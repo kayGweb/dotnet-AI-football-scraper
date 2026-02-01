@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "dgSpecHash": "UXnJWM2exO4=",
+  "success": true,
+  "projectFilePath": "/Users/kendallgroup/Projects/WebScraper/WebScraper/WebScraper.csproj",
+  "expectedPackageFiles": [
+    "/Users/kendallgroup/.nuget/packages/anglesharp/1.4.0/anglesharp.1.4.0.nupkg.sha512",
+    "/Users/kendallgroup/.nuget/packages/htmlagilitypack/1.12.4/htmlagilitypack.1.12.4.nupkg.sha512",
+    "/Users/kendallgroup/.nuget/packages/polly/8.6.5/polly.8.6.5.nupkg.sha512",
+    "/Users/kendallgroup/.nuget/packages/polly.core/8.6.5/polly.core.8.6.5.nupkg.sha512"
+  ],
+  "logs": []
+}
