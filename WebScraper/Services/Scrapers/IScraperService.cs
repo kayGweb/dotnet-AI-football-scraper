@@ -1,5 +1,3 @@
-using WebScraper.Models;
-
 namespace WebScraper.Services.Scrapers;
 
 public interface ITeamScraperService
