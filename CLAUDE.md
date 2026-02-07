@@ -38,8 +38,14 @@ WebScraper/
 │       ├── GameRepository.cs          # Game repository implementation
 │       └── StatsRepository.cs         # Stats repository implementation
 ├── Services/
-│   ├── Scrapers/                      # (Phase 4 - scraper services)
-│   └── RateLimiterService.cs          # (Phase 4)
+│   ├── RateLimiterService.cs          # Global rate limiter (SemaphoreSlim-based)
+│   └── Scrapers/
+│       ├── IScraperService.cs         # Scraper interfaces (ITeam/IPlayer/IGame/IStats)
+│       ├── BaseScraperService.cs      # Abstract base: FetchPageAsync, rate limiting, logging
+│       ├── TeamScraperService.cs      # Scrapes 32 NFL teams from PFR
+│       ├── PlayerScraperService.cs    # Scrapes player rosters per team from PFR
+│       ├── GameScraperService.cs      # Scrapes season schedules/scores from PFR
+│       └── StatsScraperService.cs     # Scrapes per-game player stats from PFR box scores
 └── Extensions/
     └── ServiceCollectionExtensions.cs # (Phase 5 - DI wiring)
 data/                                   # SQLite database directory
@@ -88,6 +94,25 @@ All repositories follow the same pattern:
 2. Specialized query methods per interface
 3. `UpsertAsync` — finds existing record by natural key, updates if found, inserts if not
 
+## Scraper Services
+
+### Architecture
+- **BaseScraperService** — abstract base class injected with `HttpClient`, `ILogger`, `ScraperSettings`, `RateLimiterService`
+  - `FetchPageAsync(url)` — fetches HTML, parses via HtmlAgilityPack, respects rate limits
+- **RateLimiterService** — singleton, uses `SemaphoreSlim` to enforce `RequestDelayMs` between requests globally
+- All scrapers target **Pro Football Reference** (pro-football-reference.com)
+
+### Scraper Details
+| Service | Interface | Data Source URL | Key Parse Logic |
+|---------|-----------|----------------|-----------------|
+| `TeamScraperService` | `ITeamScraperService` | `/teams/` | Parses `teams_active` table; maps PFR abbreviations to NFL standard |
+| `PlayerScraperService` | `IPlayerScraperService` | `/teams/{abbr}/{year}_roster.htm` | Parses `roster` table; extracts name, position, jersey, height, weight, college |
+| `GameScraperService` | `IGameScraperService` | `/years/{season}/games.htm` | Parses `games` table; determines home/away via `@` location marker |
+| `StatsScraperService` | `IStatsScraperService` | `/boxscores/{date}0{home}.htm` | Parses `player_offense` table; extracts pass/rush/rec stats per player |
+
+### PFR Abbreviation Mapping
+Scrapers maintain a mapping between PFR team abbreviations (e.g., `kan`, `crd`, `rav`) and standard NFL abbreviations (e.g., `KC`, `ARI`, `BAL`). Defined in `TeamScraperService` and `GameScraperService`.
+
 ## Build & Run
 ```bash
 dotnet restore
@@ -99,7 +124,7 @@ dotnet run --project WebScraper
 - [x] Phase 1: Project scaffolding (sln, gitignore, NuGet packages, appsettings, directory structure)
 - [x] Phase 2: Domain models (Team, Player, Game, PlayerGameStats, ScraperSettings)
 - [x] Phase 3: Data access layer (AppDbContext, repositories)
-- [ ] Phase 4: Scraper services
+- [x] Phase 4: Scraper services
 - [ ] Phase 5: DI wiring & Program.cs
 - [ ] Phase 6: Database migrations
 - [ ] Phase 7: Polish (CLI args, Polly retry, validation)
