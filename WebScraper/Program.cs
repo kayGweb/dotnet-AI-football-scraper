@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Serilog;
@@ -25,12 +26,12 @@ try
         })
         .Build();
 
-    // Ensure database is created
+    // Apply pending migrations (creates DB if it doesn't exist)
     using (var scope = host.Services.CreateScope())
     {
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-        await db.Database.EnsureCreatedAsync();
-        Log.Information("Database ready");
+        await db.Database.MigrateAsync();
+        Log.Information("Database migrated and ready");
     }
 
     // Parse CLI arguments and dispatch

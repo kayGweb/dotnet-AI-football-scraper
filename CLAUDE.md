@@ -46,6 +46,10 @@ WebScraper/
 │       ├── PlayerScraperService.cs    # Scrapes player rosters per team from PFR
 │       ├── GameScraperService.cs      # Scrapes season schedules/scores from PFR
 │       └── StatsScraperService.cs     # Scrapes per-game player stats from PFR box scores
+├── Migrations/
+│   ├── 20260207000000_InitialCreate.cs           # Initial migration (Up/Down)
+│   ├── 20260207000000_InitialCreate.Designer.cs  # Migration model snapshot
+│   └── AppDbContextModelSnapshot.cs              # Current model snapshot
 └── Extensions/
     └── ServiceCollectionExtensions.cs # DI wiring: DB, repos, scrapers, HttpClient
 data/                                   # SQLite database directory
@@ -125,8 +129,15 @@ Scrapers maintain a mapping between PFR team abbreviations (e.g., `kan`, `crd`, 
 
 ### Program.cs
 - Uses `Host.CreateDefaultBuilder` with Serilog and `AddWebScraperServices`
-- Auto-creates database on startup via `EnsureCreatedAsync()`
+- Applies pending migrations on startup via `MigrateAsync()`
 - CLI command dispatch via positional args
+
+## Database Migrations
+- Migration files live in `WebScraper/Migrations/`
+- `InitialCreate` migration creates all 4 tables (Teams, Players, Games, PlayerGameStats) with FKs and indexes
+- `Program.cs` calls `db.Database.MigrateAsync()` on startup — auto-applies pending migrations
+- To add a new migration: `dotnet ef migrations add <Name> --project WebScraper`
+- To apply manually: `dotnet ef database update --project WebScraper`
 
 ## Build & Run
 ```bash
@@ -151,7 +162,7 @@ dotnet run -- all --season 2025                # Run full pipeline (teams, playe
 - [x] Phase 3: Data access layer (AppDbContext, repositories)
 - [x] Phase 4: Scraper services
 - [x] Phase 5: DI wiring & Program.cs
-- [ ] Phase 6: Database migrations
+- [x] Phase 6: Database migrations
 - [ ] Phase 7: Polish (CLI args, Polly retry, validation)
 - [ ] Phase 8: Tests
 - [ ] Phase 9: Final verification
