@@ -17,7 +17,7 @@ A .NET 8 Console application that scrapes NFL football data from public sources 
 WebScraper.sln                          # Solution file
 WebScraper/
 ├── WebScraper.csproj                   # Project file with all NuGet refs
-├── Program.cs                          # Entry point (placeholder)
+├── Program.cs                          # Entry point with CLI command dispatch
 ├── appsettings.json                    # Config: DB provider, scraper settings, Serilog
 ├── Models/
 │   ├── Team.cs                         # NFL team entity
@@ -47,7 +47,7 @@ WebScraper/
 │       ├── GameScraperService.cs      # Scrapes season schedules/scores from PFR
 │       └── StatsScraperService.cs     # Scrapes per-game player stats from PFR box scores
 └── Extensions/
-    └── ServiceCollectionExtensions.cs # (Phase 5 - DI wiring)
+    └── ServiceCollectionExtensions.cs # DI wiring: DB, repos, scrapers, HttpClient
 data/                                   # SQLite database directory
 tests/WebScraper.Tests/                 # (Phase 8)
 ```
@@ -113,6 +113,21 @@ All repositories follow the same pattern:
 ### PFR Abbreviation Mapping
 Scrapers maintain a mapping between PFR team abbreviations (e.g., `kan`, `crd`, `rav`) and standard NFL abbreviations (e.g., `KC`, `ARI`, `BAL`). Defined in `TeamScraperService` and `GameScraperService`.
 
+## DI & Program Entry Point
+
+### ServiceCollectionExtensions (`Extensions/ServiceCollectionExtensions.cs`)
+- `AddWebScraperServices(IServiceCollection, IConfiguration)` extension method wires everything:
+  - Binds `ScraperSettings` from config
+  - Configures `AppDbContext` with provider from `DatabaseProvider` setting (SQLite/PostgreSQL/SqlServer)
+  - Registers repositories as scoped services
+  - Registers `RateLimiterService` as singleton
+  - Registers scrapers via `AddHttpClient<TInterface, TImpl>()` for typed `HttpClient` injection
+
+### Program.cs
+- Uses `Host.CreateDefaultBuilder` with Serilog and `AddWebScraperServices`
+- Auto-creates database on startup via `EnsureCreatedAsync()`
+- CLI command dispatch via positional args
+
 ## Build & Run
 ```bash
 dotnet restore
@@ -120,12 +135,22 @@ dotnet build
 dotnet run --project WebScraper
 ```
 
+## CLI Commands
+```bash
+dotnet run -- teams                            # Scrape all 32 NFL teams
+dotnet run -- players                          # Scrape rosters for all teams
+dotnet run -- games --season 2025              # Scrape full season schedule/scores
+dotnet run -- games --season 2025 --week 1     # Scrape games for a specific week
+dotnet run -- stats --season 2025 --week 1     # Scrape player stats for a week
+dotnet run -- all --season 2025                # Run full pipeline (teams, players, games)
+```
+
 ## Implementation Status
 - [x] Phase 1: Project scaffolding (sln, gitignore, NuGet packages, appsettings, directory structure)
 - [x] Phase 2: Domain models (Team, Player, Game, PlayerGameStats, ScraperSettings)
 - [x] Phase 3: Data access layer (AppDbContext, repositories)
 - [x] Phase 4: Scraper services
-- [ ] Phase 5: DI wiring & Program.cs
+- [x] Phase 5: DI wiring & Program.cs
 - [ ] Phase 6: Database migrations
 - [ ] Phase 7: Polish (CLI args, Polly retry, validation)
 - [ ] Phase 8: Tests
