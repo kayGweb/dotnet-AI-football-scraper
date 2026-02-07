@@ -53,7 +53,7 @@ WebScraper/
 └── Extensions/
     └── ServiceCollectionExtensions.cs # DI wiring: DB, repos, scrapers, HttpClient
 data/                                   # SQLite database directory
-tests/WebScraper.Tests/                 # (Phase 8)
+tests/WebScraper.Tests/                 # xUnit test project
 ```
 
 ## Database Schema
@@ -163,6 +163,23 @@ dotnet run -- stats --season 2025 --week 1     # Scrape player stats for a week
 dotnet run -- all --season 2025                # Run full pipeline (teams, players, games)
 ```
 
+## Testing
+- **Framework:** xUnit with `Microsoft.NET.Test.Sdk`
+- **Mocking:** Moq
+- **Database:** In-memory SQLite via `TestDbContextFactory` helper
+- **Run tests:** `dotnet test` from repo root
+
+### Test Coverage
+| Test File | Tests | What It Covers |
+|-----------|-------|----------------|
+| `Repositories/TeamRepositoryTests.cs` | 10 | CRUD, GetByAbbreviation, GetByConference, Upsert insert/update, Delete, Exists |
+| `Repositories/PlayerRepositoryTests.cs` | 6 | CRUD, GetByTeam, GetByName, Upsert insert/update, nullable TeamId |
+| `Repositories/GameRepositoryTests.cs` | 5 | CRUD, GetBySeason, GetByWeek, Upsert insert/update with score changes |
+| `Repositories/StatsRepositoryTests.cs` | 4 | Upsert insert/update, GetPlayerStats by name+season, GetGameStats |
+| `Scrapers/TeamScraperParsingTests.cs` | 5 | ParseTeamNode with valid HTML, header rows, missing links, ExtractCity |
+| `Scrapers/GameScraperParsingTests.cs` | 2 | PFR-to-NFL abbreviation mapping (14 mapped + 4 unmapped pass-through) |
+| `Models/ModelTests.cs` | 4 | Default values for Team, Player, Game, PlayerGameStats, ScraperSettings |
+
 ## Implementation Status
 - [x] Phase 1: Project scaffolding (sln, gitignore, NuGet packages, appsettings, directory structure)
 - [x] Phase 2: Domain models (Team, Player, Game, PlayerGameStats, ScraperSettings)
@@ -171,5 +188,5 @@ dotnet run -- all --season 2025                # Run full pipeline (teams, playe
 - [x] Phase 5: DI wiring & Program.cs
 - [x] Phase 6: Database migrations
 - [x] Phase 7: Polish (CLI args, Polly retry, validation)
-- [ ] Phase 8: Tests
+- [x] Phase 8: Tests
 - [ ] Phase 9: Final verification
