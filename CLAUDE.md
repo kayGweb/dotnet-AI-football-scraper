@@ -10,7 +10,7 @@ A .NET 8 Console application that scrapes NFL football data from public sources 
 - **Database:** SQLite (dev default), PostgreSQL, SQL Server (swappable via config)
 - **DI:** Microsoft.Extensions.Hosting / DependencyInjection
 - **Logging:** Serilog (Console + File sinks)
-- **Resilience:** Polly
+- **Resilience:** Polly v8 + Microsoft.Extensions.Http.Resilience (retry, circuit breaker, timeout)
 
 ## Project Structure
 ```
@@ -125,12 +125,19 @@ Scrapers maintain a mapping between PFR team abbreviations (e.g., `kan`, `crd`, 
   - Configures `AppDbContext` with provider from `DatabaseProvider` setting (SQLite/PostgreSQL/SqlServer)
   - Registers repositories as scoped services
   - Registers `RateLimiterService` as singleton
-  - Registers scrapers via `AddHttpClient<TInterface, TImpl>()` for typed `HttpClient` injection
+  - Registers scrapers via `AddHttpClient<TInterface, TImpl>()` with Polly resilience pipelines
+
+### Polly Resilience Policies
+Each scraper's `HttpClient` is configured with a resilience pipeline:
+- **Retry** — exponential backoff (2s, 4s, 8s), up to `MaxRetries` attempts on 408/429/5xx or network errors
+- **Circuit Breaker** — opens after 70% failure rate over 30s (min 3 requests), breaks for 15s
+- **Timeout** — per-attempt timeout from `ScraperSettings.TimeoutSeconds`
 
 ### Program.cs
 - Uses `Host.CreateDefaultBuilder` with Serilog and `AddWebScraperServices`
 - Applies pending migrations on startup via `MigrateAsync()`
-- CLI command dispatch via positional args
+- CLI command dispatch with input validation (season 1920-current, week 1-22)
+- `--help` / `-h` flag for usage info
 
 ## Database Migrations
 - Migration files live in `WebScraper/Migrations/`
@@ -163,6 +170,6 @@ dotnet run -- all --season 2025                # Run full pipeline (teams, playe
 - [x] Phase 4: Scraper services
 - [x] Phase 5: DI wiring & Program.cs
 - [x] Phase 6: Database migrations
-- [ ] Phase 7: Polish (CLI args, Polly retry, validation)
+- [x] Phase 7: Polish (CLI args, Polly retry, validation)
 - [ ] Phase 8: Tests
 - [ ] Phase 9: Final verification

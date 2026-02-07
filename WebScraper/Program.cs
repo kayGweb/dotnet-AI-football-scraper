@@ -53,14 +53,8 @@ return 0;
 
 static async Task RunCommandAsync(IHost host, string[] args)
 {
-    // Usage:
-    //   dotnet run -- teams
-    //   dotnet run -- players
-    //   dotnet run -- games --season 2025
-    //   dotnet run -- stats --season 2025 --week 1
-    //   dotnet run -- all --season 2025
-
-    if (args.Length == 0)
+    if (args.Length == 0 || args[0].Equals("--help", StringComparison.OrdinalIgnoreCase)
+                        || args[0].Equals("-h", StringComparison.OrdinalIgnoreCase))
     {
         PrintUsage();
         return;
@@ -69,6 +63,20 @@ static async Task RunCommandAsync(IHost host, string[] args)
     var command = args[0].ToLowerInvariant();
     var season = GetArgValue(args, "--season");
     var week = GetArgValue(args, "--week");
+
+    // Validate season range
+    if (season != null && (season.Value < 1920 || season.Value > DateTime.Now.Year + 1))
+    {
+        Log.Error("Invalid season {Season}. Must be between 1920 and {MaxYear}", season.Value, DateTime.Now.Year + 1);
+        return;
+    }
+
+    // Validate week range
+    if (week != null && (week.Value < 1 || week.Value > 22))
+    {
+        Log.Error("Invalid week {Week}. Must be between 1 and 22", week.Value);
+        return;
+    }
 
     using var scope = host.Services.CreateScope();
     var services = scope.ServiceProvider;
@@ -159,13 +167,27 @@ static int? GetArgValue(string[] args, string flag)
 static void PrintUsage()
 {
     Console.WriteLine("""
-        NFL Web Scraper - Usage:
+        NFL Web Scraper v1.0
 
-          dotnet run -- teams                          Scrape all 32 NFL teams
-          dotnet run -- players                        Scrape rosters for all teams
-          dotnet run -- games --season <year>           Scrape game schedule/scores
-          dotnet run -- games --season <year> --week <n> Scrape games for a specific week
-          dotnet run -- stats --season <year> --week <n> Scrape player stats for a week
-          dotnet run -- all --season <year>             Run full pipeline (teams, players, games)
+        Usage: dotnet run -- <command> [options]
+
+        Commands:
+          teams                              Scrape all 32 NFL teams
+          players                            Scrape rosters for all teams
+          games    --season <year>           Scrape full season schedule/scores
+          games    --season <year> --week <n> Scrape games for a specific week
+          stats    --season <year> --week <n> Scrape player stats for a week
+          all      --season <year>           Run full pipeline (teams, players, games)
+
+        Options:
+          --season <year>   NFL season year (1920-current)
+          --week <n>        Week number (1-22)
+          --help, -h        Show this help message
+
+        Examples:
+          dotnet run -- teams
+          dotnet run -- games --season 2025
+          dotnet run -- stats --season 2025 --week 1
+          dotnet run -- all --season 2025
         """);
 }
