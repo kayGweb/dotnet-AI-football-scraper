@@ -80,6 +80,38 @@ public class TeamScraperService : BaseScraperService, ITeamScraperService
         _logger.LogInformation("Teams scrape complete. {Count} teams processed", count);
     }
 
+    public async Task ScrapeTeamAsync(string abbreviation)
+    {
+        _logger.LogInformation("Starting single team scrape for {Abbreviation}", abbreviation);
+
+        var doc = await FetchPageAsync("https://www.pro-football-reference.com/teams/");
+        if (doc == null)
+        {
+            _logger.LogWarning("Failed to fetch teams page");
+            return;
+        }
+
+        var teamNodes = doc.DocumentNode.SelectNodes("//table[@id='teams_active']//tbody//tr[not(contains(@class,'thead'))]");
+        if (teamNodes == null)
+        {
+            _logger.LogWarning("No team rows found in teams_active table");
+            return;
+        }
+
+        foreach (var node in teamNodes)
+        {
+            var team = ParseTeamNode(node);
+            if (team != null && team.Abbreviation.Equals(abbreviation, StringComparison.OrdinalIgnoreCase))
+            {
+                await _teamRepository.UpsertAsync(team);
+                _logger.LogInformation("Upserted team: {TeamName} ({Abbreviation})", team.Name, team.Abbreviation);
+                return;
+            }
+        }
+
+        _logger.LogWarning("Team with abbreviation {Abbreviation} not found on page", abbreviation);
+    }
+
     private Team? ParseTeamNode(HtmlNode node)
     {
         try

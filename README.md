@@ -51,6 +51,7 @@ dotnet run --project WebScraper -- <command> [options]
 | Command | Required Options | Description |
 |---------|-----------------|-------------|
 | `teams` | — | Scrape all 32 NFL teams |
+| `teams` | `--team <abbr>` | Scrape a single team by NFL abbreviation |
 | `players` | — | Scrape rosters for all teams (teams must be scraped first) |
 | `games` | `--season <year>` | Scrape full season schedule and scores |
 | `games` | `--season <year> --week <n>` | Scrape games for a specific week |
@@ -61,6 +62,7 @@ dotnet run --project WebScraper -- <command> [options]
 
 | Flag | Value | Description |
 |------|-------|-------------|
+| `--team` | NFL abbreviation | Team abbreviation (e.g., `KC`, `NE`, `DAL`) — used with `teams` command |
 | `--season` | `1920` – current year | NFL season year |
 | `--week` | `1` – `22` | Week number (regular season + playoffs) |
 | `--help`, `-h` | — | Show help message |
@@ -70,6 +72,9 @@ dotnet run --project WebScraper -- <command> [options]
 ```bash
 # Scrape all 32 NFL teams
 dotnet run --project WebScraper -- teams
+
+# Scrape a single team by abbreviation
+dotnet run --project WebScraper -- teams --team KC
 
 # Scrape player rosters (requires teams to exist in DB)
 dotnet run --project WebScraper -- players
@@ -235,10 +240,10 @@ dotnet test --verbosity normal
 | Repository (Player) | 6 | CRUD, lookup by team/name, upsert, nullable team FK |
 | Repository (Game) | 5 | CRUD, lookup by season/week, upsert with score updates |
 | Repository (Stats) | 4 | Upsert, lookup by player name + season, lookup by game |
-| Scraper (Team) | 5 | HTML parsing, header row handling, city extraction |
+| Scraper (Team) | 8 | HTML parsing, header row handling, city extraction, single-team scrape |
 | Scraper (Game) | 2 | PFR-to-NFL abbreviation mapping |
 | Models | 4 | Default property values |
-| **Total** | **36** | |
+| **Total** | **39** | |
 
 ## Project Structure
 
