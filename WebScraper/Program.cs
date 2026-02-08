@@ -84,8 +84,12 @@ static async Task RunCommandAsync(IHost host, string[] args)
     switch (command)
     {
         case "teams":
+            var teamAbbr = GetStringArgValue(args, "--team");
             var teamScraper = services.GetRequiredService<ITeamScraperService>();
-            await teamScraper.ScrapeTeamsAsync();
+            if (teamAbbr != null)
+                await teamScraper.ScrapeTeamAsync(teamAbbr);
+            else
+                await teamScraper.ScrapeTeamsAsync();
             break;
 
         case "players":
@@ -164,6 +168,20 @@ static int? GetArgValue(string[] args, string flag)
     return null;
 }
 
+static string? GetStringArgValue(string[] args, string flag)
+{
+    for (int i = 0; i < args.Length - 1; i++)
+    {
+        if (args[i].Equals(flag, StringComparison.OrdinalIgnoreCase))
+        {
+            var value = args[i + 1];
+            if (!string.IsNullOrWhiteSpace(value) && !value.StartsWith("--"))
+                return value;
+        }
+    }
+    return null;
+}
+
 static void PrintUsage()
 {
     Console.WriteLine("""
@@ -173,6 +191,7 @@ static void PrintUsage()
 
         Commands:
           teams                              Scrape all 32 NFL teams
+          teams    --team <abbr>             Scrape a single team by NFL abbreviation
           players                            Scrape rosters for all teams
           games    --season <year>           Scrape full season schedule/scores
           games    --season <year> --week <n> Scrape games for a specific week
@@ -180,12 +199,14 @@ static void PrintUsage()
           all      --season <year>           Run full pipeline (teams, players, games)
 
         Options:
+          --team <abbr>     NFL team abbreviation (e.g., KC, NE, DAL)
           --season <year>   NFL season year (1920-current)
           --week <n>        Week number (1-22)
           --help, -h        Show this help message
 
         Examples:
           dotnet run -- teams
+          dotnet run -- teams --team KC
           dotnet run -- games --season 2025
           dotnet run -- stats --season 2025 --week 1
           dotnet run -- all --season 2025

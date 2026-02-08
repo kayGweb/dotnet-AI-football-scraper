@@ -109,7 +109,7 @@ All repositories follow the same pattern:
 ### Scraper Details
 | Service | Interface | Data Source URL | Key Parse Logic |
 |---------|-----------|----------------|-----------------|
-| `TeamScraperService` | `ITeamScraperService` | `/teams/` | Parses `teams_active` table; maps PFR abbreviations to NFL standard |
+| `TeamScraperService` | `ITeamScraperService` | `/teams/` | Parses `teams_active` table; maps PFR abbreviations to NFL standard. Supports single-team scrape via `ScrapeTeamAsync(abbreviation)` |
 | `PlayerScraperService` | `IPlayerScraperService` | `/teams/{abbr}/{year}_roster.htm` | Parses `roster` table; extracts name, position, jersey, height, weight, college |
 | `GameScraperService` | `IGameScraperService` | `/years/{season}/games.htm` | Parses `games` table; determines home/away via `@` location marker |
 | `StatsScraperService` | `IStatsScraperService` | `/boxscores/{date}0{home}.htm` | Parses `player_offense` table; extracts pass/rush/rec stats per player |
@@ -156,6 +156,7 @@ dotnet run --project WebScraper
 ## CLI Commands
 ```bash
 dotnet run -- teams                            # Scrape all 32 NFL teams
+dotnet run -- teams --team KC                  # Scrape a single team by abbreviation
 dotnet run -- players                          # Scrape rosters for all teams
 dotnet run -- games --season 2025              # Scrape full season schedule/scores
 dotnet run -- games --season 2025 --week 1     # Scrape games for a specific week
@@ -176,7 +177,7 @@ dotnet run -- all --season 2025                # Run full pipeline (teams, playe
 | `Repositories/PlayerRepositoryTests.cs` | 6 | CRUD, GetByTeam, GetByName, Upsert insert/update, nullable TeamId |
 | `Repositories/GameRepositoryTests.cs` | 5 | CRUD, GetBySeason, GetByWeek, Upsert insert/update with score changes |
 | `Repositories/StatsRepositoryTests.cs` | 4 | Upsert insert/update, GetPlayerStats by name+season, GetGameStats |
-| `Scrapers/TeamScraperParsingTests.cs` | 5 | ParseTeamNode with valid HTML, header rows, missing links, ExtractCity |
+| `Scrapers/TeamScraperParsingTests.cs` | 8 | ParseTeamNode with valid HTML, header rows, missing links, ExtractCity, single-team scrape (match, not found, case-insensitive) |
 | `Scrapers/GameScraperParsingTests.cs` | 2 | PFR-to-NFL abbreviation mapping (14 mapped + 4 unmapped pass-through) |
 | `Models/ModelTests.cs` | 4 | Default values for Team, Player, Game, PlayerGameStats, ScraperSettings |
 

@@ -3,6 +3,7 @@ namespace WebScraper.Services.Scrapers;
 public interface ITeamScraperService
 {
     Task ScrapeTeamsAsync();
+    Task ScrapeTeamAsync(string abbreviation);
 }
 
 public interface IPlayerScraperService
