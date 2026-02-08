@@ -24,20 +24,49 @@ public class PlayerScraperService : BaseScraperService, IPlayerScraperService
         _teamRepository = teamRepository;
     }
 
+    private static readonly int DefaultSeason = DateTime.Now.Year;
+
     public async Task ScrapeAllPlayersAsync()
     {
-        _logger.LogInformation("Starting full player roster scrape for all teams");
+        await ScrapeAllPlayersAsync(DefaultSeason);
+    }
+
+    public async Task ScrapeAllPlayersAsync(int season)
+    {
+        _logger.LogInformation("Starting full player roster scrape for all teams (season {Season})", season);
 
         var teams = await _teamRepository.GetAllAsync();
         foreach (var team in teams)
         {
-            await ScrapePlayersAsync(team.Id);
+            await ScrapeTeamRosterAsync(team.Id, season);
         }
 
-        _logger.LogInformation("All player rosters scrape complete");
+        _logger.LogInformation("All player rosters scrape complete for season {Season}", season);
     }
 
     public async Task ScrapePlayersAsync(int teamId)
+    {
+        await ScrapeTeamRosterAsync(teamId, DefaultSeason);
+    }
+
+    public async Task ScrapePlayersAsync(string abbreviation)
+    {
+        await ScrapePlayersAsync(abbreviation, DefaultSeason);
+    }
+
+    public async Task ScrapePlayersAsync(string abbreviation, int season)
+    {
+        var team = await _teamRepository.GetByAbbreviationAsync(abbreviation);
+        if (team == null)
+        {
+            _logger.LogWarning("Team with abbreviation '{Abbreviation}' not found. Make sure teams have been scraped first", abbreviation);
+            return;
+        }
+
+        await ScrapeTeamRosterAsync(team.Id, season);
+    }
+
+    private async Task ScrapeTeamRosterAsync(int teamId, int season)
     {
         var team = await _teamRepository.GetByIdAsync(teamId);
         if (team == null)
@@ -46,23 +75,23 @@ public class PlayerScraperService : BaseScraperService, IPlayerScraperService
             return;
         }
 
-        _logger.LogInformation("Scraping roster for {TeamName} ({Abbreviation})", team.Name, team.Abbreviation);
+        _logger.LogInformation("Scraping {Season} roster for {TeamName} ({Abbreviation})", season, team.Name, team.Abbreviation);
 
         // Pro Football Reference roster URL pattern
         var pfrAbbr = GetPfrAbbreviation(team.Abbreviation);
-        var url = $"https://www.pro-football-reference.com/teams/{pfrAbbr}/2025_roster.htm";
+        var url = $"https://www.pro-football-reference.com/teams/{pfrAbbr}/{season}_roster.htm";
 
         var doc = await FetchPageAsync(url);
         if (doc == null)
         {
-            _logger.LogWarning("Failed to fetch roster page for {TeamName}", team.Name);
+            _logger.LogWarning("Failed to fetch roster page for {TeamName} ({Season})", team.Name, season);
             return;
         }
 
         var playerNodes = doc.DocumentNode.SelectNodes("//table[@id='roster']//tbody//tr[not(contains(@class,'thead'))]");
         if (playerNodes == null)
         {
-            _logger.LogWarning("No player rows found for {TeamName}", team.Name);
+            _logger.LogWarning("No player rows found for {TeamName} ({Season})", team.Name, season);
             return;
         }
 
@@ -78,7 +107,7 @@ public class PlayerScraperService : BaseScraperService, IPlayerScraperService
             }
         }
 
-        _logger.LogInformation("Roster scrape complete for {TeamName}. {Count} players processed", team.Name, count);
+        _logger.LogInformation("Roster scrape complete for {TeamName} ({Season}). {Count} players processed", team.Name, season, count);
     }
 
     private Player? ParsePlayerNode(HtmlNode node, int teamId)

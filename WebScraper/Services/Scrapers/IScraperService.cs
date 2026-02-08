@@ -10,6 +10,9 @@ public interface IPlayerScraperService
 {
     Task ScrapePlayersAsync(int teamId);
     Task ScrapeAllPlayersAsync();
+    Task ScrapePlayersAsync(string abbreviation);
+    Task ScrapePlayersAsync(string abbreviation, int season);
+    Task ScrapeAllPlayersAsync(int season);
 }
 
 public interface IGameScraperService

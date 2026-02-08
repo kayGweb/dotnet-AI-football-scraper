@@ -110,7 +110,7 @@ All repositories follow the same pattern:
 | Service | Interface | Data Source URL | Key Parse Logic |
 |---------|-----------|----------------|-----------------|
 | `TeamScraperService` | `ITeamScraperService` | `/teams/` | Parses `teams_active` table; maps PFR abbreviations to NFL standard. Supports single-team scrape via `ScrapeTeamAsync(abbreviation)` |
-| `PlayerScraperService` | `IPlayerScraperService` | `/teams/{abbr}/{year}_roster.htm` | Parses `roster` table; extracts name, position, jersey, height, weight, college |
+| `PlayerScraperService` | `IPlayerScraperService` | `/teams/{abbr}/{year}_roster.htm` | Parses `roster` table; extracts name, position, jersey, height, weight, college. Supports single-team scrape via `ScrapePlayersAsync(abbreviation)` and season-specific via `ScrapePlayersAsync(abbreviation, season)` |
 | `GameScraperService` | `IGameScraperService` | `/years/{season}/games.htm` | Parses `games` table; determines home/away via `@` location marker |
 | `StatsScraperService` | `IStatsScraperService` | `/boxscores/{date}0{home}.htm` | Parses `player_offense` table; extracts pass/rush/rec stats per player |
 
@@ -157,7 +157,10 @@ dotnet run --project WebScraper
 ```bash
 dotnet run -- teams                            # Scrape all 32 NFL teams
 dotnet run -- teams --team KC                  # Scrape a single team by abbreviation
-dotnet run -- players                          # Scrape rosters for all teams
+dotnet run -- players                          # Scrape rosters for all teams (current year)
+dotnet run -- players --team KC                # Scrape roster for a single team
+dotnet run -- players --season 2023            # Scrape rosters for all teams for a season
+dotnet run -- players --team KC --season 2023  # Scrape roster for a team and season
 dotnet run -- games --season 2025              # Scrape full season schedule/scores
 dotnet run -- games --season 2025 --week 1     # Scrape games for a specific week
 dotnet run -- stats --season 2025 --week 1     # Scrape player stats for a week
@@ -178,6 +181,7 @@ dotnet run -- all --season 2025                # Run full pipeline (teams, playe
 | `Repositories/GameRepositoryTests.cs` | 5 | CRUD, GetBySeason, GetByWeek, Upsert insert/update with score changes |
 | `Repositories/StatsRepositoryTests.cs` | 4 | Upsert insert/update, GetPlayerStats by name+season, GetGameStats |
 | `Scrapers/TeamScraperParsingTests.cs` | 8 | ParseTeamNode with valid HTML, header rows, missing links, ExtractCity, single-team scrape (match, not found, case-insensitive) |
+| `Scrapers/PlayerScraperParsingTests.cs` | 8 | ParsePlayerNode, ScrapePlayersAsync by abbreviation (found/not found), season URL verification, default year URL, ScrapeAllPlayersAsync with season, PFR abbreviation mapping (known + pass-through) |
 | `Scrapers/GameScraperParsingTests.cs` | 2 | PFR-to-NFL abbreviation mapping (14 mapped + 4 unmapped pass-through) |
 | `Models/ModelTests.cs` | 4 | Default values for Team, Player, Game, PlayerGameStats, ScraperSettings |
 

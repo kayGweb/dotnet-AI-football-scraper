@@ -93,8 +93,16 @@ static async Task RunCommandAsync(IHost host, string[] args)
             break;
 
         case "players":
+            var playerTeamAbbr = GetStringArgValue(args, "--team");
             var playerScraper = services.GetRequiredService<IPlayerScraperService>();
-            await playerScraper.ScrapeAllPlayersAsync();
+            if (playerTeamAbbr != null && season != null)
+                await playerScraper.ScrapePlayersAsync(playerTeamAbbr, season.Value);
+            else if (playerTeamAbbr != null)
+                await playerScraper.ScrapePlayersAsync(playerTeamAbbr);
+            else if (season != null)
+                await playerScraper.ScrapeAllPlayersAsync(season.Value);
+            else
+                await playerScraper.ScrapeAllPlayersAsync();
             break;
 
         case "games":
@@ -147,7 +155,7 @@ static async Task RunAllAsync(IServiceProvider services, int season)
     await teamScraper.ScrapeTeamsAsync();
 
     var playerScraper = services.GetRequiredService<IPlayerScraperService>();
-    await playerScraper.ScrapeAllPlayersAsync();
+    await playerScraper.ScrapeAllPlayersAsync(season);
 
     var gameScraper = services.GetRequiredService<IGameScraperService>();
     await gameScraper.ScrapeGamesAsync(season);
@@ -192,7 +200,10 @@ static void PrintUsage()
         Commands:
           teams                              Scrape all 32 NFL teams
           teams    --team <abbr>             Scrape a single team by NFL abbreviation
-          players                            Scrape rosters for all teams
+          players                            Scrape rosters for all teams (current year)
+          players  --team <abbr>             Scrape roster for a single team
+          players  --season <year>           Scrape rosters for all teams for a season
+          players  --team <abbr> --season <year>  Scrape roster for a team and season
           games    --season <year>           Scrape full season schedule/scores
           games    --season <year> --week <n> Scrape games for a specific week
           stats    --season <year> --week <n> Scrape player stats for a week
@@ -207,6 +218,9 @@ static void PrintUsage()
         Examples:
           dotnet run -- teams
           dotnet run -- teams --team KC
+          dotnet run -- players --team KC
+          dotnet run -- players --season 2023
+          dotnet run -- players --team KC --season 2023
           dotnet run -- games --season 2025
           dotnet run -- stats --season 2025 --week 1
           dotnet run -- all --season 2025
