@@ -84,6 +84,36 @@ WebScraper/
     └── ServiceCollectionExtensions.cs # DI wiring: DB, repos, delegates to DataProviderFactory
 data/                                   # SQLite database directory
 tests/WebScraper.Tests/                 # xUnit test project
+├── WebScraper.Tests.csproj             # Test project with xUnit, Moq, in-memory SQLite
+├── Helpers/
+│   └── TestDbContextFactory.cs         # In-memory SQLite factory for repository tests
+├── Repositories/
+│   ├── TeamRepositoryTests.cs          # 10 tests: CRUD, upsert, queries
+│   ├── PlayerRepositoryTests.cs        # 6 tests: CRUD, FK relationships
+│   ├── GameRepositoryTests.cs          # 5 tests: CRUD, season/week queries
+│   └── StatsRepositoryTests.cs         # 4 tests: Upsert, player/game stats queries
+├── Scrapers/
+│   ├── TeamScraperParsingTests.cs      # 8 tests: PFR HTML parsing
+│   ├── GameScraperParsingTests.cs      # 2 tests: PFR abbreviation mapping
+│   ├── Espn/
+│   │   ├── EspnMappingsTests.cs        # ESPN ID ↔ NFL abbreviation tests (all 32 teams)
+│   │   ├── EspnTeamServiceTests.cs     # ESPN team scraping with mock HTTP
+│   │   └── EspnGameServiceTests.cs     # ESPN scoreboard parsing with mock HTTP
+│   ├── SportsDataIo/
+│   │   ├── SportsDataTeamServiceTests.cs   # SportsData.io team scraping tests
+│   │   └── SportsDataStatsServiceTests.cs  # SportsData.io stats DTO deserialization tests
+│   ├── MySportsFeeds/
+│   │   ├── MySportsFeedsTeamServiceTests.cs    # MySportsFeeds nested JSON parsing tests
+│   │   └── MySportsFeedsPlayerServiceTests.cs  # MySportsFeeds player/stats DTO tests
+│   └── NflCom/
+│       └── NflComTeamServiceTests.cs   # NFL.com team scraping + graceful error handling
+├── Services/
+│   ├── BaseApiServiceTests.cs          # FetchJsonAsync, auth configuration (Header/Basic/None)
+│   └── DataProviderFactoryTests.cs     # Provider registration per provider string
+├── Configuration/
+│   └── ProviderConfigTests.cs          # Config binding, provider settings, --source override
+└── Models/
+    └── ModelTests.cs                   # 4 tests: Default values for all entities
 ```
 
 ## Multi-Provider Architecture
@@ -309,12 +339,31 @@ To switch data sources permanently, set `DataProvider` in `appsettings.json`. To
 ### Test Coverage
 | Test File | Tests | What It Covers |
 |-----------|-------|----------------|
+| **Repositories** | | |
 | `Repositories/TeamRepositoryTests.cs` | 10 | CRUD, GetByAbbreviation, GetByConference, Upsert insert/update, Delete, Exists |
 | `Repositories/PlayerRepositoryTests.cs` | 6 | CRUD, GetByTeam, GetByName, Upsert insert/update, nullable TeamId |
 | `Repositories/GameRepositoryTests.cs` | 5 | CRUD, GetBySeason, GetByWeek, Upsert insert/update with score changes |
 | `Repositories/StatsRepositoryTests.cs` | 4 | Upsert insert/update, GetPlayerStats by name+season, GetGameStats |
+| **PFR Scrapers** | | |
 | `Scrapers/TeamScraperParsingTests.cs` | 8 | ParseTeamNode with valid HTML, header rows, missing links, ExtractCity, single-team scrape (match, not found, case-insensitive) |
 | `Scrapers/GameScraperParsingTests.cs` | 2 | PFR-to-NFL abbreviation mapping (14 mapped + 4 unmapped pass-through) |
+| **API Infrastructure** | | |
+| `Services/BaseApiServiceTests.cs` | 10 | FetchJsonAsync deserialization (valid, malformed, error, null, case-insensitive), auth configuration (Header, Basic, None, missing key, custom headers) |
+| `Services/DataProviderFactoryTests.cs` | 9 | All 5 providers register correctly, invalid provider throws, case-insensitive matching |
+| `Configuration/ProviderConfigTests.cs` | 10 | Config binding from IConfiguration, default values, per-provider settings, API key handling, --source override, multi-provider dictionary |
+| **ESPN Provider** | | |
+| `Scrapers/Espn/EspnMappingsTests.cs` | 8 | All 32 ESPN IDs → NFL abbreviations, reverse mapping, division lookup, unknown IDs, case insensitivity |
+| `Scrapers/Espn/EspnTeamServiceTests.cs` | 8 | JSON parsing, ESPN ID → NFL abbreviation mapping, conference/division, city, null response, single team, empty displayName |
+| `Scrapers/Espn/EspnGameServiceTests.cs` | 7 | Scoreboard parsing, home/away detection, score parsing, season/week, team not in DB, null response, no competitions |
+| **SportsData.io Provider** | | |
+| `Scrapers/SportsDataIo/SportsDataTeamServiceTests.cs` | 6 | Flat JSON parsing, field mapping, single team, not found, empty name, null response |
+| `Scrapers/SportsDataIo/SportsDataStatsServiceTests.cs` | 6 | DTO deserialization, passing/rushing/receiving field mapping, zero stats, team/gameKey preservation |
+| **MySportsFeeds Provider** | | |
+| `Scrapers/MySportsFeeds/MySportsFeedsTeamServiceTests.cs` | 7 | Nested JSON parsing, field mapping, single team, not found, empty name, null conference defaults |
+| `Scrapers/MySportsFeeds/MySportsFeedsPlayerServiceTests.cs` | 10 | DTO deserialization, first/last name concatenation, all fields, currentTeam, nullable fields, empty names, gamelogs/stats deserialization |
+| **NFL.com Provider** | | |
+| `Scrapers/NflCom/NflComTeamServiceTests.cs` | 8 | JSON parsing, field mapping, single team, case-insensitive, not found, empty fullName, null response, unexpected JSON structure |
+| **Models** | | |
 | `Models/ModelTests.cs` | 4 | Default values for Team, Player, Game, PlayerGameStats, ScraperSettings |
 
 ## Implementation Status
@@ -338,8 +387,8 @@ To switch data sources permanently, set `DataProvider` in `appsettings.json`. To
 - [x] API Phase 5: MySportsFeeds API provider (MySportsFeedsTeamService, MySportsFeedsPlayerService, MySportsFeedsGameService, MySportsFeedsStatsService, DTOs)
 - [x] API Phase 6: NFL.com API provider (NflComTeamService, NflComPlayerService, NflComGameService, NflComStatsService, DTOs)
 - [x] API Phase 7: CLI `--source` flag for runtime provider override
-- [ ] API Phase 8: Tests for API providers
-- [ ] API Phase 9: Documentation & polish
+- [x] API Phase 8: Tests for API providers (BaseApiService, DataProviderFactory, EspnMappings, provider service tests, config binding)
+- [x] API Phase 9: Documentation & polish
 
 ## Adding a New Data Provider
 1. Create a folder: `Services/Scrapers/NewProvider/`
