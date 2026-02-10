@@ -51,13 +51,25 @@ WebScraper/
 │       ├── PlayerScraperService.cs    # PFR: Scrapes player rosters per team
 │       ├── GameScraperService.cs      # PFR: Scrapes season schedules/scores
 │       ├── StatsScraperService.cs     # PFR: Scrapes per-game player stats from box scores
-│       └── Espn/
-│           ├── EspnDtos.cs            # DTO classes matching ESPN JSON response shapes
-│           ├── EspnMappings.cs        # ESPN team ID ↔ NFL abbreviation + division lookup
-│           ├── EspnTeamService.cs     # ESPN API: Scrapes teams via /teams endpoint
-│           ├── EspnPlayerService.cs   # ESPN API: Scrapes rosters via /teams/{id}/roster
-│           ├── EspnGameService.cs     # ESPN API: Scrapes scores via /scoreboard
-│           └── EspnStatsService.cs    # ESPN API: Scrapes player stats via /summary?event={id}
+│       ├── Espn/
+│       │   ├── EspnDtos.cs            # DTO classes matching ESPN JSON response shapes
+│       │   ├── EspnMappings.cs        # ESPN team ID ↔ NFL abbreviation + division lookup
+│       │   ├── EspnTeamService.cs     # ESPN API: Scrapes teams via /teams endpoint
+│       │   ├── EspnPlayerService.cs   # ESPN API: Scrapes rosters via /teams/{id}/roster
+│       │   ├── EspnGameService.cs     # ESPN API: Scrapes scores via /scoreboard
+│       │   └── EspnStatsService.cs    # ESPN API: Scrapes player stats via /summary?event={id}
+│       ├── SportsDataIo/
+│       │   ├── SportsDataDtos.cs      # DTO classes for SportsData.io JSON responses
+│       │   ├── SportsDataTeamService.cs     # SportsData.io: Teams via /scores/json/Teams
+│       │   ├── SportsDataPlayerService.cs   # SportsData.io: Players via /scores/json/Players/{team}
+│       │   ├── SportsDataGameService.cs     # SportsData.io: Scores via /scores/json/ScoresByWeek
+│       │   └── SportsDataStatsService.cs    # SportsData.io: Stats via /stats/json/PlayerGameStatsByWeek
+│       └── MySportsFeeds/
+│           ├── MySportsFeedsDtos.cs          # DTO classes for MySportsFeeds JSON responses
+│           ├── MySportsFeedsTeamService.cs   # MySportsFeeds: Teams via /{season}/teams.json
+│           ├── MySportsFeedsPlayerService.cs # MySportsFeeds: Players via /players.json
+│           ├── MySportsFeedsGameService.cs   # MySportsFeeds: Games via /{season}/games.json
+│           └── MySportsFeedsStatsService.cs  # MySportsFeeds: Stats via /{season}/week/{week}/player_gamelogs.json
 ├── Migrations/
 │   ├── 20260207000000_InitialCreate.cs           # Initial migration (Up/Down)
 │   ├── 20260207000000_InitialCreate.Designer.cs  # Migration model snapshot
@@ -93,8 +105,8 @@ AppDbContext → SQLite / PostgreSQL / SQL Server
 |----------|-------------|------|--------|
 | Pro Football Reference | `ProFootballReference` | None (HTML scraping) | Implemented |
 | ESPN API | `Espn` | None (open JSON API) | Implemented |
-| SportsData.io | `SportsDataIo` | API key header | Planned |
-| MySportsFeeds | `MySportsFeeds` | HTTP Basic auth | Planned |
+| SportsData.io | `SportsDataIo` | API key header | Implemented |
+| MySportsFeeds | `MySportsFeeds` | HTTP Basic auth | Implemented |
 | NFL.com | `NflCom` | None (undocumented) | Planned |
 
 ### BaseApiService (`Services/Scrapers/BaseApiService.cs`)
@@ -200,6 +212,26 @@ Scrapers maintain a mapping between PFR team abbreviations (e.g., `kan`, `crd`, 
 ### ESPN Team ID Mapping
 `EspnMappings` provides bidirectional lookup between ESPN numeric IDs and NFL abbreviations for all 32 teams. Also includes conference/division lookup by NFL abbreviation.
 
+### SportsData.io API Details
+| Service | Interface | Endpoint | Key Parse Logic |
+|---------|-----------|----------|-----------------|
+| `SportsDataTeamService` | `ITeamScraperService` | `/scores/json/Teams` | Flat JSON array; uses standard NFL abbreviations — no mapping needed |
+| `SportsDataPlayerService` | `IPlayerScraperService` | `/scores/json/Players/{team}` | Flat array per team; height provided as string |
+| `SportsDataGameService` | `IGameScraperService` | `/scores/json/ScoresByWeek/{season}/{week}` | Standard abbreviations for home/away teams |
+| `SportsDataStatsService` | `IStatsScraperService` | `/stats/json/PlayerGameStatsByWeek/{season}/{week}` | All player stats for entire week in one call; flat field mapping |
+
+**Auth:** API key via `Ocp-Apim-Subscription-Key` header (configured in `appsettings.json`). Uses standard NFL abbreviations throughout — no team ID mapping required.
+
+### MySportsFeeds API Details
+| Service | Interface | Endpoint | Key Parse Logic |
+|---------|-----------|----------|-----------------|
+| `MySportsFeedsTeamService` | `ITeamScraperService` | `/{season}/teams.json` | Nested `teams[].team`; uses standard NFL abbreviations |
+| `MySportsFeedsPlayerService` | `IPlayerScraperService` | `/players.json?team={abbr}&season={season}` | Nested `players[].player`; concatenates `firstName` + `lastName` |
+| `MySportsFeedsGameService` | `IGameScraperService` | `/{season}/games.json?week={n}` | Nested `games[].schedule`; scores in `schedule.score` sub-object |
+| `MySportsFeedsStatsService` | `IStatsScraperService` | `/{season}/week/{week}/player_gamelogs.json` | Deeply nested `gamelogs[].stats.passing/rushing/receiving` |
+
+**Auth:** HTTP Basic with API key as username and `"MYSPORTSFEEDS"` as password (handled by `BaseApiService.ConfigureAuth()`). Uses standard NFL abbreviations.
+
 ## DI & Program Entry Point
 
 ### ServiceCollectionExtensions (`Extensions/ServiceCollectionExtensions.cs`)
@@ -247,7 +279,7 @@ dotnet run -- stats --season 2025 --week 1     # Scrape player stats for a week
 dotnet run -- all --season 2025                # Run full pipeline (teams, players, games)
 ```
 
-To use the ESPN API instead of PFR, set `DataProvider` to `"Espn"` in `appsettings.json`.
+To switch data sources, set `DataProvider` in `appsettings.json` to `"Espn"`, `"SportsDataIo"`, or `"MySportsFeeds"`. SportsData.io and MySportsFeeds require API keys configured in `Providers` section.
 
 ## Testing
 - **Framework:** xUnit with `Microsoft.NET.Test.Sdk`
@@ -283,8 +315,8 @@ To use the ESPN API instead of PFR, set `DataProvider` to `"Espn"` in `appsettin
 - [x] API Phase 1: Core provider infrastructure (DataProvider enum, ApiProviderSettings, BaseApiService)
 - [x] API Phase 2: Provider factory & DI wiring (DataProviderFactory, updated ServiceCollectionExtensions)
 - [x] API Phase 3: ESPN API provider (EspnTeamService, EspnPlayerService, EspnGameService, EspnStatsService, DTOs, mappings)
-- [ ] API Phase 4: SportsData.io API provider
-- [ ] API Phase 5: MySportsFeeds API provider
+- [x] API Phase 4: SportsData.io API provider (SportsDataTeamService, SportsDataPlayerService, SportsDataGameService, SportsDataStatsService, DTOs)
+- [x] API Phase 5: MySportsFeeds API provider (MySportsFeedsTeamService, MySportsFeedsPlayerService, MySportsFeedsGameService, MySportsFeedsStatsService, DTOs)
 - [ ] API Phase 6: NFL.com API provider
 - [ ] API Phase 7: CLI `--source` flag for runtime provider override
 - [ ] API Phase 8: Tests for API providers
