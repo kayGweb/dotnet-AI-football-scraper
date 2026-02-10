@@ -1,8 +1,18 @@
 # NFL Web Scraper
 
-A .NET 8 console application that scrapes NFL football data from [Pro Football Reference](https://www.pro-football-reference.com/) and stores it in a structured relational database.
+A .NET 8 console application that scrapes NFL football data from multiple sources and stores it in a structured relational database. Supports five pluggable data providers — switch between HTML scraping and REST API sources via configuration or a CLI flag.
 
 Collects teams, player rosters, game schedules/scores, and per-game player statistics (passing, rushing, receiving).
+
+### Data Providers
+
+| Provider | Config Value | Auth | Description |
+|----------|-------------|------|-------------|
+| Pro Football Reference | `ProFootballReference` | None | HTML scraping (default) |
+| ESPN API | `Espn` | None | Open JSON API |
+| SportsData.io | `SportsDataIo` | API key header | Requires free/paid API key |
+| MySportsFeeds | `MySportsFeeds` | HTTP Basic | Requires API key |
+| NFL.com | `NflCom` | None | Undocumented JSON endpoints |
 
 ## Prerequisites
 
@@ -65,6 +75,7 @@ dotnet run --project WebScraper -- <command> [options]
 | `--team` | NFL abbreviation | Team abbreviation (e.g., `KC`, `NE`, `DAL`) — used with `teams` command |
 | `--season` | `1920` – current year | NFL season year |
 | `--week` | `1` – `22` | Week number (regular season + playoffs) |
+| `--source` | Provider name | Override the data provider at runtime (e.g., `Espn`, `SportsDataIo`, `MySportsFeeds`, `NflCom`) |
 | `--help`, `-h` | — | Show help message |
 
 ### Examples
@@ -90,6 +101,12 @@ dotnet run --project WebScraper -- stats --season 2025 --week 1
 
 # Run the full pipeline (teams + players + games)
 dotnet run --project WebScraper -- all --season 2025
+
+# Use the ESPN API instead of the default provider
+dotnet run --project WebScraper -- teams --source Espn
+
+# Use SportsData.io for games (requires API key in appsettings.json)
+dotnet run --project WebScraper -- games --season 2025 --source SportsDataIo
 ```
 
 ### Recommended Scrape Order
@@ -135,6 +152,65 @@ Update the connection string to match your chosen provider:
 | PostgreSQL | `Host=localhost;Database=nfl_data;Username=postgres;Password=yourpassword` |
 | SQL Server | `Server=localhost;Database=nfl_data;Trusted_Connection=True;TrustServerCertificate=True` |
 
+### Data Provider
+
+```json
+{
+  "ScraperSettings": {
+    "DataProvider": "ProFootballReference"
+  }
+}
+```
+
+Set `DataProvider` to change the default data source. Supported values: `ProFootballReference`, `Espn`, `SportsDataIo`, `MySportsFeeds`, `NflCom`. This can also be overridden at runtime with the `--source` flag without changing the config file.
+
+### Provider-Specific Settings
+
+Each API provider has its own configuration block under `Providers`:
+
+```json
+{
+  "ScraperSettings": {
+    "Providers": {
+      "Espn": {
+        "BaseUrl": "https://site.api.espn.com/apis/site/v2/sports/football/nfl",
+        "AuthType": "None",
+        "RequestDelayMs": 1000
+      },
+      "SportsDataIo": {
+        "BaseUrl": "https://api.sportsdata.io/v3/nfl",
+        "ApiKey": "YOUR_API_KEY_HERE",
+        "AuthType": "Header",
+        "AuthHeaderName": "Ocp-Apim-Subscription-Key",
+        "RequestDelayMs": 1000
+      },
+      "MySportsFeeds": {
+        "BaseUrl": "https://api.mysportsfeeds.com/v2.1/pull/nfl",
+        "ApiKey": "YOUR_API_KEY_HERE",
+        "AuthType": "Basic",
+        "RequestDelayMs": 1500
+      },
+      "NflCom": {
+        "BaseUrl": "https://site.api.nfl.com/v1",
+        "AuthType": "None",
+        "RequestDelayMs": 1500
+      }
+    }
+  }
+}
+```
+
+| Setting | Description |
+|---------|-------------|
+| `BaseUrl` | Base URL for the provider's API |
+| `ApiKey` | API key (required for SportsData.io and MySportsFeeds) |
+| `AuthType` | Authentication method: `None`, `Header` (API key header), or `Basic` (HTTP Basic) |
+| `AuthHeaderName` | Custom header name for API key (used when `AuthType` is `Header`) |
+| `RequestDelayMs` | Per-provider rate limit override (milliseconds between requests) |
+| `CustomHeaders` | Optional dictionary of additional HTTP headers |
+
+To use **SportsData.io** or **MySportsFeeds**, add your API key to the respective `ApiKey` field in `appsettings.json`. ESPN and NFL.com require no API key.
+
 ### Scraper Settings
 
 ```json
@@ -150,7 +226,7 @@ Update the connection string to match your chosen provider:
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `RequestDelayMs` | `1500` | Minimum delay between HTTP requests (milliseconds). Respects the data source's rate limits. |
+| `RequestDelayMs` | `1500` | Global minimum delay between HTTP requests (milliseconds). Individual providers can override this. |
 | `MaxRetries` | `3` | Number of retry attempts on transient failures (408, 429, 5xx). Uses exponential backoff (2s, 4s, 8s). |
 | `UserAgent` | `NFLScraper/1.0 (educational project)` | HTTP User-Agent header sent with every request. |
 | `TimeoutSeconds` | `30` | Per-request timeout in seconds. |
@@ -240,30 +316,68 @@ dotnet test --verbosity normal
 | Repository (Player) | 6 | CRUD, lookup by team/name, upsert, nullable team FK |
 | Repository (Game) | 5 | CRUD, lookup by season/week, upsert with score updates |
 | Repository (Stats) | 4 | Upsert, lookup by player name + season, lookup by game |
-| Scraper (Team) | 8 | HTML parsing, header row handling, city extraction, single-team scrape |
-| Scraper (Game) | 2 | PFR-to-NFL abbreviation mapping |
+| PFR Scraper (Team) | 8 | HTML parsing, header row handling, city extraction, single-team scrape |
+| PFR Scraper (Game) | 2 | PFR-to-NFL abbreviation mapping |
+| API Infrastructure | 10 | FetchJsonAsync deserialization, auth config (Header/Basic/None), custom headers |
+| DataProviderFactory | 9 | All 5 providers register correctly, invalid provider throws, case-insensitive |
+| Provider Config | 10 | Config binding, API keys, `--source` override, multi-provider dictionary |
+| ESPN Mappings | 8 | All 32 ESPN ID mappings, reverse lookup, division lookup, case insensitivity |
+| ESPN Services | 15 | Team JSON parsing, ID mapping, scoreboard parsing, home/away, scores |
+| SportsData.io | 12 | Flat JSON parsing, DTO deserialization, passing/rushing/receiving stats |
+| MySportsFeeds | 17 | Nested JSON parsing, name concatenation, gamelogs, nullable fields |
+| NFL.com | 8 | JSON parsing, case-insensitive matching, graceful error handling |
 | Models | 4 | Default property values |
-| **Total** | **39** | |
+| **Total** | **128** | |
+
+## Architecture
+
+The application uses a provider abstraction layer — all data providers implement the same four interfaces, so the CLI, repositories, and database layer are completely provider-agnostic:
+
+```
+Program.cs (CLI dispatch)
+    ↓
+ITeamScraperService / IPlayerScraperService / IGameScraperService / IStatsScraperService
+    ↓                           ↓
+BaseScraperService          BaseApiService
+(HTML — PFR)               (JSON — ESPN, SportsData.io, etc.)
+    ↓                           ↓
+Repository Layer (unchanged) ← UpsertAsync()
+    ↓
+AppDbContext → SQLite / PostgreSQL / SQL Server
+```
+
+Adding a new provider requires no changes to interfaces, repositories, models, or the CLI. See `CLAUDE.md` for detailed instructions.
 
 ## Project Structure
 
 ```
 WebScraper.sln
 WebScraper/
-├── Program.cs                          # Entry point and CLI dispatch
-├── appsettings.json                    # Configuration
-├── Models/                             # Entity classes
+├── Program.cs                          # Entry point, CLI dispatch, --source override
+├── appsettings.json                    # Configuration (DB, providers, Serilog)
+├── Models/                             # Entity classes + config POCOs
 ├── Data/
 │   ├── AppDbContext.cs                 # EF Core DbContext
 │   └── Repositories/                   # Repository pattern implementations
 ├── Services/
 │   ├── RateLimiterService.cs           # Global request rate limiter
-│   └── Scrapers/                       # Scraper service implementations
+│   ├── DataProviderFactory.cs          # Maps provider config to DI registrations
+│   └── Scrapers/
+│       ├── BaseScraperService.cs       # Abstract base for HTML scraping
+│       ├── BaseApiService.cs           # Abstract base for JSON APIs
+│       ├── TeamScraperService.cs       # Pro Football Reference (HTML)
+│       ├── PlayerScraperService.cs     # Pro Football Reference (HTML)
+│       ├── GameScraperService.cs       # Pro Football Reference (HTML)
+│       ├── StatsScraperService.cs      # Pro Football Reference (HTML)
+│       ├── Espn/                       # ESPN API provider (4 services + DTOs + mappings)
+│       ├── SportsDataIo/              # SportsData.io API provider (4 services + DTOs)
+│       ├── MySportsFeeds/             # MySportsFeeds API provider (4 services + DTOs)
+│       └── NflCom/                    # NFL.com API provider (4 services + DTOs)
 ├── Migrations/                         # EF Core migration files
 └── Extensions/
-    └── ServiceCollectionExtensions.cs  # DI registration
+    └── ServiceCollectionExtensions.cs  # DI wiring
 data/                                   # SQLite database directory
-tests/WebScraper.Tests/                 # xUnit test project
+tests/WebScraper.Tests/                 # xUnit test project (128 tests)
 ```
 
 ## License
