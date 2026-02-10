@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Serilog;
@@ -15,10 +16,24 @@ try
 {
     Log.Information("Starting NFL Web Scraper");
 
+    // Pre-parse --source flag to override DataProvider before host is built
+    var sourceOverride = GetStringArgValue(args, "--source");
+
     var host = Host.CreateDefaultBuilder(args)
         .UseSerilog((context, services, configuration) =>
         {
             configuration.ReadFrom.Configuration(context.Configuration);
+        })
+        .ConfigureAppConfiguration((context, config) =>
+        {
+            if (sourceOverride != null)
+            {
+                config.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["ScraperSettings:DataProvider"] = sourceOverride
+                });
+                Log.Information("Data provider overridden via --source flag: {Provider}", sourceOverride);
+            }
         })
         .ConfigureServices((context, services) =>
         {
@@ -199,10 +214,13 @@ static void PrintUsage()
           all      --season <year>           Run full pipeline (teams, players, games)
 
         Options:
-          --team <abbr>     NFL team abbreviation (e.g., KC, NE, DAL)
-          --season <year>   NFL season year (1920-current)
-          --week <n>        Week number (1-22)
-          --help, -h        Show this help message
+          --team <abbr>       NFL team abbreviation (e.g., KC, NE, DAL)
+          --season <year>     NFL season year (1920-current)
+          --week <n>          Week number (1-22)
+          --source <provider> Data source override (default: from appsettings.json)
+                              Values: ProFootballReference, Espn, SportsDataIo,
+                                      MySportsFeeds, NflCom
+          --help, -h          Show this help message
 
         Examples:
           dotnet run -- teams
@@ -210,5 +228,7 @@ static void PrintUsage()
           dotnet run -- games --season 2025
           dotnet run -- stats --season 2025 --week 1
           dotnet run -- all --season 2025
+          dotnet run -- teams --source Espn
+          dotnet run -- games --season 2025 --source SportsDataIo
         """);
 }

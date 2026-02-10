@@ -6,4 +6,6 @@ public class ScraperSettings
     public int MaxRetries { get; set; } = 3;
     public string UserAgent { get; set; } = "NFLScraper/1.0 (educational project)";
     public int TimeoutSeconds { get; set; } = 30;
+    public string DataProvider { get; set; } = "ProFootballReference";
+    public Dictionary<string, ApiProviderSettings> Providers { get; set; } = new();
 }
