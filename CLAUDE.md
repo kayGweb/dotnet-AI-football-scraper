@@ -64,12 +64,18 @@ WebScraper/
 │       │   ├── SportsDataPlayerService.cs   # SportsData.io: Players via /scores/json/Players/{team}
 │       │   ├── SportsDataGameService.cs     # SportsData.io: Scores via /scores/json/ScoresByWeek
 │       │   └── SportsDataStatsService.cs    # SportsData.io: Stats via /stats/json/PlayerGameStatsByWeek
-│       └── MySportsFeeds/
-│           ├── MySportsFeedsDtos.cs          # DTO classes for MySportsFeeds JSON responses
-│           ├── MySportsFeedsTeamService.cs   # MySportsFeeds: Teams via /{season}/teams.json
-│           ├── MySportsFeedsPlayerService.cs # MySportsFeeds: Players via /players.json
-│           ├── MySportsFeedsGameService.cs   # MySportsFeeds: Games via /{season}/games.json
-│           └── MySportsFeedsStatsService.cs  # MySportsFeeds: Stats via /{season}/week/{week}/player_gamelogs.json
+│       ├── MySportsFeeds/
+│       │   ├── MySportsFeedsDtos.cs          # DTO classes for MySportsFeeds JSON responses
+│       │   ├── MySportsFeedsTeamService.cs   # MySportsFeeds: Teams via /{season}/teams.json
+│       │   ├── MySportsFeedsPlayerService.cs # MySportsFeeds: Players via /players.json
+│       │   ├── MySportsFeedsGameService.cs   # MySportsFeeds: Games via /{season}/games.json
+│       │   └── MySportsFeedsStatsService.cs  # MySportsFeeds: Stats via /{season}/week/{week}/player_gamelogs.json
+│       └── NflCom/
+│           ├── NflComDtos.cs                 # DTO classes for NFL.com JSON responses
+│           ├── NflComTeamService.cs          # NFL.com: Teams via /teams
+│           ├── NflComPlayerService.cs        # NFL.com: Rosters via /teams/{abbr}/roster
+│           ├── NflComGameService.cs          # NFL.com: Games via /games?season=&seasonType=REG&week=
+│           └── NflComStatsService.cs         # NFL.com: Stats via /games/{gameDetailId}/stats
 ├── Migrations/
 │   ├── 20260207000000_InitialCreate.cs           # Initial migration (Up/Down)
 │   ├── 20260207000000_InitialCreate.Designer.cs  # Migration model snapshot
@@ -107,7 +113,7 @@ AppDbContext → SQLite / PostgreSQL / SQL Server
 | ESPN API | `Espn` | None (open JSON API) | Implemented |
 | SportsData.io | `SportsDataIo` | API key header | Implemented |
 | MySportsFeeds | `MySportsFeeds` | HTTP Basic auth | Implemented |
-| NFL.com | `NflCom` | None (undocumented) | Planned |
+| NFL.com | `NflCom` | None (undocumented) | Implemented |
 
 ### BaseApiService (`Services/Scrapers/BaseApiService.cs`)
 Abstract base class for all JSON API providers, parallel to `BaseScraperService`:
@@ -232,6 +238,16 @@ Scrapers maintain a mapping between PFR team abbreviations (e.g., `kan`, `crd`, 
 
 **Auth:** HTTP Basic with API key as username and `"MYSPORTSFEEDS"` as password (handled by `BaseApiService.ConfigureAuth()`). Uses standard NFL abbreviations.
 
+### NFL.com API Details
+| Service | Interface | Endpoint | Key Parse Logic |
+|---------|-----------|----------|-----------------|
+| `NflComTeamService` | `ITeamScraperService` | `/teams` | Flat `teams[]` array; standard NFL abbreviations |
+| `NflComPlayerService` | `IPlayerScraperService` | `/teams/{abbr}/roster` | Flat `roster[]` array; jersey/weight as strings |
+| `NflComGameService` | `IGameScraperService` | `/games?season={year}&seasonType=REG&week={n}` | Caches `gameDetailId` in-memory for stats lookups |
+| `NflComStatsService` | `IStatsScraperService` | `/games/{gameDetailId}/stats` | `homeTeamStats`/`awayTeamStats` with nested passing/rushing/receiving |
+
+**Auth:** None required. Endpoints are undocumented and may change — most fragile provider. Uses standard NFL abbreviations.
+
 ## DI & Program Entry Point
 
 ### ServiceCollectionExtensions (`Extensions/ServiceCollectionExtensions.cs`)
@@ -250,6 +266,7 @@ Each scraper's `HttpClient` (both HTML and API) is configured with a resilience 
 
 ### Program.cs
 - Uses `Host.CreateDefaultBuilder` with Serilog and `AddWebScraperServices`
+- Pre-parses `--source` flag before host build to override `DataProvider` config via `AddInMemoryCollection`
 - Applies pending migrations on startup via `MigrateAsync()`
 - CLI command dispatch with input validation (season 1920-current, week 1-22)
 - `--help` / `-h` flag for usage info
@@ -277,9 +294,11 @@ dotnet run -- games --season 2025              # Scrape full season schedule/sco
 dotnet run -- games --season 2025 --week 1     # Scrape games for a specific week
 dotnet run -- stats --season 2025 --week 1     # Scrape player stats for a week
 dotnet run -- all --season 2025                # Run full pipeline (teams, players, games)
+dotnet run -- teams --source Espn              # Override data source at runtime
+dotnet run -- games --season 2025 --source SportsDataIo
 ```
 
-To switch data sources, set `DataProvider` in `appsettings.json` to `"Espn"`, `"SportsDataIo"`, or `"MySportsFeeds"`. SportsData.io and MySportsFeeds require API keys configured in `Providers` section.
+To switch data sources permanently, set `DataProvider` in `appsettings.json`. To switch at runtime, use `--source <provider>`. SportsData.io and MySportsFeeds require API keys configured in `Providers` section.
 
 ## Testing
 - **Framework:** xUnit with `Microsoft.NET.Test.Sdk`
@@ -317,8 +336,8 @@ To switch data sources, set `DataProvider` in `appsettings.json` to `"Espn"`, `"
 - [x] API Phase 3: ESPN API provider (EspnTeamService, EspnPlayerService, EspnGameService, EspnStatsService, DTOs, mappings)
 - [x] API Phase 4: SportsData.io API provider (SportsDataTeamService, SportsDataPlayerService, SportsDataGameService, SportsDataStatsService, DTOs)
 - [x] API Phase 5: MySportsFeeds API provider (MySportsFeedsTeamService, MySportsFeedsPlayerService, MySportsFeedsGameService, MySportsFeedsStatsService, DTOs)
-- [ ] API Phase 6: NFL.com API provider
-- [ ] API Phase 7: CLI `--source` flag for runtime provider override
+- [x] API Phase 6: NFL.com API provider (NflComTeamService, NflComPlayerService, NflComGameService, NflComStatsService, DTOs)
+- [x] API Phase 7: CLI `--source` flag for runtime provider override
 - [ ] API Phase 8: Tests for API providers
 - [ ] API Phase 9: Documentation & polish
 
