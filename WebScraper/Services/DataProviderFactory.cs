@@ -7,6 +7,7 @@ using WebScraper.Models;
 using WebScraper.Services.Scrapers;
 using WebScraper.Services.Scrapers.Espn;
 using WebScraper.Services.Scrapers.MySportsFeeds;
+using WebScraper.Services.Scrapers.NflCom;
 using WebScraper.Services.Scrapers.SportsDataIo;
 
 namespace WebScraper.Services;
@@ -50,10 +51,18 @@ public static class DataProviderFactory
                 AddApiHttpClient<IStatsScraperService, MySportsFeedsStatsService>(services, settings, msfSettings);
                 break;
 
+            case "nflcom":
+                var nflSettings = settings.Providers.GetValueOrDefault("NflCom") ?? new ApiProviderSettings();
+                AddApiHttpClient<ITeamScraperService, NflComTeamService>(services, settings, nflSettings);
+                AddApiHttpClient<IPlayerScraperService, NflComPlayerService>(services, settings, nflSettings);
+                AddApiHttpClient<IGameScraperService, NflComGameService>(services, settings, nflSettings);
+                AddApiHttpClient<IStatsScraperService, NflComStatsService>(services, settings, nflSettings);
+                break;
+
             default:
                 throw new InvalidOperationException(
                     $"Unsupported data provider: '{settings.DataProvider}'. " +
-                    "Supported: ProFootballReference, Espn, SportsDataIo, MySportsFeeds");
+                    "Supported: ProFootballReference, Espn, SportsDataIo, MySportsFeeds, NflCom");
         }
     }
 
