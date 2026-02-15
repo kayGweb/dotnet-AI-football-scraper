@@ -34,7 +34,8 @@ bld/
 [Bb]in/
 [Oo]bj/
 [Ll]og/
-[Ll]ogs/
+[Ll]ogs/*
+![Ll]ogs/.gitkeep
 
 # NuGet Packages
 *.nupkg
