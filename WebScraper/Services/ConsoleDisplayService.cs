@@ -217,6 +217,67 @@ public class ConsoleDisplayService
         Console.WriteLine($"  {message}");
     }
 
+    public void PrintMainMenu(string currentSource)
+    {
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine("  Main Menu");
+        Console.ResetColor();
+        Console.WriteLine("  " + new string('-', 40));
+        Console.WriteLine("  1. Scrape data");
+        Console.WriteLine("  2. View data");
+        Console.WriteLine("  3. Database status");
+        Console.WriteLine($"  4. Change source (current: {GetProviderDisplayName(currentSource)})");
+        Console.WriteLine("  5. Exit");
+        Console.WriteLine();
+    }
+
+    public void PrintScrapeMenu()
+    {
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine("  Scrape Menu");
+        Console.ResetColor();
+        Console.WriteLine("  " + new string('-', 40));
+        Console.WriteLine("  1. Teams (all 32)");
+        Console.WriteLine("  2. Single team");
+        Console.WriteLine("  3. Players (all rosters)");
+        Console.WriteLine("  4. Games (full season)");
+        Console.WriteLine("  5. Games (single week)");
+        Console.WriteLine("  6. Player stats (single week)");
+        Console.WriteLine("  7. Full pipeline (teams + players + games)");
+        Console.WriteLine("  8. Back to main menu");
+        Console.WriteLine();
+    }
+
+    public void PrintViewMenu()
+    {
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine("  View Menu");
+        Console.ResetColor();
+        Console.WriteLine("  " + new string('-', 40));
+        Console.WriteLine("  1. Teams");
+        Console.WriteLine("  2. Players (by team)");
+        Console.WriteLine("  3. Games (by season/week)");
+        Console.WriteLine("  4. Player stats");
+        Console.WriteLine("  5. Back to main menu");
+        Console.WriteLine();
+    }
+
+    public void PrintSourceMenu(string currentSource)
+    {
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine("  Change Data Source");
+        Console.ResetColor();
+        Console.WriteLine($"  Current: {GetProviderDisplayName(currentSource)}");
+        Console.WriteLine("  " + new string('-', 40));
+        Console.WriteLine("  1. Pro Football Reference (HTML scraping)");
+        Console.WriteLine("  2. ESPN (JSON API)");
+        Console.WriteLine("  3. SportsData.io (requires API key)");
+        Console.WriteLine("  4. MySportsFeeds (requires API key)");
+        Console.WriteLine("  5. NFL.com (undocumented API)");
+        Console.WriteLine("  6. Cancel");
+        Console.WriteLine();
+    }
+
     public static bool IsValidProvider(string provider)
     {
         return ValidProviders.Any(p => p.Equals(provider, StringComparison.OrdinalIgnoreCase));
@@ -227,7 +288,7 @@ public class ConsoleDisplayService
         return $"Valid providers: {string.Join(", ", ValidProviders)}";
     }
 
-    private static string GetProviderDisplayName(string provider)
+    public static string GetProviderDisplayName(string provider)
     {
         return provider.ToLowerInvariant() switch
         {

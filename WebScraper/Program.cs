@@ -29,26 +29,14 @@ try
         return 1;
     }
 
-    var host = Host.CreateDefaultBuilder(args)
-        .UseSerilog((context, services, configuration) =>
-        {
-            configuration.ReadFrom.Configuration(context.Configuration);
-        })
-        .ConfigureAppConfiguration((context, config) =>
-        {
-            if (sourceOverride != null)
-            {
-                config.AddInMemoryCollection(new Dictionary<string, string?>
-                {
-                    ["ScraperSettings:DataProvider"] = sourceOverride
-                });
-            }
-        })
-        .ConfigureServices((context, services) =>
-        {
-            services.AddWebScraperServices(context.Configuration);
-        })
-        .Build();
+    // Interactive mode: no args or explicit "interactive" command
+    if (args.Length == 0 || args[0].Equals("interactive", StringComparison.OrdinalIgnoreCase))
+    {
+        return await RunInteractiveAsync(sourceOverride);
+    }
+
+    // CLI mode
+    var host = BuildHost(args, sourceOverride);
 
     // Read config values for banner
     var configuration = host.Services.GetRequiredService<IConfiguration>();
@@ -81,12 +69,38 @@ finally
     await Log.CloseAndFlushAsync();
 }
 
-// --- Command dispatch ---
+// --- Host builder ---
+
+static IHost BuildHost(string[] cliArgs, string? sourceOverride)
+{
+    return Host.CreateDefaultBuilder(cliArgs)
+        .UseSerilog((context, services, configuration) =>
+        {
+            configuration.ReadFrom.Configuration(context.Configuration);
+        })
+        .ConfigureAppConfiguration((context, config) =>
+        {
+            if (sourceOverride != null)
+            {
+                config.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["ScraperSettings:DataProvider"] = sourceOverride
+                });
+            }
+        })
+        .ConfigureServices((context, services) =>
+        {
+            services.AddWebScraperServices(context.Configuration);
+        })
+        .Build();
+}
+
+// --- CLI command dispatch ---
 
 static async Task<int> RunCommandAsync(IHost host, string[] args, ConsoleDisplayService display)
 {
-    if (args.Length == 0 || args[0].Equals("--help", StringComparison.OrdinalIgnoreCase)
-                        || args[0].Equals("-h", StringComparison.OrdinalIgnoreCase))
+    if (args[0].Equals("--help", StringComparison.OrdinalIgnoreCase)
+        || args[0].Equals("-h", StringComparison.OrdinalIgnoreCase))
     {
         PrintUsage();
         return 0;
@@ -182,6 +196,8 @@ static async Task<int> RunCommandAsync(IHost host, string[] args, ConsoleDisplay
 
     return result != null && result.Success ? 0 : 1;
 }
+
+// --- Data display commands ---
 
 static async Task<int> RunListCommandAsync(string[] args, IServiceProvider services, ConsoleDisplayService display, int? season, int? week)
 {
@@ -305,6 +321,8 @@ static async Task RunStatusCommandAsync(IServiceProvider services, ConsoleDispla
     display.PrintDatabaseStatus(teams, players, games, stats);
 }
 
+// --- Scrape pipeline ---
+
 static async Task<ScrapeResult> RunAllAsync(IServiceProvider services, int season, ConsoleDisplayService display)
 {
     display.PrintInfo($"Running full scrape pipeline for season {season}...");
@@ -354,6 +372,313 @@ static async Task<ScrapeResult> RunAllAsync(IServiceProvider services, int seaso
     };
 }
 
+// --- Interactive mode ---
+
+static async Task<int> RunInteractiveAsync(string? initialSource)
+{
+    string? currentSource = initialSource;
+
+    while (true)
+    {
+        using var host = BuildHost(Array.Empty<string>(), currentSource);
+
+        var configuration = host.Services.GetRequiredService<IConfiguration>();
+        var dataProvider = configuration.GetValue<string>("ScraperSettings:DataProvider") ?? "ProFootballReference";
+        var dbProvider = configuration.GetValue<string>("DatabaseProvider") ?? "Sqlite";
+        var connString = configuration.GetConnectionString("DefaultConnection") ?? "";
+
+        var display = host.Services.GetRequiredService<ConsoleDisplayService>();
+        display.PrintBanner(dataProvider, dbProvider, connString);
+
+        // Apply pending migrations
+        using (var migrationScope = host.Services.CreateScope())
+        {
+            var db = migrationScope.ServiceProvider.GetRequiredService<AppDbContext>();
+            await db.Database.MigrateAsync();
+        }
+
+        var sourceChanged = false;
+
+        while (!sourceChanged)
+        {
+            display.PrintMainMenu(dataProvider);
+            Console.Write("  > ");
+            var input = Console.ReadLine()?.Trim();
+
+            // Handle EOF (Ctrl+D / Ctrl+Z)
+            if (input == null)
+            {
+                Console.WriteLine();
+                display.PrintSuccess("Goodbye!");
+                return 0;
+            }
+
+            if (string.IsNullOrEmpty(input)) continue;
+
+            switch (input)
+            {
+                case "1":
+                    using (var scope = host.Services.CreateScope())
+                        await HandleScrapeMenuAsync(scope.ServiceProvider, display);
+                    break;
+
+                case "2":
+                    using (var scope = host.Services.CreateScope())
+                        await HandleViewMenuAsync(scope.ServiceProvider, display);
+                    break;
+
+                case "3":
+                    using (var scope = host.Services.CreateScope())
+                        await RunStatusCommandAsync(scope.ServiceProvider, display);
+                    break;
+
+                case "4":
+                    var newSource = HandleChangeSource(display, dataProvider);
+                    if (newSource != null)
+                    {
+                        currentSource = newSource;
+                        sourceChanged = true;
+                    }
+                    break;
+
+                case "5":
+                    display.PrintSuccess("Goodbye!");
+                    return 0;
+
+                default:
+                    display.PrintWarning("Invalid choice. Enter 1-5.");
+                    break;
+            }
+        }
+    }
+}
+
+static async Task HandleScrapeMenuAsync(IServiceProvider services, ConsoleDisplayService display)
+{
+    display.PrintScrapeMenu();
+    Console.Write("  > ");
+    var input = Console.ReadLine()?.Trim();
+
+    if (string.IsNullOrEmpty(input) || input == "8") return;
+
+    switch (input)
+    {
+        case "1":
+            var teamScraper = services.GetRequiredService<ITeamScraperService>();
+            var teamResult = await teamScraper.ScrapeTeamsAsync();
+            display.PrintScrapeResult("Teams", teamResult);
+            break;
+
+        case "2":
+            Console.Write("  Team abbreviation (e.g., KC): ");
+            var abbr = Console.ReadLine()?.Trim();
+            if (string.IsNullOrEmpty(abbr))
+            {
+                display.PrintWarning("No abbreviation entered.");
+                break;
+            }
+            var singleTeamScraper = services.GetRequiredService<ITeamScraperService>();
+            var singleResult = await singleTeamScraper.ScrapeTeamAsync(abbr.ToUpperInvariant());
+            display.PrintScrapeResult("Team", singleResult);
+            break;
+
+        case "3":
+            var playerScraper = services.GetRequiredService<IPlayerScraperService>();
+            var playerResult = await playerScraper.ScrapeAllPlayersAsync();
+            display.PrintScrapeResult("Players", playerResult);
+            break;
+
+        case "4":
+            var season4 = PromptForInt("Season year (e.g., 2025)");
+            if (season4 == null) break;
+            var gameScraper4 = services.GetRequiredService<IGameScraperService>();
+            var gameResult4 = await gameScraper4.ScrapeGamesAsync(season4.Value);
+            display.PrintScrapeResult("Games", gameResult4);
+            break;
+
+        case "5":
+            var season5 = PromptForInt("Season year (e.g., 2025)");
+            if (season5 == null) break;
+            var week5 = PromptForInt("Week number (1-22)");
+            if (week5 == null) break;
+            var gameScraper5 = services.GetRequiredService<IGameScraperService>();
+            var gameResult5 = await gameScraper5.ScrapeGamesAsync(season5.Value, week5.Value);
+            display.PrintScrapeResult("Games", gameResult5);
+            break;
+
+        case "6":
+            var season6 = PromptForInt("Season year (e.g., 2025)");
+            if (season6 == null) break;
+            var week6 = PromptForInt("Week number (1-22)");
+            if (week6 == null) break;
+            var statsScraper = services.GetRequiredService<IStatsScraperService>();
+            var statsResult = await statsScraper.ScrapePlayerStatsAsync(season6.Value, week6.Value);
+            display.PrintScrapeResult("Stats", statsResult);
+            break;
+
+        case "7":
+            var season7 = PromptForInt("Season year (e.g., 2025)");
+            if (season7 == null) break;
+            await RunAllAsync(services, season7.Value, display);
+            break;
+
+        default:
+            display.PrintWarning("Invalid choice. Enter 1-8.");
+            break;
+    }
+
+    Console.WriteLine();
+}
+
+static async Task HandleViewMenuAsync(IServiceProvider services, ConsoleDisplayService display)
+{
+    display.PrintViewMenu();
+    Console.Write("  > ");
+    var input = Console.ReadLine()?.Trim();
+
+    if (string.IsNullOrEmpty(input) || input == "5") return;
+
+    switch (input)
+    {
+        case "1":
+            var teamRepo = services.GetRequiredService<ITeamRepository>();
+            var teams = await teamRepo.GetAllAsync();
+            display.PrintTeamsTable(teams);
+            break;
+
+        case "2":
+            Console.Write("  Team abbreviation (e.g., KC, or press Enter for all): ");
+            var teamAbbr = Console.ReadLine()?.Trim();
+            var playerRepo = services.GetRequiredService<IPlayerRepository>();
+            if (!string.IsNullOrEmpty(teamAbbr))
+            {
+                var teamRepoLookup = services.GetRequiredService<ITeamRepository>();
+                var team = await teamRepoLookup.GetByAbbreviationAsync(teamAbbr.ToUpperInvariant());
+                if (team == null)
+                {
+                    display.PrintError($"Team '{teamAbbr}' not found. Run teams scrape first.");
+                    break;
+                }
+                var teamPlayers = await playerRepo.GetByTeamAsync(team.Id);
+                display.PrintPlayersTable(teamPlayers, $"{team.City} {team.Name}");
+            }
+            else
+            {
+                var allPlayers = await playerRepo.GetAllAsync();
+                display.PrintPlayersTable(allPlayers);
+            }
+            break;
+
+        case "3":
+            var gameSeason = PromptForInt("Season year (e.g., 2025)");
+            if (gameSeason == null) break;
+            var gameWeek = PromptForOptionalInt("Week number (1-22, or press Enter for all)");
+            var gameRepo = services.GetRequiredService<IGameRepository>();
+            var games = gameWeek != null
+                ? await gameRepo.GetByWeekAsync(gameSeason.Value, gameWeek.Value)
+                : await gameRepo.GetBySeasonAsync(gameSeason.Value);
+            display.PrintGamesTable(games, gameSeason, gameWeek);
+            break;
+
+        case "4":
+            Console.Write("  Player name (or press Enter for weekly stats): ");
+            var playerName = Console.ReadLine()?.Trim();
+            var statsRepo = services.GetRequiredService<IStatsRepository>();
+
+            if (!string.IsNullOrEmpty(playerName))
+            {
+                var statsSeason = PromptForInt("Season year (e.g., 2025)");
+                if (statsSeason == null) break;
+                var playerStats = await statsRepo.GetPlayerStatsAsync(playerName, statsSeason.Value);
+                display.PrintInfo($"Stats for {playerName} — {statsSeason.Value} Season");
+                display.PrintStatsTable(playerStats);
+            }
+            else
+            {
+                var statsSeason = PromptForInt("Season year (e.g., 2025)");
+                if (statsSeason == null) break;
+                var statsWeek = PromptForInt("Week number (1-22)");
+                if (statsWeek == null) break;
+                var gameRepoForStats = services.GetRequiredService<IGameRepository>();
+                var weekGames = await gameRepoForStats.GetByWeekAsync(statsSeason.Value, statsWeek.Value);
+                var allStats = new List<PlayerGameStats>();
+                foreach (var game in weekGames)
+                {
+                    var gameStats = await statsRepo.GetGameStatsAsync(game.Id);
+                    allStats.AddRange(gameStats);
+                }
+                display.PrintInfo($"Stats — {statsSeason.Value} Season, Week {statsWeek.Value}");
+                display.PrintStatsTable(allStats);
+            }
+            break;
+
+        default:
+            display.PrintWarning("Invalid choice. Enter 1-5.");
+            break;
+    }
+}
+
+static string? HandleChangeSource(ConsoleDisplayService display, string currentSource)
+{
+    display.PrintSourceMenu(currentSource);
+    Console.Write("  > ");
+    var input = Console.ReadLine()?.Trim();
+
+    var newSource = input switch
+    {
+        "1" => "ProFootballReference",
+        "2" => "Espn",
+        "3" => "SportsDataIo",
+        "4" => "MySportsFeeds",
+        "5" => "NflCom",
+        _ => null
+    };
+
+    if (newSource != null && !newSource.Equals(currentSource, StringComparison.OrdinalIgnoreCase))
+    {
+        display.PrintSuccess($"Source changed to {ConsoleDisplayService.GetProviderDisplayName(newSource)}. Rebuilding...");
+        Console.WriteLine();
+        return newSource;
+    }
+
+    if (newSource != null)
+        display.PrintInfo($"Already using {ConsoleDisplayService.GetProviderDisplayName(newSource)}.");
+
+    return null;
+}
+
+// --- Input helpers ---
+
+static int? PromptForInt(string prompt)
+{
+    Console.Write($"  {prompt}: ");
+    var input = Console.ReadLine()?.Trim();
+    if (int.TryParse(input, out var value))
+        return value;
+    Console.ForegroundColor = ConsoleColor.Yellow;
+    Console.Write("  [WARN] ");
+    Console.ResetColor();
+    Console.WriteLine("Invalid number entered.");
+    return null;
+}
+
+static int? PromptForOptionalInt(string prompt)
+{
+    Console.Write($"  {prompt}: ");
+    var input = Console.ReadLine()?.Trim();
+    if (string.IsNullOrEmpty(input))
+        return null;
+    if (int.TryParse(input, out var value))
+        return value;
+    Console.ForegroundColor = ConsoleColor.Yellow;
+    Console.Write("  [WARN] ");
+    Console.ResetColor();
+    Console.WriteLine("Invalid number entered.");
+    return null;
+}
+
+// --- CLI argument helpers ---
+
 static int? GetArgValue(string[] args, string flag)
 {
     for (int i = 0; i < args.Length - 1; i++)
@@ -387,6 +712,10 @@ static void PrintUsage()
 
         Usage: dotnet run -- <command> [options]
 
+        Modes:
+          (no args)                          Launch interactive mode
+          interactive                        Launch interactive mode
+
         Scrape Commands:
           teams                              Scrape all 32 NFL teams
           teams    --team <abbr>             Scrape a single team by NFL abbreviation
@@ -419,6 +748,7 @@ static void PrintUsage()
           --help, -h          Show this help message
 
         Examples:
+          dotnet run                                                    # Interactive mode
           dotnet run -- teams
           dotnet run -- teams --team KC
           dotnet run -- games --season 2025
