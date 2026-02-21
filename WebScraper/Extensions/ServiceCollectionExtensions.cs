@@ -28,7 +28,8 @@ public static class ServiceCollectionExtensions
             switch (provider.ToLowerInvariant())
             {
                 case "sqlite":
-                    options.UseSqlite(connectionString);
+                    var resolvedConn = ResolveSqlitePath(connectionString);
+                    options.UseSqlite(resolvedConn);
                     break;
                 case "postgresql":
                     options.UseNpgsql(connectionString);
@@ -55,5 +56,24 @@ public static class ServiceCollectionExtensions
         DataProviderFactory.RegisterScrapers(services, scraperSettings);
 
         return services;
+    }
+
+    private static string? ResolveSqlitePath(string? connectionString)
+    {
+        if (string.IsNullOrEmpty(connectionString)) return connectionString;
+
+        const string prefix = "Data Source=";
+        if (!connectionString.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            return connectionString;
+
+        var path = connectionString[prefix.Length..].Trim();
+        if (Path.IsPathRooted(path)) return connectionString;
+
+        var absolutePath = Path.Combine(AppContext.BaseDirectory, path);
+        var dir = Path.GetDirectoryName(absolutePath);
+        if (dir != null && !Directory.Exists(dir))
+            Directory.CreateDirectory(dir);
+
+        return $"{prefix}{absolutePath}";
     }
 }

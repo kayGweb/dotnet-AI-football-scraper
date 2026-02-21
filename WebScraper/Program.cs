@@ -74,6 +74,7 @@ finally
 static IHost BuildHost(string[] cliArgs, string? sourceOverride)
 {
     return Host.CreateDefaultBuilder(cliArgs)
+        .UseContentRoot(AppContext.BaseDirectory)
         .UseSerilog((context, services, configuration) =>
         {
             configuration.ReadFrom.Configuration(context.Configuration);
