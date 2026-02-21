@@ -123,11 +123,9 @@ static async Task CheckApiConnectivityAsync(IHost host, string dataProvider, Con
             var reachable = await apiService.CheckConnectivityAsync();
             if (!reachable)
             {
-                var message =
+                display.PrintWarning(
                     $"{ConsoleDisplayService.GetProviderDisplayName(dataProvider)} may be unreachable. " +
-                    "Scraping commands may fail.";
-                display.PrintWarning(message);
-                Log.Warning("API connectivity check: {Message}", message);
+                    "Scraping commands may fail.");
             }
         }
     }

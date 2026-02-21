@@ -49,6 +49,9 @@ public class ConsoleDisplayService
             Console.Write("  [OK] ");
             Console.ResetColor();
             Console.WriteLine($"{operation}: {result.Message}");
+
+            FileLogger.Information("Scrape {Operation} succeeded: {Message} ({RecordsProcessed} records)",
+                operation, result.Message, result.RecordsProcessed);
         }
         else
         {
@@ -63,6 +66,9 @@ public class ConsoleDisplayService
                 Console.WriteLine($"         - {error}");
                 Console.ResetColor();
             }
+
+            FileLogger.Error("Scrape {Operation} failed: {Message}. Errors: {Errors}",
+                operation, result.Message, result.Errors);
         }
     }
 
@@ -214,6 +220,8 @@ public class ConsoleDisplayService
         Console.Write("  [ERROR] ");
         Console.ResetColor();
         Console.WriteLine(message);
+
+        FileLogger.Error("{Message}", message);
     }
 
     public void PrintWarning(string message)
@@ -222,6 +230,8 @@ public class ConsoleDisplayService
         Console.Write("  [WARN] ");
         Console.ResetColor();
         Console.WriteLine(message);
+
+        FileLogger.Warning("{Message}", message);
     }
 
     public void PrintSuccess(string message)
