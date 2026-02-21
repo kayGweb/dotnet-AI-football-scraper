@@ -76,11 +76,18 @@ finally
 
 static IHost BuildHost(string[] cliArgs, string? sourceOverride)
 {
+    var logDir = Path.Combine(AppContext.BaseDirectory, "logs");
+    if (!Directory.Exists(logDir))
+        Directory.CreateDirectory(logDir);
+    var logPath = Path.Combine(logDir, "scraper-.log");
+
     return Host.CreateDefaultBuilder(cliArgs)
         .UseContentRoot(AppContext.BaseDirectory)
         .UseSerilog((context, services, configuration) =>
         {
-            configuration.ReadFrom.Configuration(context.Configuration);
+            configuration
+                .ReadFrom.Configuration(context.Configuration)
+                .WriteTo.File(logPath, rollingInterval: Serilog.RollingInterval.Day);
         })
         .ConfigureAppConfiguration((context, config) =>
         {
@@ -116,9 +123,11 @@ static async Task CheckApiConnectivityAsync(IHost host, string dataProvider, Con
             var reachable = await apiService.CheckConnectivityAsync();
             if (!reachable)
             {
-                display.PrintWarning(
+                var message =
                     $"{ConsoleDisplayService.GetProviderDisplayName(dataProvider)} may be unreachable. " +
-                    "Scraping commands may fail.");
+                    "Scraping commands may fail.";
+                display.PrintWarning(message);
+                Log.Warning("API connectivity check: {Message}", message);
             }
         }
     }

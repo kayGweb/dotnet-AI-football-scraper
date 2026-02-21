@@ -1,9 +1,12 @@
+using Serilog;
 using WebScraper.Models;
 
 namespace WebScraper.Services;
 
 public class ConsoleDisplayService
 {
+    private static readonly Serilog.ILogger FileLogger = Log.ForContext<ConsoleDisplayService>();
+
     private static readonly string[] ValidProviders =
         ["ProFootballReference", "Espn", "SportsDataIo", "MySportsFeeds", "NflCom"];
 
