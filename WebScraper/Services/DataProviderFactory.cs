@@ -92,7 +92,10 @@ public static class DataProviderFactory
             {
                 if (!string.IsNullOrEmpty(providerSettings.BaseUrl))
                 {
-                    client.BaseAddress = new Uri(providerSettings.BaseUrl);
+                    var baseUrl = providerSettings.BaseUrl;
+                    if (!baseUrl.EndsWith('/'))
+                        baseUrl += '/';
+                    client.BaseAddress = new Uri(baseUrl);
                 }
 
                 client.DefaultRequestHeaders.UserAgent.ParseAdd(settings.UserAgent);

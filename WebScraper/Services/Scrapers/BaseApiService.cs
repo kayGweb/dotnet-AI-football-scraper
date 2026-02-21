@@ -66,35 +66,59 @@ public abstract class BaseApiService
     }
 
     /// <summary>
+    /// Strips a leading slash so HttpClient resolves the path relative to
+    /// BaseAddress rather than treating it as an absolute path from the host root.
+    /// </summary>
+    private static string NormalizeRelativeUrl(string url)
+    {
+        return url.StartsWith('/') ? url[1..] : url;
+    }
+
+    /// <summary>
+    /// Resolves a (normalized) relative URL against the HttpClient's BaseAddress
+    /// to produce the full absolute URL for logging and error messages.
+    /// </summary>
+    private string ResolveFullUrl(string relativeUrl)
+    {
+        var normalized = NormalizeRelativeUrl(relativeUrl);
+        if (_httpClient.BaseAddress != null)
+            return new Uri(_httpClient.BaseAddress, normalized).ToString();
+        return relativeUrl;
+    }
+
+    /// <summary>
     /// Performs a lightweight GET against <paramref name="probeUrl"/> to verify the
     /// API is reachable. Returns true on a 2xx response, false otherwise.
     /// Does not throw; logs warnings on failure.
     /// </summary>
     public async Task<bool> CheckConnectivityAsync(string probeUrl = "/teams")
     {
+        var normalized = NormalizeRelativeUrl(probeUrl);
+        var fullUrl = ResolveFullUrl(probeUrl);
+
         try
         {
-            _logger.LogInformation("Checking API connectivity via {ProbeUrl}", probeUrl);
-            var response = await _httpClient.GetAsync(probeUrl, HttpCompletionOption.ResponseHeadersRead);
+            _logger.LogInformation("Checking API connectivity via {FullUrl}", fullUrl);
+            var response = await _httpClient.GetAsync(normalized, HttpCompletionOption.ResponseHeadersRead);
 
             if (response.IsSuccessStatusCode)
             {
-                _logger.LogInformation("API connectivity check passed ({StatusCode})", (int)response.StatusCode);
+                _logger.LogInformation("API connectivity check passed ({StatusCode}) for {FullUrl}", (int)response.StatusCode, fullUrl);
                 return true;
             }
 
             _logger.LogWarning(
-                "API connectivity check failed: {ProbeUrl} returned {StatusCode}. " +
+                "API connectivity check failed: {FullUrl} returned {StatusCode}. " +
                 "Scraping may fail — verify the provider's BaseUrl in appsettings.json",
-                probeUrl, (int)response.StatusCode);
+                fullUrl, (int)response.StatusCode);
             return false;
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex,
-                "API connectivity check failed: could not reach {ProbeUrl}. " +
+                "API connectivity check failed: could not reach {FullUrl}. " +
                 "Scraping may fail — verify network and BaseUrl in appsettings.json",
-                probeUrl);
+                fullUrl);
             return false;
         }
     }
@@ -102,12 +126,14 @@ public abstract class BaseApiService
     protected async Task<T?> FetchJsonAsync<T>(string url) where T : class
     {
         await _rateLimiter.WaitAsync();
+        var normalized = NormalizeRelativeUrl(url);
+        var fullUrl = ResolveFullUrl(url);
 
         try
         {
-            _logger.LogInformation("Fetching JSON: {Url}", url);
+            _logger.LogInformation("Fetching JSON: {FullUrl}", fullUrl);
 
-            var response = await _httpClient.GetAsync(url);
+            var response = await _httpClient.GetAsync(normalized);
             response.EnsureSuccessStatusCode();
 
             var json = await response.Content.ReadAsStringAsync();
@@ -115,29 +141,29 @@ public abstract class BaseApiService
 
             if (result == null)
             {
-                _logger.LogWarning("Deserialized null from {Url}", url);
+                _logger.LogWarning("Deserialized null from {FullUrl}", fullUrl);
             }
 
             return result;
         }
         catch (JsonException ex)
         {
-            _logger.LogError(ex, "JSON deserialization failed for {Url}", url);
+            _logger.LogError(ex, "JSON deserialization failed for {FullUrl}", fullUrl);
             return null;
         }
         catch (HttpRequestException ex)
         {
-            _logger.LogError(ex, "HTTP error fetching {Url}: {StatusCode}", url, ex.StatusCode);
+            _logger.LogError(ex, "HTTP error fetching {FullUrl}: {StatusCode}", fullUrl, ex.StatusCode);
             return null;
         }
         catch (TaskCanceledException ex)
         {
-            _logger.LogError(ex, "Request timed out fetching {Url}", url);
+            _logger.LogError(ex, "Request timed out fetching {FullUrl}", fullUrl);
             return null;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to fetch {Url}", url);
+            _logger.LogError(ex, "Failed to fetch {FullUrl}", fullUrl);
             return null;
         }
     }
