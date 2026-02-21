@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "/Users/kendallgroup/Projects/WebScraper/WebScraper/WebScraper.csproj": {}
+    "/Users/kendallgroup/Projects/WebScraper/dotnet-AI-football-scraper/WebScraper/WebScraper.csproj": {}
   },
   "projects": {
-    "/Users/kendallgroup/Projects/WebScraper/WebScraper/WebScraper.csproj": {
+    "/Users/kendallgroup/Projects/WebScraper/dotnet-AI-football-scraper/WebScraper/WebScraper.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "/Users/kendallgroup/Projects/WebScraper/WebScraper/WebScraper.csproj",
+        "projectUniqueName": "/Users/kendallgroup/Projects/WebScraper/dotnet-AI-football-scraper/WebScraper/WebScraper.csproj",
         "projectName": "WebScraper",
-        "projectPath": "/Users/kendallgroup/Projects/WebScraper/WebScraper/WebScraper.csproj",
+        "projectPath": "/Users/kendallgroup/Projects/WebScraper/dotnet-AI-football-scraper/WebScraper/WebScraper.csproj",
         "packagesPath": "/Users/kendallgroup/.nuget/packages/",
-        "outputPath": "/Users/kendallgroup/Projects/WebScraper/WebScraper/obj/",
+        "outputPath": "/Users/kendallgroup/Projects/WebScraper/dotnet-AI-football-scraper/WebScraper/obj/",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "/Users/kendallgroup/.nuget/NuGet/NuGet.Config"
@@ -52,9 +52,59 @@
               "target": "Package",
               "version": "[1.12.4, )"
             },
-            "Polly": {
+            "Microsoft.EntityFrameworkCore": {
               "target": "Package",
-              "version": "[8.6.5, )"
+              "version": "[8.0.11, )"
+            },
+            "Microsoft.EntityFrameworkCore.Design": {
+              "include": "Runtime, Build, Native, ContentFiles, Analyzers, BuildTransitive",
+              "suppressParent": "All",
+              "target": "Package",
+              "version": "[8.0.11, )"
+            },
+            "Microsoft.EntityFrameworkCore.SqlServer": {
+              "target": "Package",
+              "version": "[8.0.11, )"
+            },
+            "Microsoft.EntityFrameworkCore.Sqlite": {
+              "target": "Package",
+              "version": "[8.0.11, )"
+            },
+            "Microsoft.Extensions.Configuration": {
+              "target": "Package",
+              "version": "[8.0.0, )"
+            },
+            "Microsoft.Extensions.Hosting": {
+              "target": "Package",
+              "version": "[8.0.1, )"
+            },
+            "Microsoft.Extensions.Http": {
+              "target": "Package",
+              "version": "[8.0.1, )"
+            },
+            "Microsoft.Extensions.Http.Resilience": {
+              "target": "Package",
+              "version": "[8.10.0, )"
+            },
+            "Npgsql.EntityFrameworkCore.PostgreSQL": {
+              "target": "Package",
+              "version": "[8.0.11, )"
+            },
+            "Serilog.Extensions.Hosting": {
+              "target": "Package",
+              "version": "[8.0.0, )"
+            },
+            "Serilog.Settings.Configuration": {
+              "target": "Package",
+              "version": "[8.0.4, )"
+            },
+            "Serilog.Sinks.Console": {
+              "target": "Package",
+              "version": "[5.0.1, )"
+            },
+            "Serilog.Sinks.File": {
+              "target": "Package",
+              "version": "[5.0.0, )"
             }
           },
           "imports": [
