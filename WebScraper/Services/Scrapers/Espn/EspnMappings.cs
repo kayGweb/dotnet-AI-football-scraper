@@ -1,8 +1,11 @@
+using WebScraper.Models;
+
 namespace WebScraper.Services.Scrapers.Espn;
 
 /// <summary>
 /// Bidirectional mapping between ESPN numeric team IDs and standard NFL abbreviations.
 /// ESPN uses its own internal IDs for teams, which differ from standard NFL abbreviations.
+/// Conference/division lookups delegate to <see cref="NflTeams"/>.
 /// </summary>
 public static class EspnMappings
 {
@@ -63,6 +66,21 @@ public static class EspnMappings
     }
 
     /// <summary>
+    /// Converts an ESPN numeric team ID to a standard NFL abbreviation,
+    /// falling back to the ESPN-provided abbreviation if the ID is unknown.
+    /// </summary>
+    public static string ToNflAbbreviation(string espnId, string espnAbbreviation)
+    {
+        if (EspnIdToNflAbbreviation.TryGetValue(espnId, out var mapped))
+            return mapped;
+
+        if (!string.IsNullOrEmpty(espnAbbreviation) && NflTeams.IsValid(espnAbbreviation))
+            return espnAbbreviation.ToUpperInvariant();
+
+        return espnId;
+    }
+
+    /// <summary>
     /// Converts a standard NFL abbreviation to an ESPN numeric team ID.
     /// Returns null if no mapping exists.
     /// </summary>
@@ -72,33 +90,11 @@ public static class EspnMappings
     }
 
     /// <summary>
-    /// Conference and division lookup by NFL abbreviation.
-    /// </summary>
-    private static readonly Dictionary<string, (string Conference, string Division)> DivisionLookup = new()
-    {
-        // AFC East
-        { "BUF", ("AFC", "East") }, { "MIA", ("AFC", "East") }, { "NE", ("AFC", "East") }, { "NYJ", ("AFC", "East") },
-        // AFC North
-        { "BAL", ("AFC", "North") }, { "CIN", ("AFC", "North") }, { "CLE", ("AFC", "North") }, { "PIT", ("AFC", "North") },
-        // AFC South
-        { "HOU", ("AFC", "South") }, { "IND", ("AFC", "South") }, { "JAX", ("AFC", "South") }, { "TEN", ("AFC", "South") },
-        // AFC West
-        { "DEN", ("AFC", "West") }, { "KC", ("AFC", "West") }, { "LV", ("AFC", "West") }, { "LAC", ("AFC", "West") },
-        // NFC East
-        { "DAL", ("NFC", "East") }, { "NYG", ("NFC", "East") }, { "PHI", ("NFC", "East") }, { "WAS", ("NFC", "East") },
-        // NFC North
-        { "CHI", ("NFC", "North") }, { "DET", ("NFC", "North") }, { "GB", ("NFC", "North") }, { "MIN", ("NFC", "North") },
-        // NFC South
-        { "ATL", ("NFC", "South") }, { "CAR", ("NFC", "South") }, { "NO", ("NFC", "South") }, { "TB", ("NFC", "South") },
-        // NFC West
-        { "ARI", ("NFC", "West") }, { "LAR", ("NFC", "West") }, { "SF", ("NFC", "West") }, { "SEA", ("NFC", "West") },
-    };
-
-    /// <summary>
     /// Gets the conference and division for a given NFL abbreviation.
+    /// Delegates to <see cref="NflTeams.GetDivision"/>.
     /// </summary>
     public static (string Conference, string Division) GetDivision(string nflAbbreviation)
     {
-        return DivisionLookup.GetValueOrDefault(nflAbbreviation.ToUpperInvariant(), ("", ""));
+        return NflTeams.GetDivision(nflAbbreviation);
     }
 }

@@ -56,6 +56,9 @@ try
         Log.Information("Database migrated and ready");
     }
 
+    // Connectivity check for API-based providers
+    await CheckApiConnectivityAsync(host, dataProvider, display);
+
     // Parse CLI arguments and dispatch
     return await RunCommandAsync(host, args, display);
 }
@@ -94,6 +97,35 @@ static IHost BuildHost(string[] cliArgs, string? sourceOverride)
             services.AddWebScraperServices(context.Configuration);
         })
         .Build();
+}
+
+// --- API connectivity check ---
+
+static async Task CheckApiConnectivityAsync(IHost host, string dataProvider, ConsoleDisplayService display)
+{
+    if (dataProvider.Equals("ProFootballReference", StringComparison.OrdinalIgnoreCase))
+        return;
+
+    try
+    {
+        using var scope = host.Services.CreateScope();
+        var teamService = scope.ServiceProvider.GetRequiredService<ITeamScraperService>();
+
+        if (teamService is BaseApiService apiService)
+        {
+            var reachable = await apiService.CheckConnectivityAsync();
+            if (!reachable)
+            {
+                display.PrintWarning(
+                    $"{ConsoleDisplayService.GetProviderDisplayName(dataProvider)} may be unreachable. " +
+                    "Scraping commands may fail.");
+            }
+        }
+    }
+    catch (Exception ex)
+    {
+        Log.Warning(ex, "Could not perform API connectivity check");
+    }
 }
 
 // --- CLI command dispatch ---
@@ -204,7 +236,7 @@ static async Task<int> RunListCommandAsync(string[] args, IServiceProvider servi
 {
     if (args.Length < 2)
     {
-        display.PrintError("list requires a subcommand: teams, players, games, or stats");
+        display.PrintError("list requires a subcommand: teams, players, games, stats, or abbr");
         PrintUsage();
         return 1;
     }
@@ -301,8 +333,13 @@ static async Task<int> RunListCommandAsync(string[] args, IServiceProvider servi
             }
             return 0;
 
+        case "abbr":
+        case "abbreviations":
+            display.PrintAbbreviationsTable();
+            return 0;
+
         default:
-            display.PrintError($"Unknown list subcommand: '{subcommand}'. Use: teams, players, games, stats");
+            display.PrintError($"Unknown list subcommand: '{subcommand}'. Use: teams, players, games, stats, abbr");
             return 1;
     }
 }
@@ -398,6 +435,9 @@ static async Task<int> RunInteractiveAsync(string? initialSource)
             await db.Database.MigrateAsync();
         }
 
+        // Connectivity check for API-based providers
+        await CheckApiConnectivityAsync(host, dataProvider, display);
+
         var sourceChanged = false;
 
         while (!sourceChanged)
@@ -471,15 +511,10 @@ static async Task HandleScrapeMenuAsync(IServiceProvider services, ConsoleDispla
             break;
 
         case "2":
-            Console.Write("  Team abbreviation (e.g., KC): ");
-            var abbr = Console.ReadLine()?.Trim();
-            if (string.IsNullOrEmpty(abbr))
-            {
-                display.PrintWarning("No abbreviation entered.");
-                break;
-            }
+            var abbr = PromptForAbbreviation(display);
+            if (string.IsNullOrEmpty(abbr)) break;
             var singleTeamScraper = services.GetRequiredService<ITeamScraperService>();
-            var singleResult = await singleTeamScraper.ScrapeTeamAsync(abbr.ToUpperInvariant());
+            var singleResult = await singleTeamScraper.ScrapeTeamAsync(abbr);
             display.PrintScrapeResult("Team", singleResult);
             break;
 
@@ -548,13 +583,12 @@ static async Task HandleViewMenuAsync(IServiceProvider services, ConsoleDisplayS
             break;
 
         case "2":
-            Console.Write("  Team abbreviation (e.g., KC, or press Enter for all): ");
-            var teamAbbr = Console.ReadLine()?.Trim();
+            var teamAbbr = PromptForOptionalAbbreviation(display);
             var playerRepo = services.GetRequiredService<IPlayerRepository>();
             if (!string.IsNullOrEmpty(teamAbbr))
             {
                 var teamRepoLookup = services.GetRequiredService<ITeamRepository>();
-                var team = await teamRepoLookup.GetByAbbreviationAsync(teamAbbr.ToUpperInvariant());
+                var team = await teamRepoLookup.GetByAbbreviationAsync(teamAbbr);
                 if (team == null)
                 {
                     display.PrintError($"Team '{teamAbbr}' not found. Run teams scrape first.");
@@ -678,6 +712,43 @@ static int? PromptForOptionalInt(string prompt)
     return null;
 }
 
+static string? PromptForAbbreviation(ConsoleDisplayService display)
+{
+    while (true)
+    {
+        Console.Write("  Team abbreviation (e.g., KC — enter ? to list all): ");
+        var input = Console.ReadLine()?.Trim();
+        if (string.IsNullOrEmpty(input))
+        {
+            display.PrintWarning("No abbreviation entered.");
+            return null;
+        }
+        if (input == "?")
+        {
+            display.PrintAbbreviationsTable();
+            continue;
+        }
+        return input.ToUpperInvariant();
+    }
+}
+
+static string? PromptForOptionalAbbreviation(ConsoleDisplayService display)
+{
+    while (true)
+    {
+        Console.Write("  Team abbreviation (e.g., KC — enter ? to list, Enter for all): ");
+        var input = Console.ReadLine()?.Trim();
+        if (string.IsNullOrEmpty(input))
+            return null;
+        if (input == "?")
+        {
+            display.PrintAbbreviationsTable();
+            continue;
+        }
+        return input.ToUpperInvariant();
+    }
+}
+
 // --- CLI argument helpers ---
 
 static int? GetArgValue(string[] args, string flag)
@@ -735,6 +806,7 @@ static void PrintUsage()
           list games --season <year> --week <n>  Show games for a specific week
           list stats --season <year> --week <n>  Show player stats for a week
           list stats --player <name> --season <year>  Show a player's season stats
+          list abbr                          Show all 32 NFL team abbreviations
           status                             Show database record counts
 
         Options:

@@ -7,6 +7,23 @@ public class ConsoleDisplayService
     private static readonly string[] ValidProviders =
         ["ProFootballReference", "Espn", "SportsDataIo", "MySportsFeeds", "NflCom"];
 
+    public void PrintAbbreviationsTable()
+    {
+        Console.WriteLine();
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine("  NFL Team Abbreviations");
+        Console.ResetColor();
+        Console.WriteLine("  " + new string('-', 40));
+
+        foreach (var group in NflTeams.ByDivision())
+        {
+            var abbrs = string.Join("  ", group.Select(t => $"{t.Abbreviation,-4}"));
+            Console.WriteLine($"  {group.Key + ":",-12} {abbrs}");
+        }
+
+        Console.WriteLine();
+    }
+
     public void PrintBanner(string provider, string dbProvider, string connectionString)
     {
         var sourceName = GetProviderDisplayName(provider);

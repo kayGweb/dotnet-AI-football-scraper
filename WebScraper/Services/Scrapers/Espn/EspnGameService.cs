@@ -90,8 +90,8 @@ public class EspnGameService : BaseApiService, IGameScraperService
 
             if (homeCompetitor == null || awayCompetitor == null) return null;
 
-            var homeAbbr = EspnMappings.ToNflAbbreviation(homeCompetitor.Team.Id);
-            var awayAbbr = EspnMappings.ToNflAbbreviation(awayCompetitor.Team.Id);
+            var homeAbbr = EspnMappings.ToNflAbbreviation(homeCompetitor.Team.Id, homeCompetitor.Team.Abbreviation);
+            var awayAbbr = EspnMappings.ToNflAbbreviation(awayCompetitor.Team.Id, awayCompetitor.Team.Abbreviation);
 
             var homeTeam = await _teamRepository.GetByAbbreviationAsync(homeAbbr);
             var awayTeam = await _teamRepository.GetByAbbreviationAsync(awayAbbr);

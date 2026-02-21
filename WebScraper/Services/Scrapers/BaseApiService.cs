@@ -65,6 +65,40 @@ public abstract class BaseApiService
         }
     }
 
+    /// <summary>
+    /// Performs a lightweight GET against <paramref name="probeUrl"/> to verify the
+    /// API is reachable. Returns true on a 2xx response, false otherwise.
+    /// Does not throw; logs warnings on failure.
+    /// </summary>
+    public async Task<bool> CheckConnectivityAsync(string probeUrl = "/teams")
+    {
+        try
+        {
+            _logger.LogInformation("Checking API connectivity via {ProbeUrl}", probeUrl);
+            var response = await _httpClient.GetAsync(probeUrl, HttpCompletionOption.ResponseHeadersRead);
+
+            if (response.IsSuccessStatusCode)
+            {
+                _logger.LogInformation("API connectivity check passed ({StatusCode})", (int)response.StatusCode);
+                return true;
+            }
+
+            _logger.LogWarning(
+                "API connectivity check failed: {ProbeUrl} returned {StatusCode}. " +
+                "Scraping may fail — verify the provider's BaseUrl in appsettings.json",
+                probeUrl, (int)response.StatusCode);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "API connectivity check failed: could not reach {ProbeUrl}. " +
+                "Scraping may fail — verify network and BaseUrl in appsettings.json",
+                probeUrl);
+            return false;
+        }
+    }
+
     protected async Task<T?> FetchJsonAsync<T>(string url) where T : class
     {
         await _rateLimiter.WaitAsync();

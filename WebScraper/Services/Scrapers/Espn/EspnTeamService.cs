@@ -71,7 +71,7 @@ public class EspnTeamService : BaseApiService, ITeamScraperService
 
         foreach (var espnTeam in espnTeams)
         {
-            var nflAbbr = EspnMappings.ToNflAbbreviation(espnTeam.Id);
+            var nflAbbr = EspnMappings.ToNflAbbreviation(espnTeam.Id, espnTeam.Abbreviation);
             if (nflAbbr.Equals(abbreviation, StringComparison.OrdinalIgnoreCase))
             {
                 var team = MapToTeam(espnTeam);
@@ -91,7 +91,7 @@ public class EspnTeamService : BaseApiService, ITeamScraperService
 
     private static Team? MapToTeam(EspnTeam espnTeam)
     {
-        var nflAbbr = EspnMappings.ToNflAbbreviation(espnTeam.Id);
+        var nflAbbr = EspnMappings.ToNflAbbreviation(espnTeam.Id, espnTeam.Abbreviation);
         var (conference, division) = EspnMappings.GetDivision(nflAbbr);
 
         if (string.IsNullOrEmpty(espnTeam.DisplayName))
