@@ -195,7 +195,7 @@ public class GameScraperService : BaseScraperService, IGameScraperService
         if (segments.Length < 2) return null;
 
         var pfrAbbr = segments[1].ToLowerInvariant();
-        return TeamScraperService.PfrToNflAbbreviation(pfrAbbr);
+        return PfrToNflAbbreviation(pfrAbbr);
     }
 
     // Exposed for use by other scrapers that need the same mapping

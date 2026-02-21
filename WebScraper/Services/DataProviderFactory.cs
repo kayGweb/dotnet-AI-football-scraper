@@ -1,8 +1,8 @@
 using System.Net;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Http.Resilience;
 using Polly;
-using Polly.Retry;
 using WebScraper.Models;
 using WebScraper.Services.Scrapers;
 using WebScraper.Services.Scrapers.Espn;
@@ -137,7 +137,7 @@ public static class DataProviderFactory
             }
         });
 
-        builder.AddCircuitBreaker(new Polly.CircuitBreaker.HttpCircuitBreakerStrategyOptions
+        builder.AddCircuitBreaker(new HttpCircuitBreakerStrategyOptions
         {
             SamplingDuration = TimeSpan.FromSeconds(30),
             FailureRatio = 0.7,
