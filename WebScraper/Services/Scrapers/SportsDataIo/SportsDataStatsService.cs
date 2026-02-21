@@ -25,7 +25,7 @@ public class SportsDataStatsService : BaseApiService, IStatsScraperService
         _gameRepository = gameRepository;
     }
 
-    public async Task ScrapePlayerStatsAsync(int season, int week)
+    public async Task<ScrapeResult> ScrapePlayerStatsAsync(int season, int week)
     {
         _logger.LogInformation("Starting player stats scrape for season {Season} week {Week} from SportsData.io API",
             season, week);
@@ -38,7 +38,7 @@ public class SportsDataStatsService : BaseApiService, IStatsScraperService
         {
             _logger.LogWarning("Failed to fetch player stats for season {Season} week {Week} from SportsData.io API",
                 season, week);
-            return;
+            return ScrapeResult.Failed($"Failed to fetch player stats for season {season} week {week} from SportsData.io API");
         }
 
         // Load games for this week to resolve GameId
@@ -46,7 +46,7 @@ public class SportsDataStatsService : BaseApiService, IStatsScraperService
         if (!games.Any())
         {
             _logger.LogWarning("No games found for season {Season} week {Week}. Scrape games first.", season, week);
-            return;
+            return ScrapeResult.Failed($"No games found for season {season} week {week}. Scrape games first.");
         }
 
         int count = 0;
@@ -78,6 +78,7 @@ public class SportsDataStatsService : BaseApiService, IStatsScraperService
         _logger.LogInformation(
             "Player stats scrape complete for season {Season} week {Week}. {Count} stat lines processed",
             season, week, count);
+        return ScrapeResult.Succeeded(count, $"{count} stat lines processed for season {season} week {week} from SportsData.io API");
     }
 
     private static bool HasStats(SportsDataPlayerStatsDto dto)

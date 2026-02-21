@@ -26,7 +26,7 @@ public class NflComGameService : BaseApiService, IGameScraperService
         _teamRepository = teamRepository;
     }
 
-    public async Task ScrapeGamesAsync(int season)
+    public async Task<ScrapeResult> ScrapeGamesAsync(int season)
     {
         _logger.LogInformation("Starting games scrape for season {Season} from NFL.com API", season);
 
@@ -38,9 +38,10 @@ public class NflComGameService : BaseApiService, IGameScraperService
         }
 
         _logger.LogInformation("Games scrape complete for season {Season}. {Count} games processed", season, totalCount);
+        return ScrapeResult.Succeeded(totalCount, $"{totalCount} games processed for season {season} from NFL.com API");
     }
 
-    public async Task ScrapeGamesAsync(int season, int week)
+    public async Task<ScrapeResult> ScrapeGamesAsync(int season, int week)
     {
         _logger.LogInformation("Starting games scrape for season {Season} week {Week} from NFL.com API", season, week);
 
@@ -48,6 +49,7 @@ public class NflComGameService : BaseApiService, IGameScraperService
 
         _logger.LogInformation("Games scrape complete for season {Season} week {Week}. {Count} games processed",
             season, week, count);
+        return ScrapeResult.Succeeded(count, $"{count} games processed for season {season} week {week} from NFL.com API");
     }
 
     private async Task<int> ScrapeWeekAsync(int season, int week)

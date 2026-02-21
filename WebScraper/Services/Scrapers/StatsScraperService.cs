@@ -27,7 +27,7 @@ public class StatsScraperService : BaseScraperService, IStatsScraperService
         _gameRepository = gameRepository;
     }
 
-    public async Task ScrapePlayerStatsAsync(int season, int week)
+    public async Task<ScrapeResult> ScrapePlayerStatsAsync(int season, int week)
     {
         _logger.LogInformation("Starting player stats scrape for season {Season} week {Week}", season, week);
 
@@ -37,7 +37,7 @@ public class StatsScraperService : BaseScraperService, IStatsScraperService
         if (!gamesList.Any())
         {
             _logger.LogWarning("No games found for season {Season} week {Week}. Scrape games first.", season, week);
-            return;
+            return ScrapeResult.Failed($"No games found for season {season} week {week}. Scrape games first.");
         }
 
         int totalStats = 0;
@@ -48,6 +48,7 @@ public class StatsScraperService : BaseScraperService, IStatsScraperService
         }
 
         _logger.LogInformation("Player stats scrape complete for season {Season} week {Week}. {Count} stat lines processed", season, week, totalStats);
+        return ScrapeResult.Succeeded(totalStats, $"{totalStats} stat lines processed for season {season} week {week}");
     }
 
     private async Task<int> ScrapeBoxScoreAsync(Game game)

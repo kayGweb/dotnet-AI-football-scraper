@@ -19,7 +19,7 @@ public class NflComTeamService : BaseApiService, ITeamScraperService
         _teamRepository = teamRepository;
     }
 
-    public async Task ScrapeTeamsAsync()
+    public async Task<ScrapeResult> ScrapeTeamsAsync()
     {
         _logger.LogInformation("Starting teams scrape from NFL.com API");
 
@@ -27,7 +27,7 @@ public class NflComTeamService : BaseApiService, ITeamScraperService
         if (response == null)
         {
             _logger.LogWarning("Failed to fetch teams from NFL.com API");
-            return;
+            return ScrapeResult.Failed("Failed to fetch teams from NFL.com API");
         }
 
         int count = 0;
@@ -43,9 +43,10 @@ public class NflComTeamService : BaseApiService, ITeamScraperService
         }
 
         _logger.LogInformation("NFL.com teams scrape complete. {Count} teams processed", count);
+        return ScrapeResult.Succeeded(count, $"{count} teams processed from NFL.com API");
     }
 
-    public async Task ScrapeTeamAsync(string abbreviation)
+    public async Task<ScrapeResult> ScrapeTeamAsync(string abbreviation)
     {
         _logger.LogInformation("Starting single team scrape for {Abbreviation} from NFL.com API", abbreviation);
 
@@ -53,7 +54,7 @@ public class NflComTeamService : BaseApiService, ITeamScraperService
         if (response == null)
         {
             _logger.LogWarning("Failed to fetch teams from NFL.com API");
-            return;
+            return ScrapeResult.Failed("Failed to fetch teams from NFL.com API");
         }
 
         var dto = response.Teams.FirstOrDefault(t =>
@@ -62,7 +63,7 @@ public class NflComTeamService : BaseApiService, ITeamScraperService
         if (dto == null)
         {
             _logger.LogWarning("Team with abbreviation {Abbreviation} not found in NFL.com response", abbreviation);
-            return;
+            return ScrapeResult.Failed($"Team with abbreviation '{abbreviation}' not found in NFL.com response");
         }
 
         var team = MapToTeam(dto);
@@ -70,7 +71,10 @@ public class NflComTeamService : BaseApiService, ITeamScraperService
         {
             await _teamRepository.UpsertAsync(team);
             _logger.LogInformation("Upserted team: {TeamName} ({Abbreviation})", team.Name, team.Abbreviation);
+            return ScrapeResult.Succeeded(1, $"Team {team.Name} ({team.Abbreviation}) scraped from NFL.com API");
         }
+
+        return ScrapeResult.Failed($"Failed to map NFL.com team data for '{abbreviation}'");
     }
 
     private static Team? MapToTeam(NflComTeam dto)
