@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Serilog;
 using WebScraper.Data;
+using WebScraper.Data.Repositories;
 using WebScraper.Extensions;
 using WebScraper.Models;
 using WebScraper.Services;
@@ -166,6 +167,13 @@ static async Task<int> RunCommandAsync(IHost host, string[] args, ConsoleDisplay
             result = await RunAllAsync(services, season.Value, display);
             break;
 
+        case "list":
+            return await RunListCommandAsync(args, services, display, season, week);
+
+        case "status":
+            await RunStatusCommandAsync(services, display);
+            return 0;
+
         default:
             display.PrintError($"Unknown command: '{command}'");
             PrintUsage();
@@ -173,6 +181,128 @@ static async Task<int> RunCommandAsync(IHost host, string[] args, ConsoleDisplay
     }
 
     return result != null && result.Success ? 0 : 1;
+}
+
+static async Task<int> RunListCommandAsync(string[] args, IServiceProvider services, ConsoleDisplayService display, int? season, int? week)
+{
+    if (args.Length < 2)
+    {
+        display.PrintError("list requires a subcommand: teams, players, games, or stats");
+        PrintUsage();
+        return 1;
+    }
+
+    var subcommand = args[1].ToLowerInvariant();
+
+    switch (subcommand)
+    {
+        case "teams":
+            var conference = GetStringArgValue(args, "--conference");
+            var teamRepo = services.GetRequiredService<ITeamRepository>();
+
+            if (conference != null)
+            {
+                var confUpper = conference.ToUpperInvariant();
+                if (confUpper != "AFC" && confUpper != "NFC")
+                {
+                    display.PrintError("--conference must be AFC or NFC");
+                    return 1;
+                }
+                var confTeams = await teamRepo.GetByConferenceAsync(confUpper);
+                display.PrintTeamsTable(confTeams);
+            }
+            else
+            {
+                var allTeams = await teamRepo.GetAllAsync();
+                display.PrintTeamsTable(allTeams);
+            }
+            return 0;
+
+        case "players":
+            var teamAbbr = GetStringArgValue(args, "--team");
+            var playerRepo = services.GetRequiredService<IPlayerRepository>();
+
+            if (teamAbbr != null)
+            {
+                var teamRepoForLookup = services.GetRequiredService<ITeamRepository>();
+                var team = await teamRepoForLookup.GetByAbbreviationAsync(teamAbbr.ToUpperInvariant());
+                if (team == null)
+                {
+                    display.PrintError($"Team '{teamAbbr}' not found in database. Run 'teams' scrape first.");
+                    return 1;
+                }
+                var teamPlayers = await playerRepo.GetByTeamAsync(team.Id);
+                display.PrintPlayersTable(teamPlayers, $"{team.City} {team.Name}");
+            }
+            else
+            {
+                var allPlayers = await playerRepo.GetAllAsync();
+                display.PrintPlayersTable(allPlayers);
+            }
+            return 0;
+
+        case "games":
+            if (season == null)
+            {
+                display.PrintError("--season is required for list games");
+                return 1;
+            }
+            var gameRepo = services.GetRequiredService<IGameRepository>();
+            var games = week != null
+                ? await gameRepo.GetByWeekAsync(season.Value, week.Value)
+                : await gameRepo.GetBySeasonAsync(season.Value);
+            display.PrintGamesTable(games, season, week);
+            return 0;
+
+        case "stats":
+            var playerName = GetStringArgValue(args, "--player");
+            var statsRepo = services.GetRequiredService<IStatsRepository>();
+
+            if (playerName != null && season != null)
+            {
+                var playerStats = await statsRepo.GetPlayerStatsAsync(playerName, season.Value);
+                display.PrintInfo($"Stats for {playerName} — {season.Value} Season");
+                display.PrintStatsTable(playerStats);
+            }
+            else if (season != null && week != null)
+            {
+                var gameRepoForStats = services.GetRequiredService<IGameRepository>();
+                var weekGames = await gameRepoForStats.GetByWeekAsync(season.Value, week.Value);
+                var allStats = new List<PlayerGameStats>();
+                foreach (var game in weekGames)
+                {
+                    var gameStats = await statsRepo.GetGameStatsAsync(game.Id);
+                    allStats.AddRange(gameStats);
+                }
+                display.PrintInfo($"Stats — {season.Value} Season, Week {week.Value}");
+                display.PrintStatsTable(allStats);
+            }
+            else
+            {
+                display.PrintError("list stats requires --season and --week, or --player and --season");
+                return 1;
+            }
+            return 0;
+
+        default:
+            display.PrintError($"Unknown list subcommand: '{subcommand}'. Use: teams, players, games, stats");
+            return 1;
+    }
+}
+
+static async Task RunStatusCommandAsync(IServiceProvider services, ConsoleDisplayService display)
+{
+    var teamRepo = services.GetRequiredService<ITeamRepository>();
+    var playerRepo = services.GetRequiredService<IPlayerRepository>();
+    var gameRepo = services.GetRequiredService<IGameRepository>();
+    var statsRepo = services.GetRequiredService<IStatsRepository>();
+
+    var teams = (await teamRepo.GetAllAsync()).Count();
+    var players = (await playerRepo.GetAllAsync()).Count();
+    var games = (await gameRepo.GetAllAsync()).Count();
+    var stats = (await statsRepo.GetAllAsync()).Count();
+
+    display.PrintDatabaseStatus(teams, players, games, stats);
 }
 
 static async Task<ScrapeResult> RunAllAsync(IServiceProvider services, int season, ConsoleDisplayService display)
@@ -257,7 +387,7 @@ static void PrintUsage()
 
         Usage: dotnet run -- <command> [options]
 
-        Commands:
+        Scrape Commands:
           teams                              Scrape all 32 NFL teams
           teams    --team <abbr>             Scrape a single team by NFL abbreviation
           players                            Scrape rosters for all teams
@@ -266,10 +396,23 @@ static void PrintUsage()
           stats    --season <year> --week <n> Scrape player stats for a week
           all      --season <year>           Run full pipeline (teams, players, games)
 
+        View Commands:
+          list teams                         Show all teams in the database
+          list teams --conference <AFC|NFC>  Show teams by conference
+          list players                       Show all players
+          list players --team <abbr>         Show roster for a team
+          list games --season <year>         Show games for a season
+          list games --season <year> --week <n>  Show games for a specific week
+          list stats --season <year> --week <n>  Show player stats for a week
+          list stats --player <name> --season <year>  Show a player's season stats
+          status                             Show database record counts
+
         Options:
           --team <abbr>       NFL team abbreviation (e.g., KC, NE, DAL)
           --season <year>     NFL season year (1920-current)
           --week <n>          Week number (1-22)
+          --conference <conf> Conference filter (AFC or NFC)
+          --player <name>     Player name for stats lookup
           --source <provider> Data source override (default: from appsettings.json)
                               Values: ProFootballReference, Espn, SportsDataIo,
                                       MySportsFeeds, NflCom
@@ -282,6 +425,10 @@ static void PrintUsage()
           dotnet run -- stats --season 2025 --week 1
           dotnet run -- all --season 2025
           dotnet run -- teams --source Espn
-          dotnet run -- games --season 2025 --source SportsDataIo
+          dotnet run -- list teams
+          dotnet run -- list players --team KC
+          dotnet run -- list games --season 2025 --week 1
+          dotnet run -- list stats --player "Patrick Mahomes" --season 2025
+          dotnet run -- status
         """);
 }
