@@ -5,6 +5,8 @@ using Microsoft.Extensions.Hosting;
 using Serilog;
 using WebScraper.Data;
 using WebScraper.Extensions;
+using WebScraper.Models;
+using WebScraper.Services;
 using WebScraper.Services.Scrapers;
 
 // Configure Serilog from appsettings.json
@@ -14,10 +16,17 @@ Log.Logger = new LoggerConfiguration()
 
 try
 {
-    Log.Information("Starting NFL Web Scraper");
-
     // Pre-parse --source flag to override DataProvider before host is built
     var sourceOverride = GetStringArgValue(args, "--source");
+
+    // Early validation of --source flag before building DI container
+    if (sourceOverride != null && !ConsoleDisplayService.IsValidProvider(sourceOverride))
+    {
+        var display = new ConsoleDisplayService();
+        display.PrintError($"Unknown data provider: '{sourceOverride}'");
+        display.PrintInfo(ConsoleDisplayService.GetValidProvidersMessage());
+        return 1;
+    }
 
     var host = Host.CreateDefaultBuilder(args)
         .UseSerilog((context, services, configuration) =>
@@ -32,7 +41,6 @@ try
                 {
                     ["ScraperSettings:DataProvider"] = sourceOverride
                 });
-                Log.Information("Data provider overridden via --source flag: {Provider}", sourceOverride);
             }
         })
         .ConfigureServices((context, services) =>
@@ -40,6 +48,16 @@ try
             services.AddWebScraperServices(context.Configuration);
         })
         .Build();
+
+    // Read config values for banner
+    var configuration = host.Services.GetRequiredService<IConfiguration>();
+    var dataProvider = configuration.GetValue<string>("ScraperSettings:DataProvider") ?? "ProFootballReference";
+    var dbProvider = configuration.GetValue<string>("DatabaseProvider") ?? "Sqlite";
+    var connString = configuration.GetConnectionString("DefaultConnection") ?? "";
+
+    // Print startup banner
+    var display = host.Services.GetRequiredService<ConsoleDisplayService>();
+    display.PrintBanner(dataProvider, dbProvider, connString);
 
     // Apply pending migrations (creates DB if it doesn't exist)
     using (var scope = host.Services.CreateScope())
@@ -50,7 +68,7 @@ try
     }
 
     // Parse CLI arguments and dispatch
-    await RunCommandAsync(host, args);
+    return await RunCommandAsync(host, args, display);
 }
 catch (Exception ex)
 {
@@ -62,17 +80,15 @@ finally
     await Log.CloseAndFlushAsync();
 }
 
-return 0;
-
 // --- Command dispatch ---
 
-static async Task RunCommandAsync(IHost host, string[] args)
+static async Task<int> RunCommandAsync(IHost host, string[] args, ConsoleDisplayService display)
 {
     if (args.Length == 0 || args[0].Equals("--help", StringComparison.OrdinalIgnoreCase)
                         || args[0].Equals("-h", StringComparison.OrdinalIgnoreCase))
     {
         PrintUsage();
-        return;
+        return 0;
     }
 
     var command = args[0].ToLowerInvariant();
@@ -82,92 +98,130 @@ static async Task RunCommandAsync(IHost host, string[] args)
     // Validate season range
     if (season != null && (season.Value < 1920 || season.Value > DateTime.Now.Year + 1))
     {
-        Log.Error("Invalid season {Season}. Must be between 1920 and {MaxYear}", season.Value, DateTime.Now.Year + 1);
-        return;
+        display.PrintError($"Invalid season {season.Value}. Must be between 1920 and {DateTime.Now.Year + 1}");
+        return 1;
     }
 
     // Validate week range
     if (week != null && (week.Value < 1 || week.Value > 22))
     {
-        Log.Error("Invalid week {Week}. Must be between 1 and 22", week.Value);
-        return;
+        display.PrintError($"Invalid week {week.Value}. Must be between 1 and 22");
+        return 1;
     }
 
     using var scope = host.Services.CreateScope();
     var services = scope.ServiceProvider;
+    ScrapeResult? result = null;
 
     switch (command)
     {
         case "teams":
             var teamAbbr = GetStringArgValue(args, "--team");
             var teamScraper = services.GetRequiredService<ITeamScraperService>();
-            if (teamAbbr != null)
-                await teamScraper.ScrapeTeamAsync(teamAbbr);
-            else
-                await teamScraper.ScrapeTeamsAsync();
+            result = teamAbbr != null
+                ? await teamScraper.ScrapeTeamAsync(teamAbbr)
+                : await teamScraper.ScrapeTeamsAsync();
+            display.PrintScrapeResult("Teams", result);
             break;
 
         case "players":
             var playerScraper = services.GetRequiredService<IPlayerScraperService>();
-            await playerScraper.ScrapeAllPlayersAsync();
+            result = await playerScraper.ScrapeAllPlayersAsync();
+            display.PrintScrapeResult("Players", result);
             break;
 
         case "games":
             if (season == null)
             {
-                Log.Error("--season is required for games command");
+                display.PrintError("--season is required for games command");
                 PrintUsage();
-                return;
+                return 1;
             }
             var gameScraper = services.GetRequiredService<IGameScraperService>();
-            if (week != null)
-                await gameScraper.ScrapeGamesAsync(season.Value, week.Value);
-            else
-                await gameScraper.ScrapeGamesAsync(season.Value);
+            result = week != null
+                ? await gameScraper.ScrapeGamesAsync(season.Value, week.Value)
+                : await gameScraper.ScrapeGamesAsync(season.Value);
+            display.PrintScrapeResult("Games", result);
             break;
 
         case "stats":
             if (season == null || week == null)
             {
-                Log.Error("--season and --week are required for stats command");
+                display.PrintError("--season and --week are required for stats command");
                 PrintUsage();
-                return;
+                return 1;
             }
             var statsScraper = services.GetRequiredService<IStatsScraperService>();
-            await statsScraper.ScrapePlayerStatsAsync(season.Value, week.Value);
+            result = await statsScraper.ScrapePlayerStatsAsync(season.Value, week.Value);
+            display.PrintScrapeResult("Stats", result);
             break;
 
         case "all":
             if (season == null)
             {
-                Log.Error("--season is required for all command");
+                display.PrintError("--season is required for all command");
                 PrintUsage();
-                return;
+                return 1;
             }
-            await RunAllAsync(services, season.Value);
+            result = await RunAllAsync(services, season.Value, display);
             break;
 
         default:
-            Log.Error("Unknown command: {Command}", command);
+            display.PrintError($"Unknown command: '{command}'");
             PrintUsage();
-            break;
+            return 1;
     }
+
+    return result != null && result.Success ? 0 : 1;
 }
 
-static async Task RunAllAsync(IServiceProvider services, int season)
+static async Task<ScrapeResult> RunAllAsync(IServiceProvider services, int season, ConsoleDisplayService display)
 {
-    Log.Information("Running full scrape pipeline for season {Season}", season);
+    display.PrintInfo($"Running full scrape pipeline for season {season}...");
+    Console.WriteLine();
+    var errors = new List<string>();
+    int totalRecords = 0;
 
+    // Step 1: Teams
     var teamScraper = services.GetRequiredService<ITeamScraperService>();
-    await teamScraper.ScrapeTeamsAsync();
+    var teamResult = await teamScraper.ScrapeTeamsAsync();
+    display.PrintScrapeResult("Teams", teamResult);
+    totalRecords += teamResult.RecordsProcessed;
 
+    if (!teamResult.Success)
+    {
+        display.PrintError("Teams scrape failed. Cannot continue pipeline.");
+        return ScrapeResult.Failed("Pipeline stopped: teams scrape failed");
+    }
+
+    // Step 2: Players
     var playerScraper = services.GetRequiredService<IPlayerScraperService>();
-    await playerScraper.ScrapeAllPlayersAsync();
+    var playerResult = await playerScraper.ScrapeAllPlayersAsync();
+    display.PrintScrapeResult("Players", playerResult);
+    totalRecords += playerResult.RecordsProcessed;
 
+    if (!playerResult.Success)
+        errors.Add(playerResult.Message);
+
+    // Step 3: Games
     var gameScraper = services.GetRequiredService<IGameScraperService>();
-    await gameScraper.ScrapeGamesAsync(season);
+    var gameResult = await gameScraper.ScrapeGamesAsync(season);
+    display.PrintScrapeResult("Games", gameResult);
+    totalRecords += gameResult.RecordsProcessed;
 
-    Log.Information("Full scrape pipeline complete for season {Season}", season);
+    if (!gameResult.Success)
+        errors.Add(gameResult.Message);
+
+    Console.WriteLine();
+    display.PrintInfo($"Full pipeline complete for season {season}. {totalRecords} total records processed.");
+
+    return new ScrapeResult
+    {
+        Success = errors.Count == 0,
+        RecordsProcessed = totalRecords,
+        Message = $"Pipeline complete: {totalRecords} records across teams, players, and games",
+        Errors = errors
+    };
 }
 
 static int? GetArgValue(string[] args, string flag)
@@ -200,7 +254,6 @@ static string? GetStringArgValue(string[] args, string flag)
 static void PrintUsage()
 {
     Console.WriteLine("""
-        NFL Web Scraper v1.0
 
         Usage: dotnet run -- <command> [options]
 
