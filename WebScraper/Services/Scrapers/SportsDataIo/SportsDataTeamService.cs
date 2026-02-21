@@ -19,7 +19,7 @@ public class SportsDataTeamService : BaseApiService, ITeamScraperService
         _teamRepository = teamRepository;
     }
 
-    public async Task ScrapeTeamsAsync()
+    public async Task<ScrapeResult> ScrapeTeamsAsync()
     {
         _logger.LogInformation("Starting teams scrape from SportsData.io API");
 
@@ -27,7 +27,7 @@ public class SportsDataTeamService : BaseApiService, ITeamScraperService
         if (teams == null)
         {
             _logger.LogWarning("Failed to fetch teams from SportsData.io API");
-            return;
+            return ScrapeResult.Failed("Failed to fetch teams from SportsData.io API");
         }
 
         int count = 0;
@@ -43,9 +43,10 @@ public class SportsDataTeamService : BaseApiService, ITeamScraperService
         }
 
         _logger.LogInformation("SportsData.io teams scrape complete. {Count} teams processed", count);
+        return ScrapeResult.Succeeded(count, $"{count} teams processed from SportsData.io API");
     }
 
-    public async Task ScrapeTeamAsync(string abbreviation)
+    public async Task<ScrapeResult> ScrapeTeamAsync(string abbreviation)
     {
         _logger.LogInformation("Starting single team scrape for {Abbreviation} from SportsData.io API", abbreviation);
 
@@ -53,7 +54,7 @@ public class SportsDataTeamService : BaseApiService, ITeamScraperService
         if (teams == null)
         {
             _logger.LogWarning("Failed to fetch teams from SportsData.io API");
-            return;
+            return ScrapeResult.Failed("Failed to fetch teams from SportsData.io API");
         }
 
         var dto = teams.FirstOrDefault(t =>
@@ -62,7 +63,7 @@ public class SportsDataTeamService : BaseApiService, ITeamScraperService
         if (dto == null)
         {
             _logger.LogWarning("Team with abbreviation {Abbreviation} not found in SportsData.io response", abbreviation);
-            return;
+            return ScrapeResult.Failed($"Team with abbreviation '{abbreviation}' not found in SportsData.io response");
         }
 
         var team = MapToTeam(dto);
@@ -70,7 +71,10 @@ public class SportsDataTeamService : BaseApiService, ITeamScraperService
         {
             await _teamRepository.UpsertAsync(team);
             _logger.LogInformation("Upserted team: {TeamName} ({Abbreviation})", team.Name, team.Abbreviation);
+            return ScrapeResult.Succeeded(1, $"Team {team.Name} ({team.Abbreviation}) scraped from SportsData.io API");
         }
+
+        return ScrapeResult.Failed($"Failed to map SportsData.io team data for '{abbreviation}'");
     }
 
     private static Team? MapToTeam(SportsDataTeamDto dto)

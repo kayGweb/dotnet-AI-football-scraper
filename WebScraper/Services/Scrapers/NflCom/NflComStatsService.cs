@@ -28,7 +28,7 @@ public class NflComStatsService : BaseApiService, IStatsScraperService
         _teamRepository = teamRepository;
     }
 
-    public async Task ScrapePlayerStatsAsync(int season, int week)
+    public async Task<ScrapeResult> ScrapePlayerStatsAsync(int season, int week)
     {
         _logger.LogInformation("Starting player stats scrape for season {Season} week {Week} from NFL.com API",
             season, week);
@@ -39,7 +39,7 @@ public class NflComStatsService : BaseApiService, IStatsScraperService
         if (!gamesList.Any())
         {
             _logger.LogWarning("No games found for season {Season} week {Week}. Scrape games first.", season, week);
-            return;
+            return ScrapeResult.Failed($"No games found for season {season} week {week}. Scrape games first.");
         }
 
         int totalStats = 0;
@@ -52,6 +52,7 @@ public class NflComStatsService : BaseApiService, IStatsScraperService
         _logger.LogInformation(
             "Player stats scrape complete for season {Season} week {Week}. {Count} stat lines processed",
             season, week, totalStats);
+        return ScrapeResult.Succeeded(totalStats, $"{totalStats} stat lines processed for season {season} week {week} from NFL.com API");
     }
 
     private async Task<int> ScrapeGameStatsAsync(Game game, int season, int week)

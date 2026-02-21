@@ -74,8 +74,10 @@ public class EspnGameServiceTests
         var (service, gameRepo, teamRepo) = CreateService(handler);
         SetupTeamLookup(teamRepo);
 
-        await service.ScrapeGamesAsync(2025, 1);
+        var result = await service.ScrapeGamesAsync(2025, 1);
 
+        Assert.True(result.Success);
+        Assert.Equal(1, result.RecordsProcessed);
         gameRepo.Verify(r => r.UpsertAsync(It.IsAny<Game>()), Times.Once);
     }
 
@@ -91,8 +93,9 @@ public class EspnGameServiceTests
             .Callback<Game>(g => capturedGame = g)
             .Returns(Task.CompletedTask);
 
-        await service.ScrapeGamesAsync(2025, 1);
+        var result = await service.ScrapeGamesAsync(2025, 1);
 
+        Assert.True(result.Success);
         Assert.NotNull(capturedGame);
         Assert.Equal(1, capturedGame.HomeTeamId);  // KC = ID 1
         Assert.Equal(2, capturedGame.AwayTeamId);   // BUF = ID 2
@@ -110,8 +113,9 @@ public class EspnGameServiceTests
             .Callback<Game>(g => capturedGame = g)
             .Returns(Task.CompletedTask);
 
-        await service.ScrapeGamesAsync(2025, 1);
+        var result = await service.ScrapeGamesAsync(2025, 1);
 
+        Assert.True(result.Success);
         Assert.NotNull(capturedGame);
         Assert.Equal(27, capturedGame.HomeScore);
         Assert.Equal(24, capturedGame.AwayScore);
@@ -129,8 +133,9 @@ public class EspnGameServiceTests
             .Callback<Game>(g => capturedGame = g)
             .Returns(Task.CompletedTask);
 
-        await service.ScrapeGamesAsync(2025, 1);
+        var result = await service.ScrapeGamesAsync(2025, 1);
 
+        Assert.True(result.Success);
         Assert.NotNull(capturedGame);
         Assert.Equal(2025, capturedGame.Season);
         Assert.Equal(1, capturedGame.Week);
@@ -143,8 +148,10 @@ public class EspnGameServiceTests
         var (service, gameRepo, teamRepo) = CreateService(handler);
         // Don't set up team lookups -> both return null
 
-        await service.ScrapeGamesAsync(2025, 1);
+        var result = await service.ScrapeGamesAsync(2025, 1);
 
+        Assert.True(result.Success);
+        Assert.Equal(0, result.RecordsProcessed);
         gameRepo.Verify(r => r.UpsertAsync(It.IsAny<Game>()), Times.Never);
     }
 
@@ -154,8 +161,10 @@ public class EspnGameServiceTests
         var handler = new FakeHttpHandler(HttpStatusCode.InternalServerError);
         var (service, gameRepo, _) = CreateService(handler);
 
-        await service.ScrapeGamesAsync(2025, 1);
+        var result = await service.ScrapeGamesAsync(2025, 1);
 
+        Assert.True(result.Success);
+        Assert.Equal(0, result.RecordsProcessed);
         gameRepo.Verify(r => r.UpsertAsync(It.IsAny<Game>()), Times.Never);
     }
 
@@ -176,8 +185,10 @@ public class EspnGameServiceTests
         var handler = new FakeHttpHandler(json);
         var (service, gameRepo, _) = CreateService(handler);
 
-        await service.ScrapeGamesAsync(2025, 1);
+        var result = await service.ScrapeGamesAsync(2025, 1);
 
+        Assert.True(result.Success);
+        Assert.Equal(0, result.RecordsProcessed);
         gameRepo.Verify(r => r.UpsertAsync(It.IsAny<Game>()), Times.Never);
     }
 

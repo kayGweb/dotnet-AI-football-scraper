@@ -24,26 +24,40 @@ public class PlayerScraperService : BaseScraperService, IPlayerScraperService
         _teamRepository = teamRepository;
     }
 
-    public async Task ScrapeAllPlayersAsync()
+    public async Task<ScrapeResult> ScrapeAllPlayersAsync()
     {
         _logger.LogInformation("Starting full player roster scrape for all teams");
 
         var teams = await _teamRepository.GetAllAsync();
-        foreach (var team in teams)
+        var teamsList = teams.ToList();
+        int totalCount = 0;
+        var errors = new List<string>();
+
+        foreach (var team in teamsList)
         {
-            await ScrapePlayersAsync(team.Id);
+            var result = await ScrapePlayersAsync(team.Id);
+            totalCount += result.RecordsProcessed;
+            if (!result.Success)
+                errors.Add(result.Message);
         }
 
-        _logger.LogInformation("All player rosters scrape complete");
+        _logger.LogInformation("All player rosters scrape complete. {Count} players processed", totalCount);
+        return new ScrapeResult
+        {
+            Success = errors.Count == 0 || totalCount > 0,
+            RecordsProcessed = totalCount,
+            Message = $"{totalCount} players processed across {teamsList.Count} teams",
+            Errors = errors
+        };
     }
 
-    public async Task ScrapePlayersAsync(int teamId)
+    public async Task<ScrapeResult> ScrapePlayersAsync(int teamId)
     {
         var team = await _teamRepository.GetByIdAsync(teamId);
         if (team == null)
         {
             _logger.LogWarning("Team with ID {TeamId} not found", teamId);
-            return;
+            return ScrapeResult.Failed($"Team with ID {teamId} not found");
         }
 
         _logger.LogInformation("Scraping roster for {TeamName} ({Abbreviation})", team.Name, team.Abbreviation);
@@ -56,14 +70,14 @@ public class PlayerScraperService : BaseScraperService, IPlayerScraperService
         if (doc == null)
         {
             _logger.LogWarning("Failed to fetch roster page for {TeamName}", team.Name);
-            return;
+            return ScrapeResult.Failed($"Failed to fetch roster page for {team.Name}");
         }
 
         var playerNodes = doc.DocumentNode.SelectNodes("//table[@id='roster']//tbody//tr[not(contains(@class,'thead'))]");
         if (playerNodes == null)
         {
             _logger.LogWarning("No player rows found for {TeamName}", team.Name);
-            return;
+            return ScrapeResult.Failed($"No player rows found for {team.Name}");
         }
 
         int count = 0;
@@ -79,6 +93,7 @@ public class PlayerScraperService : BaseScraperService, IPlayerScraperService
         }
 
         _logger.LogInformation("Roster scrape complete for {TeamName}. {Count} players processed", team.Name, count);
+        return ScrapeResult.Succeeded(count, $"{count} players processed for {team.Name}");
     }
 
     private Player? ParsePlayerNode(HtmlNode node, int teamId)

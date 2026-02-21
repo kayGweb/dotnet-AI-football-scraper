@@ -19,7 +19,7 @@ public class EspnTeamService : BaseApiService, ITeamScraperService
         _teamRepository = teamRepository;
     }
 
-    public async Task ScrapeTeamsAsync()
+    public async Task<ScrapeResult> ScrapeTeamsAsync()
     {
         _logger.LogInformation("Starting teams scrape from ESPN API");
 
@@ -27,7 +27,7 @@ public class EspnTeamService : BaseApiService, ITeamScraperService
         if (response == null)
         {
             _logger.LogWarning("Failed to fetch teams from ESPN API");
-            return;
+            return ScrapeResult.Failed("Failed to fetch teams from ESPN API");
         }
 
         var espnTeams = response.Sports
@@ -49,9 +49,10 @@ public class EspnTeamService : BaseApiService, ITeamScraperService
         }
 
         _logger.LogInformation("ESPN teams scrape complete. {Count} teams processed", count);
+        return ScrapeResult.Succeeded(count, $"{count} teams processed from ESPN API");
     }
 
-    public async Task ScrapeTeamAsync(string abbreviation)
+    public async Task<ScrapeResult> ScrapeTeamAsync(string abbreviation)
     {
         _logger.LogInformation("Starting single team scrape for {Abbreviation} from ESPN API", abbreviation);
 
@@ -59,7 +60,7 @@ public class EspnTeamService : BaseApiService, ITeamScraperService
         if (response == null)
         {
             _logger.LogWarning("Failed to fetch teams from ESPN API");
-            return;
+            return ScrapeResult.Failed("Failed to fetch teams from ESPN API");
         }
 
         var espnTeams = response.Sports
@@ -78,12 +79,14 @@ public class EspnTeamService : BaseApiService, ITeamScraperService
                 {
                     await _teamRepository.UpsertAsync(team);
                     _logger.LogInformation("Upserted team: {TeamName} ({Abbreviation})", team.Name, team.Abbreviation);
+                    return ScrapeResult.Succeeded(1, $"Team {team.Name} ({team.Abbreviation}) scraped from ESPN API");
                 }
-                return;
+                return ScrapeResult.Failed($"Failed to map ESPN team data for '{abbreviation}'");
             }
         }
 
         _logger.LogWarning("Team with abbreviation {Abbreviation} not found in ESPN response", abbreviation);
+        return ScrapeResult.Failed($"Team with abbreviation '{abbreviation}' not found in ESPN response");
     }
 
     private static Team? MapToTeam(EspnTeam espnTeam)

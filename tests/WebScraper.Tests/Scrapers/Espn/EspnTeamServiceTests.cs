@@ -68,9 +68,10 @@ public class EspnTeamServiceTests
         var mockRepo = new Mock<ITeamRepository>();
         var service = CreateService(handler, mockRepo.Object);
 
-        await service.ScrapeTeamsAsync();
+        var result = await service.ScrapeTeamsAsync();
 
-        // Should upsert 2 teams
+        Assert.True(result.Success);
+        Assert.Equal(2, result.RecordsProcessed);
         mockRepo.Verify(r => r.UpsertAsync(It.IsAny<Team>()), Times.Exactly(2));
     }
 
@@ -85,8 +86,9 @@ public class EspnTeamServiceTests
             .Returns(Task.CompletedTask);
 
         var service = CreateService(handler, mockRepo.Object);
-        await service.ScrapeTeamsAsync();
+        var result = await service.ScrapeTeamsAsync();
 
+        Assert.True(result.Success);
         // ESPN ID "12" -> "KC", ESPN ID "2" -> "BUF"
         Assert.Contains(capturedTeams, t => t.Abbreviation == "KC" && t.Name == "Kansas City Chiefs");
         Assert.Contains(capturedTeams, t => t.Abbreviation == "BUF" && t.Name == "Buffalo Bills");
@@ -103,8 +105,9 @@ public class EspnTeamServiceTests
             .Returns(Task.CompletedTask);
 
         var service = CreateService(handler, mockRepo.Object);
-        await service.ScrapeTeamsAsync();
+        var result = await service.ScrapeTeamsAsync();
 
+        Assert.True(result.Success);
         var kc = capturedTeams.First(t => t.Abbreviation == "KC");
         Assert.Equal("AFC", kc.Conference);
         Assert.Equal("West", kc.Division);
@@ -125,8 +128,9 @@ public class EspnTeamServiceTests
             .Returns(Task.CompletedTask);
 
         var service = CreateService(handler, mockRepo.Object);
-        await service.ScrapeTeamsAsync();
+        var result = await service.ScrapeTeamsAsync();
 
+        Assert.True(result.Success);
         Assert.Contains(capturedTeams, t => t.City == "Kansas City");
         Assert.Contains(capturedTeams, t => t.City == "Buffalo");
     }
@@ -138,8 +142,9 @@ public class EspnTeamServiceTests
         var mockRepo = new Mock<ITeamRepository>();
         var service = CreateService(handler, mockRepo.Object);
 
-        await service.ScrapeTeamsAsync();
+        var result = await service.ScrapeTeamsAsync();
 
+        Assert.False(result.Success);
         mockRepo.Verify(r => r.UpsertAsync(It.IsAny<Team>()), Times.Never);
     }
 
@@ -154,8 +159,10 @@ public class EspnTeamServiceTests
             .Returns(Task.CompletedTask);
 
         var service = CreateService(handler, mockRepo.Object);
-        await service.ScrapeTeamAsync("KC");
+        var result = await service.ScrapeTeamAsync("KC");
 
+        Assert.True(result.Success);
+        Assert.Equal(1, result.RecordsProcessed);
         Assert.Single(capturedTeams);
         Assert.Equal("KC", capturedTeams[0].Abbreviation);
     }
@@ -167,8 +174,9 @@ public class EspnTeamServiceTests
         var mockRepo = new Mock<ITeamRepository>();
         var service = CreateService(handler, mockRepo.Object);
 
-        await service.ScrapeTeamAsync("FAKE");
+        var result = await service.ScrapeTeamAsync("FAKE");
 
+        Assert.False(result.Success);
         mockRepo.Verify(r => r.UpsertAsync(It.IsAny<Team>()), Times.Never);
     }
 
@@ -196,8 +204,9 @@ public class EspnTeamServiceTests
         var mockRepo = new Mock<ITeamRepository>();
         var service = CreateService(handler, mockRepo.Object);
 
-        await service.ScrapeTeamsAsync();
+        var result = await service.ScrapeTeamsAsync();
 
+        Assert.Equal(0, result.RecordsProcessed);
         mockRepo.Verify(r => r.UpsertAsync(It.IsAny<Team>()), Times.Never);
     }
 

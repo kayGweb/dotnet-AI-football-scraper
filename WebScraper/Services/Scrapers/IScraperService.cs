@@ -1,24 +1,26 @@
+using WebScraper.Models;
+
 namespace WebScraper.Services.Scrapers;
 
 public interface ITeamScraperService
 {
-    Task ScrapeTeamsAsync();
-    Task ScrapeTeamAsync(string abbreviation);
+    Task<ScrapeResult> ScrapeTeamsAsync();
+    Task<ScrapeResult> ScrapeTeamAsync(string abbreviation);
 }
 
 public interface IPlayerScraperService
 {
-    Task ScrapePlayersAsync(int teamId);
-    Task ScrapeAllPlayersAsync();
+    Task<ScrapeResult> ScrapePlayersAsync(int teamId);
+    Task<ScrapeResult> ScrapeAllPlayersAsync();
 }
 
 public interface IGameScraperService
 {
-    Task ScrapeGamesAsync(int season);
-    Task ScrapeGamesAsync(int season, int week);
+    Task<ScrapeResult> ScrapeGamesAsync(int season);
+    Task<ScrapeResult> ScrapeGamesAsync(int season, int week);
 }
 
 public interface IStatsScraperService
 {
-    Task ScrapePlayerStatsAsync(int season, int week);
+    Task<ScrapeResult> ScrapePlayerStatsAsync(int season, int week);
 }

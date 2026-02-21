@@ -18,13 +18,14 @@ A .NET 8 Console application that scrapes NFL football data from multiple source
 WebScraper.sln                          # Solution file
 WebScraper/
 ├── WebScraper.csproj                   # Project file with all NuGet refs
-├── Program.cs                          # Entry point with CLI command dispatch
+├── Program.cs                          # Entry point: CLI dispatch, interactive REPL, data display
 ├── appsettings.json                    # Config: DB provider, data provider, scraper settings, Serilog
 ├── Models/
 │   ├── Team.cs                         # NFL team entity
 │   ├── Player.cs                       # Player entity (FK -> Team)
 │   ├── Game.cs                         # Game entity (FKs -> HomeTeam, AwayTeam)
 │   ├── PlayerGameStats.cs              # Per-game player stats (FKs -> Player, Game)
+│   ├── ScrapeResult.cs                # Scraper operation result (Success, RecordsProcessed, Errors)
 │   ├── ScraperSettings.cs             # Config POCO: scraper options + DataProvider + Providers dict
 │   ├── DataProvider.cs                # Enum: ProFootballReference, Espn, SportsDataIo, MySportsFeeds, NflCom
 │   └── ApiProviderSettings.cs         # Config POCO: BaseUrl, ApiKey, AuthType, headers per provider
@@ -42,6 +43,7 @@ WebScraper/
 │       └── StatsRepository.cs         # Stats repository implementation
 ├── Services/
 │   ├── RateLimiterService.cs          # Global rate limiter (SemaphoreSlim-based)
+│   ├── ConsoleDisplayService.cs       # User-facing console output (tables, banners, menus, progress)
 │   ├── DataProviderFactory.cs         # Maps DataProvider config to correct DI registrations
 │   └── Scrapers/
 │       ├── IScraperService.cs         # Scraper interfaces (ITeam/IPlayer/IGame/IStats)
@@ -109,11 +111,13 @@ tests/WebScraper.Tests/                 # xUnit test project
 │       └── NflComTeamServiceTests.cs   # NFL.com team scraping + graceful error handling
 ├── Services/
 │   ├── BaseApiServiceTests.cs          # FetchJsonAsync, auth configuration (Header/Basic/None)
-│   └── DataProviderFactoryTests.cs     # Provider registration per provider string
+│   ├── DataProviderFactoryTests.cs     # Provider registration per provider string
+│   └── ConsoleDisplayServiceTests.cs   # Banner, tables, menus, status output, provider validation
 ├── Configuration/
 │   └── ProviderConfigTests.cs          # Config binding, provider settings, --source override
 └── Models/
-    └── ModelTests.cs                   # 4 tests: Default values for all entities
+    ├── ModelTests.cs                   # 4 tests: Default values for all entities
+    └── ScrapeResultTests.cs            # 5 tests: Default values, Succeeded/Failed factory methods
 ```
 
 ## Multi-Provider Architecture
@@ -225,6 +229,8 @@ All repositories follow the same pattern:
 - **BaseApiService** — abstract base for JSON API scrapers, injected with `HttpClient`, `ILogger`, `ApiProviderSettings`, `RateLimiterService`
   - `FetchJsonAsync<T>(url)` — fetches JSON, deserializes via System.Text.Json, handles auth, respects rate limits
 - **RateLimiterService** — singleton, uses `SemaphoreSlim` to enforce `RequestDelayMs` between requests globally
+- **ScrapeResult** — all scraper interface methods return `Task<ScrapeResult>` with `Success`, `RecordsProcessed`, `RecordsFailed`, `Message`, and `Errors` fields. Factory methods: `ScrapeResult.Succeeded(count, message)` and `ScrapeResult.Failed(message)`
+- **ConsoleDisplayService** — singleton for user-facing console output (separate from Serilog). Provides `PrintBanner()`, `PrintScrapeResult()`, `PrintTeamsTable()`, `PrintGamesTable()`, `PrintPlayersTable()`, `PrintStatsTable()`, `PrintDatabaseStatus()`, interactive menu methods (`PrintMainMenu`, `PrintScrapeMenu`, `PrintViewMenu`, `PrintSourceMenu`), and colored status output (`PrintError`, `PrintSuccess`, `PrintWarning`)
 
 ### PFR Scraper Details
 | Service | Interface | Data Source URL | Key Parse Logic |
@@ -298,7 +304,11 @@ Each scraper's `HttpClient` (both HTML and API) is configured with a resilience 
 - Uses `Host.CreateDefaultBuilder` with Serilog and `AddWebScraperServices`
 - Pre-parses `--source` flag before host build to override `DataProvider` config via `AddInMemoryCollection`
 - Applies pending migrations on startup via `MigrateAsync()`
-- CLI command dispatch with input validation (season 1920-current, week 1-22)
+- **Interactive mode** — launches with no args or `interactive` command; menu-driven REPL with scrape, view, status, and source-switching submenus. Changing source rebuilds the DI container.
+- **CLI mode** — command dispatch with input validation (season 1920-current, week 1-22)
+- **Data display** — `list teams/players/games/stats` and `status` commands query the database and display formatted tables
+- **ScrapeResult handling** — all scraper calls return `ScrapeResult`; printed via `ConsoleDisplayService.PrintScrapeResult()`; exit code 0 for success, 1 for failure
+- Extracted `BuildHost()` helper shared between CLI and interactive modes
 - `--help` / `-h` flag for usage info
 
 ## Database Migrations
@@ -317,6 +327,11 @@ dotnet run --project WebScraper
 
 ## CLI Commands
 ```bash
+# Interactive mode (menu-driven REPL)
+dotnet run                                     # Launch interactive mode (default)
+dotnet run -- interactive                      # Launch interactive mode (explicit)
+
+# Scrape commands
 dotnet run -- teams                            # Scrape all 32 NFL teams
 dotnet run -- teams --team KC                  # Scrape a single team by abbreviation
 dotnet run -- players                          # Scrape rosters for all teams
@@ -325,10 +340,43 @@ dotnet run -- games --season 2025 --week 1     # Scrape games for a specific wee
 dotnet run -- stats --season 2025 --week 1     # Scrape player stats for a week
 dotnet run -- all --season 2025                # Run full pipeline (teams, players, games)
 dotnet run -- teams --source Espn              # Override data source at runtime
-dotnet run -- games --season 2025 --source SportsDataIo
+
+# Data display commands
+dotnet run -- list teams                       # Show all teams in database
+dotnet run -- list teams --conference AFC      # Show teams by conference
+dotnet run -- list players --team KC           # Show roster for a team
+dotnet run -- list games --season 2025         # Show games for a season
+dotnet run -- list games --season 2025 --week 1  # Show games for a week
+dotnet run -- list stats --season 2025 --week 1  # Show player stats for a week
+dotnet run -- list stats --player "Patrick Mahomes" --season 2025  # Individual player stats
+dotnet run -- status                           # Show database record counts
 ```
 
 To switch data sources permanently, set `DataProvider` in `appsettings.json`. To switch at runtime, use `--source <provider>`. SportsData.io and MySportsFeeds require API keys configured in `Providers` section.
+
+## Interactive Mode
+
+When launched with no arguments (or `interactive`), the app enters a menu-driven REPL:
+
+```
+NFL Web Scraper v1.0
+Source: ESPN API  |  Database: SQLite (data/nfl_data.db)
+----------------------------------------------------
+
+Main Menu
+----------------------------------------
+1. Scrape data
+2. View data
+3. Database status
+4. Change source (current: ESPN API)
+5. Exit
+```
+
+- **Scrape submenu** — all scrape operations (teams, single team, players, games, stats, full pipeline) with inline prompts for season/week/abbreviation
+- **View submenu** — query and display database data using formatted tables (teams, players by team, games by season/week, player stats)
+- **Database status** — quick record counts for all tables
+- **Change source** — switch between all 5 data providers at runtime; triggers host rebuild with new DI container
+- **Input handling** — validates numeric input, handles EOF (Ctrl+D/Ctrl+Z) gracefully
 
 ## Testing
 - **Framework:** xUnit with `Microsoft.NET.Test.Sdk`
@@ -345,7 +393,7 @@ To switch data sources permanently, set `DataProvider` in `appsettings.json`. To
 | `Repositories/GameRepositoryTests.cs` | 5 | CRUD, GetBySeason, GetByWeek, Upsert insert/update with score changes |
 | `Repositories/StatsRepositoryTests.cs` | 4 | Upsert insert/update, GetPlayerStats by name+season, GetGameStats |
 | **PFR Scrapers** | | |
-| `Scrapers/TeamScraperParsingTests.cs` | 8 | ParseTeamNode with valid HTML, header rows, missing links, ExtractCity, single-team scrape (match, not found, case-insensitive) |
+| `Scrapers/TeamScraperParsingTests.cs` | 8 | ParseTeamNode with valid HTML, header rows, missing links, ExtractCity, single-team ScrapeResult (match, not found, case-insensitive) |
 | `Scrapers/GameScraperParsingTests.cs` | 2 | PFR-to-NFL abbreviation mapping (14 mapped + 4 unmapped pass-through) |
 | **API Infrastructure** | | |
 | `Services/BaseApiServiceTests.cs` | 10 | FetchJsonAsync deserialization (valid, malformed, error, null, case-insensitive), auth configuration (Header, Basic, None, missing key, custom headers) |
@@ -353,18 +401,21 @@ To switch data sources permanently, set `DataProvider` in `appsettings.json`. To
 | `Configuration/ProviderConfigTests.cs` | 10 | Config binding from IConfiguration, default values, per-provider settings, API key handling, --source override, multi-provider dictionary |
 | **ESPN Provider** | | |
 | `Scrapers/Espn/EspnMappingsTests.cs` | 8 | All 32 ESPN IDs → NFL abbreviations, reverse mapping, division lookup, unknown IDs, case insensitivity |
-| `Scrapers/Espn/EspnTeamServiceTests.cs` | 8 | JSON parsing, ESPN ID → NFL abbreviation mapping, conference/division, city, null response, single team, empty displayName |
-| `Scrapers/Espn/EspnGameServiceTests.cs` | 7 | Scoreboard parsing, home/away detection, score parsing, season/week, team not in DB, null response, no competitions |
+| `Scrapers/Espn/EspnTeamServiceTests.cs` | 8 | JSON parsing, ESPN ID → NFL abbreviation mapping, conference/division, city, null response, single team, empty displayName; ScrapeResult assertions |
+| `Scrapers/Espn/EspnGameServiceTests.cs` | 7 | Scoreboard parsing, home/away detection, score parsing, season/week, team not in DB, null response, no competitions; ScrapeResult assertions |
 | **SportsData.io Provider** | | |
-| `Scrapers/SportsDataIo/SportsDataTeamServiceTests.cs` | 6 | Flat JSON parsing, field mapping, single team, not found, empty name, null response |
+| `Scrapers/SportsDataIo/SportsDataTeamServiceTests.cs` | 6 | Flat JSON parsing, field mapping, single team, not found, empty name, null response; ScrapeResult assertions |
 | `Scrapers/SportsDataIo/SportsDataStatsServiceTests.cs` | 6 | DTO deserialization, passing/rushing/receiving field mapping, zero stats, team/gameKey preservation |
 | **MySportsFeeds Provider** | | |
-| `Scrapers/MySportsFeeds/MySportsFeedsTeamServiceTests.cs` | 7 | Nested JSON parsing, field mapping, single team, not found, empty name, null conference defaults |
+| `Scrapers/MySportsFeeds/MySportsFeedsTeamServiceTests.cs` | 7 | Nested JSON parsing, field mapping, single team, not found, empty name, null conference defaults; ScrapeResult assertions |
 | `Scrapers/MySportsFeeds/MySportsFeedsPlayerServiceTests.cs` | 10 | DTO deserialization, first/last name concatenation, all fields, currentTeam, nullable fields, empty names, gamelogs/stats deserialization |
 | **NFL.com Provider** | | |
-| `Scrapers/NflCom/NflComTeamServiceTests.cs` | 8 | JSON parsing, field mapping, single team, case-insensitive, not found, empty fullName, null response, unexpected JSON structure |
+| `Scrapers/NflCom/NflComTeamServiceTests.cs` | 8 | JSON parsing, field mapping, single team, case-insensitive, not found, empty fullName, null response, unexpected JSON structure; ScrapeResult assertions |
+| **UI Services** | | |
+| `Services/ConsoleDisplayServiceTests.cs` | 21 | Banner output, ScrapeResult display (success/failure), table formatting (teams/players/games/stats), database status, error/success/warning output, interactive menus (main/scrape/view/source), provider validation and display names |
 | **Models** | | |
 | `Models/ModelTests.cs` | 4 | Default values for Team, Player, Game, PlayerGameStats, ScraperSettings |
+| `Models/ScrapeResultTests.cs` | 5 | Default values, Succeeded factory (with count, with zero), Failed factory (with message, with error list) |
 
 ## Implementation Status
 
@@ -389,6 +440,15 @@ To switch data sources permanently, set `DataProvider` in `appsettings.json`. To
 - [x] API Phase 7: CLI `--source` flag for runtime provider override
 - [x] API Phase 8: Tests for API providers (BaseApiService, DataProviderFactory, EspnMappings, provider service tests, config binding)
 - [x] API Phase 9: Documentation & polish
+
+### User Interface Phases
+- [x] UI Phase 1: ScrapeResult model + interface changes (all 20 scraper implementations return `Task<ScrapeResult>`)
+- [x] UI Phase 2: ConsoleDisplayService + startup banner + early `--source` validation
+- [x] UI Phase 3: Program.cs rewrite — ScrapeResult handling, exit codes, `RunAllAsync` pipeline
+- [x] UI Phase 4: Data display commands (`list teams/players/games/stats`, `status`)
+- [x] UI Phase 5: Interactive REPL mode (menu-driven scraping, viewing, source switching)
+- [x] UI Phase 6: Test updates (ScrapeResult assertions on 6 test files, new ScrapeResultTests, ConsoleDisplayServiceTests)
+- [x] UI Phase 7: CLAUDE.md documentation update
 
 ## Adding a New Data Provider
 1. Create a folder: `Services/Scrapers/NewProvider/`

@@ -61,8 +61,10 @@ public class SportsDataTeamServiceTests
         var mockRepo = new Mock<ITeamRepository>();
         var service = CreateService(handler, mockRepo.Object);
 
-        await service.ScrapeTeamsAsync();
+        var result = await service.ScrapeTeamsAsync();
 
+        Assert.True(result.Success);
+        Assert.Equal(2, result.RecordsProcessed);
         mockRepo.Verify(r => r.UpsertAsync(It.IsAny<Team>()), Times.Exactly(2));
     }
 
@@ -77,8 +79,9 @@ public class SportsDataTeamServiceTests
             .Returns(Task.CompletedTask);
 
         var service = CreateService(handler, mockRepo.Object);
-        await service.ScrapeTeamsAsync();
+        var result = await service.ScrapeTeamsAsync();
 
+        Assert.True(result.Success);
         var kc = capturedTeams.First(t => t.Abbreviation == "KC");
         Assert.Equal("Kansas City Chiefs", kc.Name);
         Assert.Equal("Kansas City", kc.City);
@@ -97,8 +100,10 @@ public class SportsDataTeamServiceTests
             .Returns(Task.CompletedTask);
 
         var service = CreateService(handler, mockRepo.Object);
-        await service.ScrapeTeamAsync("KC");
+        var result = await service.ScrapeTeamAsync("KC");
 
+        Assert.True(result.Success);
+        Assert.Equal(1, result.RecordsProcessed);
         Assert.Single(capturedTeams);
         Assert.Equal("KC", capturedTeams[0].Abbreviation);
     }
@@ -110,8 +115,9 @@ public class SportsDataTeamServiceTests
         var mockRepo = new Mock<ITeamRepository>();
         var service = CreateService(handler, mockRepo.Object);
 
-        await service.ScrapeTeamAsync("FAKE");
+        var result = await service.ScrapeTeamAsync("FAKE");
 
+        Assert.False(result.Success);
         mockRepo.Verify(r => r.UpsertAsync(It.IsAny<Team>()), Times.Never);
     }
 
@@ -134,8 +140,9 @@ public class SportsDataTeamServiceTests
         var mockRepo = new Mock<ITeamRepository>();
         var service = CreateService(handler, mockRepo.Object);
 
-        await service.ScrapeTeamsAsync();
+        var result = await service.ScrapeTeamsAsync();
 
+        Assert.Equal(0, result.RecordsProcessed);
         mockRepo.Verify(r => r.UpsertAsync(It.IsAny<Team>()), Times.Never);
     }
 
@@ -146,8 +153,9 @@ public class SportsDataTeamServiceTests
         var mockRepo = new Mock<ITeamRepository>();
         var service = CreateService(handler, mockRepo.Object);
 
-        await service.ScrapeTeamsAsync();
+        var result = await service.ScrapeTeamsAsync();
 
+        Assert.False(result.Success);
         mockRepo.Verify(r => r.UpsertAsync(It.IsAny<Team>()), Times.Never);
     }
 

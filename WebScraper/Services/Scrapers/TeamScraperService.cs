@@ -47,7 +47,7 @@ public class TeamScraperService : BaseScraperService, ITeamScraperService
         _teamRepository = teamRepository;
     }
 
-    public async Task ScrapeTeamsAsync()
+    public async Task<ScrapeResult> ScrapeTeamsAsync()
     {
         _logger.LogInformation("Starting teams scrape from Pro Football Reference");
 
@@ -55,14 +55,14 @@ public class TeamScraperService : BaseScraperService, ITeamScraperService
         if (doc == null)
         {
             _logger.LogWarning("Failed to fetch teams page");
-            return;
+            return ScrapeResult.Failed("Failed to fetch teams page from Pro Football Reference");
         }
 
         var teamNodes = doc.DocumentNode.SelectNodes("//table[@id='teams_active']//tbody//tr[not(contains(@class,'thead'))]");
         if (teamNodes == null)
         {
             _logger.LogWarning("No team rows found in teams_active table");
-            return;
+            return ScrapeResult.Failed("No team rows found in teams_active table");
         }
 
         int count = 0;
@@ -78,9 +78,10 @@ public class TeamScraperService : BaseScraperService, ITeamScraperService
         }
 
         _logger.LogInformation("Teams scrape complete. {Count} teams processed", count);
+        return ScrapeResult.Succeeded(count, $"{count} teams processed from Pro Football Reference");
     }
 
-    public async Task ScrapeTeamAsync(string abbreviation)
+    public async Task<ScrapeResult> ScrapeTeamAsync(string abbreviation)
     {
         _logger.LogInformation("Starting single team scrape for {Abbreviation}", abbreviation);
 
@@ -88,14 +89,14 @@ public class TeamScraperService : BaseScraperService, ITeamScraperService
         if (doc == null)
         {
             _logger.LogWarning("Failed to fetch teams page");
-            return;
+            return ScrapeResult.Failed("Failed to fetch teams page from Pro Football Reference");
         }
 
         var teamNodes = doc.DocumentNode.SelectNodes("//table[@id='teams_active']//tbody//tr[not(contains(@class,'thead'))]");
         if (teamNodes == null)
         {
             _logger.LogWarning("No team rows found in teams_active table");
-            return;
+            return ScrapeResult.Failed("No team rows found in teams_active table");
         }
 
         foreach (var node in teamNodes)
@@ -105,11 +106,12 @@ public class TeamScraperService : BaseScraperService, ITeamScraperService
             {
                 await _teamRepository.UpsertAsync(team);
                 _logger.LogInformation("Upserted team: {TeamName} ({Abbreviation})", team.Name, team.Abbreviation);
-                return;
+                return ScrapeResult.Succeeded(1, $"Team {team.Name} ({team.Abbreviation}) scraped successfully");
             }
         }
 
         _logger.LogWarning("Team with abbreviation {Abbreviation} not found on page", abbreviation);
+        return ScrapeResult.Failed($"Team with abbreviation '{abbreviation}' not found");
     }
 
     private Team? ParseTeamNode(HtmlNode node)

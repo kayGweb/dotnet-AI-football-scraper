@@ -200,8 +200,10 @@ public class TeamScraperParsingTests
         var handler = new FakeHttpHandler(MultiTeamHtml);
         var scraper = CreateScraperWithHandler(handler, mockRepo.Object);
 
-        await scraper.ScrapeTeamAsync("KC");
+        var result = await scraper.ScrapeTeamAsync("KC");
 
+        Assert.True(result.Success);
+        Assert.Equal(1, result.RecordsProcessed);
         mockRepo.Verify(r => r.UpsertAsync(It.Is<Team>(t => t.Abbreviation == "KC")), Times.Once);
         mockRepo.Verify(r => r.UpsertAsync(It.IsAny<Team>()), Times.Once);
     }
@@ -213,8 +215,9 @@ public class TeamScraperParsingTests
         var handler = new FakeHttpHandler(MultiTeamHtml);
         var scraper = CreateScraperWithHandler(handler, mockRepo.Object);
 
-        await scraper.ScrapeTeamAsync("INVALID");
+        var result = await scraper.ScrapeTeamAsync("INVALID");
 
+        Assert.False(result.Success);
         mockRepo.Verify(r => r.UpsertAsync(It.IsAny<Team>()), Times.Never);
     }
 
@@ -225,8 +228,10 @@ public class TeamScraperParsingTests
         var handler = new FakeHttpHandler(MultiTeamHtml);
         var scraper = CreateScraperWithHandler(handler, mockRepo.Object);
 
-        await scraper.ScrapeTeamAsync("kc");
+        var result = await scraper.ScrapeTeamAsync("kc");
 
+        Assert.True(result.Success);
+        Assert.Equal(1, result.RecordsProcessed);
         mockRepo.Verify(r => r.UpsertAsync(It.Is<Team>(t => t.Abbreviation == "KC")), Times.Once);
     }
 }

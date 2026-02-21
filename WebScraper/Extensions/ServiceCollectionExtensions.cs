@@ -47,8 +47,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IGameRepository, GameRepository>();
         services.AddScoped<IStatsRepository, StatsRepository>();
 
-        // Register rate limiter as singleton
+        // Register rate limiter and display service as singletons
         services.AddSingleton<RateLimiterService>();
+        services.AddSingleton<ConsoleDisplayService>();
 
         // Register scraper services via provider factory (driven by DataProvider config)
         DataProviderFactory.RegisterScrapers(services, scraperSettings);

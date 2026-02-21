@@ -24,7 +24,7 @@ public class GameScraperService : BaseScraperService, IGameScraperService
         _teamRepository = teamRepository;
     }
 
-    public async Task ScrapeGamesAsync(int season)
+    public async Task<ScrapeResult> ScrapeGamesAsync(int season)
     {
         _logger.LogInformation("Starting games scrape for season {Season}", season);
 
@@ -33,14 +33,14 @@ public class GameScraperService : BaseScraperService, IGameScraperService
         if (doc == null)
         {
             _logger.LogWarning("Failed to fetch games page for season {Season}", season);
-            return;
+            return ScrapeResult.Failed($"Failed to fetch games page for season {season}");
         }
 
         var gameNodes = doc.DocumentNode.SelectNodes("//table[@id='games']//tbody//tr[not(contains(@class,'thead'))]");
         if (gameNodes == null)
         {
             _logger.LogWarning("No game rows found for season {Season}", season);
-            return;
+            return ScrapeResult.Failed($"No game rows found for season {season}");
         }
 
         int count = 0;
@@ -55,9 +55,10 @@ public class GameScraperService : BaseScraperService, IGameScraperService
         }
 
         _logger.LogInformation("Games scrape complete for season {Season}. {Count} games processed", season, count);
+        return ScrapeResult.Succeeded(count, $"{count} games processed for season {season}");
     }
 
-    public async Task ScrapeGamesAsync(int season, int week)
+    public async Task<ScrapeResult> ScrapeGamesAsync(int season, int week)
     {
         _logger.LogInformation("Starting games scrape for season {Season} week {Week}", season, week);
 
@@ -67,14 +68,14 @@ public class GameScraperService : BaseScraperService, IGameScraperService
         if (doc == null)
         {
             _logger.LogWarning("Failed to fetch games page for season {Season}", season);
-            return;
+            return ScrapeResult.Failed($"Failed to fetch games page for season {season}");
         }
 
         var gameNodes = doc.DocumentNode.SelectNodes("//table[@id='games']//tbody//tr[not(contains(@class,'thead'))]");
         if (gameNodes == null)
         {
             _logger.LogWarning("No game rows found for season {Season}", season);
-            return;
+            return ScrapeResult.Failed($"No game rows found for season {season}");
         }
 
         int count = 0;
@@ -95,6 +96,7 @@ public class GameScraperService : BaseScraperService, IGameScraperService
         }
 
         _logger.LogInformation("Games scrape complete for season {Season} week {Week}. {Count} games processed", season, week, count);
+        return ScrapeResult.Succeeded(count, $"{count} games processed for season {season} week {week}");
     }
 
     private async Task<Game?> ParseGameNodeAsync(HtmlNode node, int season)
