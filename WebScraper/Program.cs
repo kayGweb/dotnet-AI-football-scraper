@@ -23,9 +23,9 @@ try
     // Early validation of --source flag before building DI container
     if (sourceOverride != null && !ConsoleDisplayService.IsValidProvider(sourceOverride))
     {
-        var display = new ConsoleDisplayService();
-        display.PrintError($"Unknown data provider: '{sourceOverride}'");
-        display.PrintInfo(ConsoleDisplayService.GetValidProvidersMessage());
+        var earlyDisplay = new ConsoleDisplayService();
+        earlyDisplay.PrintError($"Unknown data provider: '{sourceOverride}'");
+        earlyDisplay.PrintInfo(ConsoleDisplayService.GetValidProvidersMessage());
         return 1;
     }
 

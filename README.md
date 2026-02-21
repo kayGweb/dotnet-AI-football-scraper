@@ -1,6 +1,6 @@
 # NFL Web Scraper
 
-A .NET 8 console application that scrapes NFL football data from multiple sources and stores it in a structured relational database. Supports five pluggable data providers — switch between HTML scraping and REST API sources via configuration or a CLI flag.
+A .NET 8 console application that scrapes NFL football data from multiple sources and stores it in a structured relational database. Supports five pluggable data providers — switch between HTML scraping and REST API sources via configuration or a CLI flag. Includes both a CLI mode and an interactive menu-driven REPL.
 
 Collects teams, player rosters, game schedules/scores, and per-game player statistics (passing, rushing, receiving).
 
@@ -45,18 +45,77 @@ dotnet build
 ### 4. Run the application
 
 ```bash
+# Launch interactive mode (default)
+dotnet run --project WebScraper
+
+# Or use CLI mode
 dotnet run --project WebScraper -- --help
 ```
 
 The database is created automatically on first run. EF Core migrations are applied at startup, so there is no manual database setup required.
 
-## Usage
+## Interactive Mode
+
+When launched with no arguments (or `interactive`), the app enters a menu-driven REPL:
+
+```
+NFL Web Scraper v1.0
+Source: ESPN API  |  Database: SQLite (data/nfl_data.db)
+----------------------------------------------------
+
+Main Menu
+----------------------------------------
+1. Scrape data
+2. View data
+3. Database status
+4. Change source (current: ESPN API)
+5. Exit
+```
+
+### Main Menu
+
+| Option | Description |
+|--------|-------------|
+| **1. Scrape data** | Opens a submenu with all scrape operations (teams, single team, players, games by season, games by week, stats, full pipeline) |
+| **2. View data** | Opens a submenu to query and display database contents in formatted tables |
+| **3. Database status** | Shows record counts for all tables (teams, players, games, stat lines) |
+| **4. Change source** | Switch between all 5 data providers at runtime — rebuilds the DI container |
+| **5. Exit** | Exit the application |
+
+### Scrape Submenu
+
+| Option | Description |
+|--------|-------------|
+| 1 | Scrape all 32 NFL teams |
+| 2 | Scrape a single team by abbreviation |
+| 3 | Scrape all player rosters |
+| 4 | Scrape games for a full season |
+| 5 | Scrape games for a specific week |
+| 6 | Scrape player stats for a specific week |
+| 7 | Run the full pipeline (teams + players + games) |
+| 8 | Back to main menu |
+
+### View Submenu
+
+| Option | Description |
+|--------|-------------|
+| 1 | View all teams |
+| 2 | View players (all, or filtered by team) |
+| 3 | View games (by season, optionally filtered by week) |
+| 4 | View player stats (by player name + season, or by season + week) |
+| 5 | Back to main menu |
+
+### Source Switching
+
+Selecting option 4 from the main menu displays all available providers with the current selection marked. Choosing a different provider rebuilds the application's dependency injection container with the new provider's services — no restart required.
+
+## CLI Mode
 
 ```
 dotnet run --project WebScraper -- <command> [options]
 ```
 
-### Commands
+### Scrape Commands
 
 | Command | Required Options | Description |
 |---------|-----------------|-------------|
@@ -68,19 +127,38 @@ dotnet run --project WebScraper -- <command> [options]
 | `stats` | `--season <year> --week <n>` | Scrape per-game player statistics for a week |
 | `all` | `--season <year>` | Run the full pipeline: teams, players, then games |
 
+### View Commands
+
+| Command | Required Options | Description |
+|---------|-----------------|-------------|
+| `list teams` | — | Show all teams in the database |
+| `list teams` | `--conference <AFC\|NFC>` | Show teams filtered by conference |
+| `list players` | — | Show all players |
+| `list players` | `--team <abbr>` | Show roster for a specific team |
+| `list games` | `--season <year>` | Show all games for a season |
+| `list games` | `--season <year> --week <n>` | Show games for a specific week |
+| `list stats` | `--season <year> --week <n>` | Show player stats for a week |
+| `list stats` | `--player <name> --season <year>` | Show a player's season stats |
+| `status` | — | Show database record counts |
+
 ### Options
 
 | Flag | Value | Description |
 |------|-------|-------------|
-| `--team` | NFL abbreviation | Team abbreviation (e.g., `KC`, `NE`, `DAL`) — used with `teams` command |
+| `--team` | NFL abbreviation | Team abbreviation (e.g., `KC`, `NE`, `DAL`) — used with `teams` and `list players` |
 | `--season` | `1920` – current year | NFL season year |
 | `--week` | `1` – `22` | Week number (regular season + playoffs) |
+| `--conference` | `AFC` or `NFC` | Conference filter for `list teams` |
+| `--player` | Player name | Player name for `list stats` (e.g., `"Patrick Mahomes"`) |
 | `--source` | Provider name | Override the data provider at runtime (e.g., `Espn`, `SportsDataIo`, `MySportsFeeds`, `NflCom`) |
 | `--help`, `-h` | — | Show help message |
 
 ### Examples
 
 ```bash
+# Launch interactive mode (default)
+dotnet run --project WebScraper
+
 # Scrape all 32 NFL teams
 dotnet run --project WebScraper -- teams
 
@@ -107,6 +185,30 @@ dotnet run --project WebScraper -- teams --source Espn
 
 # Use SportsData.io for games (requires API key in appsettings.json)
 dotnet run --project WebScraper -- games --season 2025 --source SportsDataIo
+
+# View all teams in the database
+dotnet run --project WebScraper -- list teams
+
+# View AFC teams only
+dotnet run --project WebScraper -- list teams --conference AFC
+
+# View Kansas City Chiefs roster
+dotnet run --project WebScraper -- list players --team KC
+
+# View all games for the 2025 season
+dotnet run --project WebScraper -- list games --season 2025
+
+# View games for a specific week
+dotnet run --project WebScraper -- list games --season 2025 --week 1
+
+# View player stats for a week
+dotnet run --project WebScraper -- list stats --season 2025 --week 1
+
+# View an individual player's season stats
+dotnet run --project WebScraper -- list stats --player "Patrick Mahomes" --season 2025
+
+# Show database record counts
+dotnet run --project WebScraper -- status
 ```
 
 ### Recommended Scrape Order
@@ -119,6 +221,16 @@ If running commands individually, follow this order to satisfy foreign key depen
 4. `stats --season <year> --week <n>` — needs both players and games
 
 The `all` command handles steps 1-3 automatically.
+
+## Console Output
+
+The application uses `ConsoleDisplayService` for all user-facing output, separate from Serilog's structured logging:
+
+- **Startup banner** — shows the active data provider, database type, and connection info
+- **Formatted tables** — teams, players, games, and stats are displayed in aligned, bordered tables
+- **Scrape results** — each operation reports success/failure with record counts (e.g., `[SUCCESS] Teams: 32 records processed`)
+- **Colored status messages** — errors (red), warnings (yellow), success (green), and info (cyan)
+- **Interactive menus** — numbered menu options with the current provider highlighted
 
 ## Configuration
 
@@ -157,12 +269,12 @@ Update the connection string to match your chosen provider:
 ```json
 {
   "ScraperSettings": {
-    "DataProvider": "ProFootballReference"
+    "DataProvider": "Espn"
   }
 }
 ```
 
-Set `DataProvider` to change the default data source. Supported values: `ProFootballReference`, `Espn`, `SportsDataIo`, `MySportsFeeds`, `NflCom`. This can also be overridden at runtime with the `--source` flag without changing the config file.
+Set `DataProvider` to change the default data source. Supported values: `ProFootballReference`, `Espn`, `SportsDataIo`, `MySportsFeeds`, `NflCom`. This can also be overridden at runtime with the `--source` flag (CLI mode) or through the source-switching menu (interactive mode) without changing the config file.
 
 ### Provider-Specific Settings
 
@@ -317,7 +429,7 @@ dotnet test --verbosity normal
 | Repository (Game) | 5 | CRUD, lookup by season/week, upsert with score updates |
 | Repository (Stats) | 4 | Upsert, lookup by player name + season, lookup by game |
 | PFR Scraper (Team) | 8 | HTML parsing, header row handling, city extraction, single-team scrape |
-| PFR Scraper (Game) | 2 | PFR-to-NFL abbreviation mapping |
+| PFR Scraper (Game) | 2 | PFR-to-NFL abbreviation mapping (14 mapped + 4 unmapped) |
 | API Infrastructure | 10 | FetchJsonAsync deserialization, auth config (Header/Basic/None), custom headers |
 | DataProviderFactory | 9 | All 5 providers register correctly, invalid provider throws, case-insensitive |
 | Provider Config | 10 | Config binding, API keys, `--source` override, multi-provider dictionary |
@@ -326,21 +438,27 @@ dotnet test --verbosity normal
 | SportsData.io | 12 | Flat JSON parsing, DTO deserialization, passing/rushing/receiving stats |
 | MySportsFeeds | 17 | Nested JSON parsing, name concatenation, gamelogs, nullable fields |
 | NFL.com | 8 | JSON parsing, case-insensitive matching, graceful error handling |
-| Models | 4 | Default property values |
-| **Total** | **128** | |
+| Console Display | 21 | Banner, tables, menus, scrape results, status, colored output, provider validation |
+| Models | 5 | Default property values for all entities and ScraperSettings |
+| ScrapeResult | 5 | Default values, Succeeded/Failed factory methods |
+| **Total** | **220** | |
 
 ## Architecture
 
 The application uses a provider abstraction layer — all data providers implement the same four interfaces, so the CLI, repositories, and database layer are completely provider-agnostic:
 
 ```
-Program.cs (CLI dispatch)
+Program.cs (CLI dispatch + Interactive REPL)
+    ↓
+ConsoleDisplayService (banner, tables, menus, colored output)
     ↓
 ITeamScraperService / IPlayerScraperService / IGameScraperService / IStatsScraperService
     ↓                           ↓
 BaseScraperService          BaseApiService
 (HTML — PFR)               (JSON — ESPN, SportsData.io, etc.)
     ↓                           ↓
+ScrapeResult (structured success/failure with record counts)
+    ↓
 Repository Layer (unchanged) ← UpsertAsync()
     ↓
 AppDbContext → SQLite / PostgreSQL / SQL Server
@@ -353,31 +471,47 @@ Adding a new provider requires no changes to interfaces, repositories, models, o
 ```
 WebScraper.sln
 WebScraper/
-├── Program.cs                          # Entry point, CLI dispatch, --source override
+├── Program.cs                          # Entry point: CLI dispatch, interactive REPL, data display
 ├── appsettings.json                    # Configuration (DB, providers, Serilog)
-├── Models/                             # Entity classes + config POCOs
+├── Models/
+│   ├── Team.cs                        # NFL team entity
+│   ├── Player.cs                      # Player entity (FK → Team)
+│   ├── Game.cs                        # Game entity (FKs → HomeTeam, AwayTeam)
+│   ├── PlayerGameStats.cs             # Per-game player stats (FKs → Player, Game)
+│   ├── ScrapeResult.cs                # Structured scraper result (Success, RecordsProcessed, Errors)
+│   ├── ScraperSettings.cs             # Config POCO for scraper options
+│   ├── DataProvider.cs                # Enum for supported data providers
+│   └── ApiProviderSettings.cs         # Per-provider config POCO (BaseUrl, ApiKey, AuthType)
 ├── Data/
-│   ├── AppDbContext.cs                 # EF Core DbContext
-│   └── Repositories/                   # Repository pattern implementations
+│   ├── AppDbContext.cs                # EF Core DbContext
+│   └── Repositories/                  # Repository pattern implementations
+│       ├── IRepository.cs             # Generic repository interface
+│       ├── ITeamRepository.cs         # Team-specific queries
+│       ├── IPlayerRepository.cs       # Player-specific queries
+│       ├── IGameRepository.cs         # Game-specific queries
+│       ├── IStatsRepository.cs        # Stats-specific queries
+│       └── (implementations)          # TeamRepository, PlayerRepository, GameRepository, StatsRepository
 ├── Services/
-│   ├── RateLimiterService.cs           # Global request rate limiter
-│   ├── DataProviderFactory.cs          # Maps provider config to DI registrations
+│   ├── RateLimiterService.cs          # Global request rate limiter (SemaphoreSlim)
+│   ├── ConsoleDisplayService.cs       # User-facing console output (tables, menus, banners, colored status)
+│   ├── DataProviderFactory.cs         # Maps provider config → DI registrations
 │   └── Scrapers/
-│       ├── BaseScraperService.cs       # Abstract base for HTML scraping
-│       ├── BaseApiService.cs           # Abstract base for JSON APIs
-│       ├── TeamScraperService.cs       # Pro Football Reference (HTML)
-│       ├── PlayerScraperService.cs     # Pro Football Reference (HTML)
-│       ├── GameScraperService.cs       # Pro Football Reference (HTML)
-│       ├── StatsScraperService.cs      # Pro Football Reference (HTML)
-│       ├── Espn/                       # ESPN API provider (4 services + DTOs + mappings)
-│       ├── SportsDataIo/              # SportsData.io API provider (4 services + DTOs)
-│       ├── MySportsFeeds/             # MySportsFeeds API provider (4 services + DTOs)
-│       └── NflCom/                    # NFL.com API provider (4 services + DTOs)
-├── Migrations/                         # EF Core migration files
+│       ├── IScraperService.cs         # Scraper interfaces (ITeam/IPlayer/IGame/IStats)
+│       ├── BaseScraperService.cs      # Abstract base for HTML scraping (PFR)
+│       ├── BaseApiService.cs          # Abstract base for JSON APIs (auth, rate limiting)
+│       ├── TeamScraperService.cs      # Pro Football Reference: teams
+│       ├── PlayerScraperService.cs    # Pro Football Reference: rosters
+│       ├── GameScraperService.cs      # Pro Football Reference: schedules/scores
+│       ├── StatsScraperService.cs     # Pro Football Reference: player stats
+│       ├── Espn/                      # ESPN API provider (4 services + DTOs + mappings)
+│       ├── SportsDataIo/             # SportsData.io API provider (4 services + DTOs)
+│       ├── MySportsFeeds/            # MySportsFeeds API provider (4 services + DTOs)
+│       └── NflCom/                   # NFL.com API provider (4 services + DTOs)
+├── Migrations/                        # EF Core migration files
 └── Extensions/
-    └── ServiceCollectionExtensions.cs  # DI wiring
-data/                                   # SQLite database directory
-tests/WebScraper.Tests/                 # xUnit test project (128 tests)
+    └── ServiceCollectionExtensions.cs # DI wiring
+data/                                  # SQLite database directory
+tests/WebScraper.Tests/                # xUnit test project (220 tests)
 ```
 
 ## License
