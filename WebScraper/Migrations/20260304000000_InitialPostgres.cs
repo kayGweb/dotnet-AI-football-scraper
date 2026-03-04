@@ -1,12 +1,13 @@
 using System;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
 namespace WebScraper.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialCreate : Migration
+    public partial class InitialPostgres : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -15,13 +16,13 @@ namespace WebScraper.Migrations
                 name: "Teams",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    Name = table.Column<string>(type: "TEXT", nullable: false),
-                    Abbreviation = table.Column<string>(type: "TEXT", nullable: false),
-                    City = table.Column<string>(type: "TEXT", nullable: false),
-                    Conference = table.Column<string>(type: "TEXT", nullable: false),
-                    Division = table.Column<string>(type: "TEXT", nullable: false)
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    Name = table.Column<string>(type: "text", nullable: false),
+                    Abbreviation = table.Column<string>(type: "text", nullable: false),
+                    City = table.Column<string>(type: "text", nullable: false),
+                    Conference = table.Column<string>(type: "text", nullable: false),
+                    Division = table.Column<string>(type: "text", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -32,15 +33,15 @@ namespace WebScraper.Migrations
                 name: "Players",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    Name = table.Column<string>(type: "TEXT", nullable: false),
-                    TeamId = table.Column<int>(type: "INTEGER", nullable: true),
-                    Position = table.Column<string>(type: "TEXT", nullable: false),
-                    JerseyNumber = table.Column<int>(type: "INTEGER", nullable: true),
-                    Height = table.Column<string>(type: "TEXT", nullable: true),
-                    Weight = table.Column<int>(type: "INTEGER", nullable: true),
-                    College = table.Column<string>(type: "TEXT", nullable: true)
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    Name = table.Column<string>(type: "text", nullable: false),
+                    TeamId = table.Column<int>(type: "integer", nullable: true),
+                    Position = table.Column<string>(type: "text", nullable: false),
+                    JerseyNumber = table.Column<int>(type: "integer", nullable: true),
+                    Height = table.Column<string>(type: "text", nullable: true),
+                    Weight = table.Column<int>(type: "integer", nullable: true),
+                    College = table.Column<string>(type: "text", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -56,15 +57,15 @@ namespace WebScraper.Migrations
                 name: "Games",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    Season = table.Column<int>(type: "INTEGER", nullable: false),
-                    Week = table.Column<int>(type: "INTEGER", nullable: false),
-                    GameDate = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    HomeTeamId = table.Column<int>(type: "INTEGER", nullable: false),
-                    AwayTeamId = table.Column<int>(type: "INTEGER", nullable: false),
-                    HomeScore = table.Column<int>(type: "INTEGER", nullable: true),
-                    AwayScore = table.Column<int>(type: "INTEGER", nullable: true)
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    Season = table.Column<int>(type: "integer", nullable: false),
+                    Week = table.Column<int>(type: "integer", nullable: false),
+                    GameDate = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    HomeTeamId = table.Column<int>(type: "integer", nullable: false),
+                    AwayTeamId = table.Column<int>(type: "integer", nullable: false),
+                    HomeScore = table.Column<int>(type: "integer", nullable: true),
+                    AwayScore = table.Column<int>(type: "integer", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -87,21 +88,21 @@ namespace WebScraper.Migrations
                 name: "PlayerGameStats",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    PlayerId = table.Column<int>(type: "INTEGER", nullable: false),
-                    GameId = table.Column<int>(type: "INTEGER", nullable: false),
-                    PassAttempts = table.Column<int>(type: "INTEGER", nullable: false),
-                    PassCompletions = table.Column<int>(type: "INTEGER", nullable: false),
-                    PassYards = table.Column<int>(type: "INTEGER", nullable: false),
-                    PassTouchdowns = table.Column<int>(type: "INTEGER", nullable: false),
-                    Interceptions = table.Column<int>(type: "INTEGER", nullable: false),
-                    RushAttempts = table.Column<int>(type: "INTEGER", nullable: false),
-                    RushYards = table.Column<int>(type: "INTEGER", nullable: false),
-                    RushTouchdowns = table.Column<int>(type: "INTEGER", nullable: false),
-                    Receptions = table.Column<int>(type: "INTEGER", nullable: false),
-                    ReceivingYards = table.Column<int>(type: "INTEGER", nullable: false),
-                    ReceivingTouchdowns = table.Column<int>(type: "INTEGER", nullable: false)
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    PlayerId = table.Column<int>(type: "integer", nullable: false),
+                    GameId = table.Column<int>(type: "integer", nullable: false),
+                    PassAttempts = table.Column<int>(type: "integer", nullable: false),
+                    PassCompletions = table.Column<int>(type: "integer", nullable: false),
+                    PassYards = table.Column<int>(type: "integer", nullable: false),
+                    PassTouchdowns = table.Column<int>(type: "integer", nullable: false),
+                    Interceptions = table.Column<int>(type: "integer", nullable: false),
+                    RushAttempts = table.Column<int>(type: "integer", nullable: false),
+                    RushYards = table.Column<int>(type: "integer", nullable: false),
+                    RushTouchdowns = table.Column<int>(type: "integer", nullable: false),
+                    Receptions = table.Column<int>(type: "integer", nullable: false),
+                    ReceivingYards = table.Column<int>(type: "integer", nullable: false),
+                    ReceivingTouchdowns = table.Column<int>(type: "integer", nullable: false)
                 },
                 constraints: table =>
                 {

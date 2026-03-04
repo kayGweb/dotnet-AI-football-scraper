@@ -70,6 +70,8 @@ project.nuget.cache
 appsettings.*.json
 !appsettings.json
 !appsettings.Development.json
+.env
+.env.*
 
 # Data directory (database files)
 data/*.db

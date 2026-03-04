@@ -91,6 +91,9 @@ static IHost BuildHost(string[] cliArgs, string? sourceOverride)
         })
         .ConfigureAppConfiguration((context, config) =>
         {
+            // Allow environment variables to override config (e.g., DATABASE_URL, ConnectionStrings__DefaultConnection)
+            config.AddEnvironmentVariables();
+
             if (sourceOverride != null)
             {
                 config.AddInMemoryCollection(new Dictionary<string, string?>
