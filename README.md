@@ -49,7 +49,7 @@ dotnet build
 dotnet run --project WebScraper
 
 # Or use CLI mode
-dotnet run --project WebScraper -- --help
+
 ```
 
 The database is created automatically on first run. EF Core migrations are applied at startup, so there is no manual database setup required.
