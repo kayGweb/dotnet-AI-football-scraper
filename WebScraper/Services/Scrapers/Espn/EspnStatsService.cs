@@ -154,7 +154,7 @@ public class EspnStatsService : BaseApiService, IStatsScraperService
             switch (keys[i].ToUpperInvariant())
             {
                 case "C/ATT":
-                    // Format is "completions/attempts"
+                case "COMPLETIONS/PASSINGATTEMPTS":
                     var parts = value.Split('/');
                     if (parts.Length == 2)
                     {
@@ -163,12 +163,15 @@ public class EspnStatsService : BaseApiService, IStatsScraperService
                     }
                     break;
                 case "YDS":
+                case "PASSINGYARDS":
                     if (int.TryParse(value, out var yds)) stats.PassYards = yds;
                     break;
                 case "TD":
+                case "PASSINGTOUCHDOWNS":
                     if (int.TryParse(value, out var td)) stats.PassTouchdowns = td;
                     break;
                 case "INT":
+                case "INTERCEPTIONS":
                     if (int.TryParse(value, out var ints)) stats.Interceptions = ints;
                     break;
             }
@@ -183,12 +186,15 @@ public class EspnStatsService : BaseApiService, IStatsScraperService
             switch (keys[i].ToUpperInvariant())
             {
                 case "CAR":
+                case "RUSHINGATTEMPTS":
                     if (int.TryParse(value, out var att)) stats.RushAttempts = att;
                     break;
                 case "YDS":
+                case "RUSHINGYARDS":
                     if (int.TryParse(value, out var yds)) stats.RushYards = yds;
                     break;
                 case "TD":
+                case "RUSHINGTOUCHDOWNS":
                     if (int.TryParse(value, out var td)) stats.RushTouchdowns = td;
                     break;
             }
@@ -203,12 +209,15 @@ public class EspnStatsService : BaseApiService, IStatsScraperService
             switch (keys[i].ToUpperInvariant())
             {
                 case "REC":
+                case "RECEPTIONS":
                     if (int.TryParse(value, out var rec)) stats.Receptions = rec;
                     break;
                 case "YDS":
+                case "RECEIVINGYARDS":
                     if (int.TryParse(value, out var yds)) stats.ReceivingYards = yds;
                     break;
                 case "TD":
+                case "RECEIVINGTOUCHDOWNS":
                     if (int.TryParse(value, out var td)) stats.ReceivingTouchdowns = td;
                     break;
             }
