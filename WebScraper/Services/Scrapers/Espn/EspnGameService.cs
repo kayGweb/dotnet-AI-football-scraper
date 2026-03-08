@@ -9,9 +9,10 @@ public class EspnGameService : BaseApiService, IGameScraperService
     private readonly IGameRepository _gameRepository;
     private readonly ITeamRepository _teamRepository;
 
-    // In-memory lookup of ESPN event IDs for stats scraping within the same session.
     // Key: "season:week:homeTeamAbbr", Value: ESPN event ID
     private static readonly Dictionary<string, string> EventIdLookup = new();
+    // Tracks which season:week combos have been fetched from the API
+    private static readonly HashSet<string> PopulatedWeeks = new();
 
     public EspnGameService(
         HttpClient httpClient,
@@ -73,6 +74,7 @@ public class EspnGameService : BaseApiService, IGameScraperService
             }
         }
 
+        PopulatedWeeks.Add($"{season}:{week}");
         return count;
     }
 
@@ -143,5 +145,84 @@ public class EspnGameService : BaseApiService, IGameScraperService
     {
         var key = $"{season}:{week}:{homeTeamAbbr}";
         return EventIdLookup.GetValueOrDefault(key);
+    }
+
+    /// <summary>
+    /// Clears all cached event IDs and populated-week markers. Used by tests.
+    /// </summary>
+    internal static void ClearEventIdCache()
+    {
+        EventIdLookup.Clear();
+        PopulatedWeeks.Clear();
+    }
+
+    /// <summary>
+    /// Returns true if event IDs have already been populated for this season/week
+    /// (either via game scraping or an explicit <see cref="PopulateEventIdsAsync"/> call).
+    /// </summary>
+    internal static bool HasEventIdsForWeek(int season, int week)
+    {
+        return PopulatedWeeks.Contains($"{season}:{week}");
+    }
+
+    /// <summary>
+    /// Fetches the ESPN scoreboard for the given season/week and populates the
+    /// in-memory event ID cache. Does not write to the database — used by
+    /// <see cref="EspnStatsService"/> when the cache is cold.
+    /// </summary>
+    internal static async Task PopulateEventIdsAsync(
+        HttpClient httpClient,
+        ILogger logger,
+        RateLimiterService rateLimiter,
+        int season,
+        int week)
+    {
+        var weekKey = $"{season}:{week}";
+        if (PopulatedWeeks.Contains(weekKey))
+            return;
+
+        await rateLimiter.WaitAsync();
+
+        var url = $"scoreboard?dates={season}&week={week}&seasontype=2";
+        logger.LogInformation("Fetching ESPN scoreboard to populate event IDs for season {Season} week {Week}", season, week);
+
+        try
+        {
+            var response = await httpClient.GetAsync(url);
+            response.EnsureSuccessStatusCode();
+
+            var json = await response.Content.ReadAsStringAsync();
+            var scoreboard = System.Text.Json.JsonSerializer.Deserialize<EspnScoreboardResponse>(json,
+                new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+            if (scoreboard == null)
+            {
+                logger.LogWarning("Failed to deserialize ESPN scoreboard for season {Season} week {Week}", season, week);
+                return;
+            }
+
+            int count = 0;
+            foreach (var espnEvent in scoreboard.Events)
+            {
+                var competition = espnEvent.Competitions.FirstOrDefault();
+                if (competition == null) continue;
+
+                var homeCompetitor = competition.Competitors.FirstOrDefault(c =>
+                    c.HomeAway.Equals("home", StringComparison.OrdinalIgnoreCase));
+                if (homeCompetitor == null) continue;
+
+                var homeAbbr = EspnMappings.ToNflAbbreviation(homeCompetitor.Team.Id, homeCompetitor.Team.Abbreviation);
+                var lookupKey = $"{season}:{week}:{homeAbbr}";
+                EventIdLookup[lookupKey] = espnEvent.Id;
+                count++;
+            }
+
+            PopulatedWeeks.Add(weekKey);
+            logger.LogInformation("Populated {Count} ESPN event IDs for season {Season} week {Week}", count, season, week);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to fetch ESPN scoreboard for event ID population (season {Season} week {Week})", season, week);
+        }
     }
 }

@@ -41,6 +41,12 @@ public class EspnStatsService : BaseApiService, IStatsScraperService
             return ScrapeResult.Failed($"No games found for season {season} week {week}. Scrape games first.");
         }
 
+        if (!EspnGameService.HasEventIdsForWeek(season, week))
+        {
+            _logger.LogInformation("Event ID cache is empty for season {Season} week {Week}. Fetching from ESPN API...", season, week);
+            await EspnGameService.PopulateEventIdsAsync(_httpClient, _logger, _rateLimiter, season, week);
+        }
+
         int totalStats = 0;
         foreach (var game in gamesList)
         {

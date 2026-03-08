@@ -11,7 +11,7 @@ public abstract class BaseApiService
     protected readonly HttpClient _httpClient;
     protected readonly ILogger _logger;
     protected readonly ApiProviderSettings _providerSettings;
-    private readonly RateLimiterService _rateLimiter;
+    protected readonly RateLimiterService _rateLimiter;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
