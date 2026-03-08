@@ -44,6 +44,7 @@ WebScraper/
 ├── Services/
 │   ├── RateLimiterService.cs          # Global rate limiter (SemaphoreSlim-based)
 │   ├── ConsoleDisplayService.cs       # User-facing console output (tables, banners, menus, progress)
+│   ├── DatabasePushService.cs         # Push local SQLite data to remote PostgreSQL
 │   ├── DataProviderFactory.cs         # Maps DataProvider config to correct DI registrations
 │   └── Scrapers/
 │       ├── IScraperService.cs         # Scraper interfaces (ITeam/IPlayer/IGame/IStats)
@@ -190,13 +191,44 @@ Four tables with the following relationships:
 
 ## Configuration
 `appsettings.json` sections:
-- `DatabaseProvider` — `"Sqlite"` | `"PostgreSQL"` | `"SqlServer"`
-- `ConnectionStrings.DefaultConnection` — connection string for selected provider
+- `DatabaseProvider` — `"Sqlite"` (default) | `"PostgreSQL"` | `"SqlServer"`
+- `ConnectionStrings.DefaultConnection` — connection string for selected provider (SQLite by default)
 - `ScraperSettings` — global scraper config:
   - `RequestDelayMs` (1500), `MaxRetries` (3), `UserAgent`, `TimeoutSeconds` (30)
   - `DataProvider` — `"ProFootballReference"` (default) | `"Espn"` | `"SportsDataIo"` | `"MySportsFeeds"` | `"NflCom"`
   - `Providers` — per-provider config dictionary with `BaseUrl`, `ApiKey`, `AuthType`, `AuthHeaderName`, `RequestDelayMs`, `CustomHeaders`
 - `Serilog` — structured logging config
+
+`appsettings.Local.json` (git-ignored, for secrets):
+- `ConnectionStrings.PostgreSQL` — remote PostgreSQL connection string used by the `push` command
+
+## Push to Server (SQLite -> PostgreSQL)
+
+The app uses a two-database workflow: scrape data into a local SQLite database, then push to a remote PostgreSQL server on demand.
+
+### Setup
+1. Add your Neon (or other PostgreSQL) connection string to `WebScraper/appsettings.Local.json`:
+   ```json
+   {
+     "ConnectionStrings": {
+       "PostgreSQL": "Host=ep-xxx.neon.tech;Database=neondb;Username=neondb_owner;Password=REAL_PASSWORD;SSL Mode=Require"
+     }
+   }
+   ```
+2. This file is git-ignored (`appsettings.*.json` pattern in `.gitignore`).
+
+### Usage
+```bash
+dotnet run -- push                     # CLI: push all local data to remote PostgreSQL
+```
+Or use option **5** ("Push to server") in the interactive menu.
+
+### How It Works
+- `DatabasePushService` opens a second `AppDbContext` pointed at the PostgreSQL connection string
+- Runs EF Core migrations on the remote database (creates tables if they don't exist)
+- Reads all data from the local SQLite context (teams, players, games, stats)
+- Upserts each record into the remote database, resolving FK relationships by natural keys (abbreviation for teams, name+team for players, season+week+teams for games)
+- Returns a `ScrapeResult` with counts and any errors
 
 ## Data Access Layer
 
@@ -341,6 +373,9 @@ dotnet run -- stats --season 2025 --week 1     # Scrape player stats for a week
 dotnet run -- all --season 2025                # Run full pipeline (teams, players, games)
 dotnet run -- teams --source Espn              # Override data source at runtime
 
+# Push local data to remote PostgreSQL
+dotnet run -- push                             # Push all SQLite data to Neon/PostgreSQL
+
 # Data display commands
 dotnet run -- list teams                       # Show all teams in database
 dotnet run -- list teams --conference AFC      # Show teams by conference
@@ -369,13 +404,15 @@ Main Menu
 2. View data
 3. Database status
 4. Change source (current: ESPN API)
-5. Exit
+5. Push to server (SQLite -> PostgreSQL)
+6. Exit
 ```
 
 - **Scrape submenu** — all scrape operations (teams, single team, players, games, stats, full pipeline) with inline prompts for season/week/abbreviation
 - **View submenu** — query and display database data using formatted tables (teams, players by team, games by season/week, player stats)
 - **Database status** — quick record counts for all tables
 - **Change source** — switch between all 5 data providers at runtime; triggers host rebuild with new DI container
+- **Push to server** — reads all data from local SQLite and upserts it into remote PostgreSQL (requires `ConnectionStrings:PostgreSQL` in `appsettings.Local.json`)
 - **Input handling** — validates numeric input, handles EOF (Ctrl+D/Ctrl+Z) gracefully
 
 ## Testing
@@ -449,6 +486,11 @@ Main Menu
 - [x] UI Phase 5: Interactive REPL mode (menu-driven scraping, viewing, source switching)
 - [x] UI Phase 6: Test updates (ScrapeResult assertions on 6 test files, new ScrapeResultTests, ConsoleDisplayServiceTests)
 - [x] UI Phase 7: CLAUDE.md documentation update
+
+### Database Push Phase
+- [x] Push Phase 1: DatabasePushService — reads local SQLite, upserts to remote PostgreSQL
+- [x] Push Phase 2: CLI `push` command + interactive menu option (menu item 5)
+- [x] Push Phase 3: Config split — SQLite as default, PostgreSQL connection string in git-ignored `appsettings.Local.json`
 
 ## Adding a New Data Provider
 1. Create a folder: `Services/Scrapers/NewProvider/`
