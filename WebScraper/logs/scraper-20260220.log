@@ -1,0 +1,2 @@
+2026-02-20 20:01:24.695 -05:00 [INF] Database migrated and ready
+2026-02-20 20:01:34.385 -05:00 [ERR] Unknown command: dotnet run --project webscraper -- teams --team kc
