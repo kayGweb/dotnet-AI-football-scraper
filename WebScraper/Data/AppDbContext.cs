@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using WebScraper.Models;
 
 namespace WebScraper.Data;
@@ -45,5 +46,21 @@ public class AppDbContext : DbContext
             .WithMany(t => t.Players)
             .HasForeignKey(p => p.TeamId)
             .IsRequired(false);
+
+        // Ensure all DateTime properties are stored as UTC for PostgreSQL compatibility
+        var utcConverter = new ValueConverter<DateTime, DateTime>(
+            v => v.Kind == DateTimeKind.Unspecified ? DateTime.SpecifyKind(v, DateTimeKind.Utc) : v.ToUniversalTime(),
+            v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+
+        foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+        {
+            foreach (var property in entityType.GetProperties())
+            {
+                if (property.ClrType == typeof(DateTime) || property.ClrType == typeof(DateTime?))
+                {
+                    property.SetValueConverter(utcConverter);
+                }
+            }
+        }
     }
 }

@@ -34,7 +34,8 @@ bld/
 [Bb]in/
 [Oo]bj/
 [Ll]og/
-[Ll]ogs/
+[Ll]ogs/*
+![Ll]ogs/.gitkeep
 
 # NuGet Packages
 *.nupkg
@@ -70,6 +71,8 @@ project.nuget.cache
 appsettings.*.json
 !appsettings.json
 !appsettings.Development.json
+.env
+.env.*
 
 # Data directory (database files)
 data/*.db

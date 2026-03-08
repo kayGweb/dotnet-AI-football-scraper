@@ -336,7 +336,7 @@ public class ConsoleDisplayService
         return dbProvider.ToLowerInvariant() switch
         {
             "sqlite" => ExtractSqlitePath(connectionString),
-            "postgresql" => "PostgreSQL",
+            "postgresql" => ExtractPostgresHost(connectionString),
             "sqlserver" => "SQL Server",
             _ => dbProvider
         };
@@ -348,5 +348,20 @@ public class ConsoleDisplayService
         var parts = connectionString.Split('=', 2);
         var path = parts.Length > 1 ? parts[1].Trim() : connectionString;
         return $"SQLite ({path})";
+    }
+
+    private static string ExtractPostgresHost(string connectionString)
+    {
+        // Extract host from "Host=ep-xxx.neon.tech;..." — show host without credentials
+        foreach (var part in connectionString.Split(';'))
+        {
+            var kv = part.Split('=', 2);
+            if (kv.Length == 2 && kv[0].Trim().Equals("Host", StringComparison.OrdinalIgnoreCase))
+            {
+                var host = kv[1].Trim();
+                return $"PostgreSQL ({host})";
+            }
+        }
+        return "PostgreSQL";
     }
 }
