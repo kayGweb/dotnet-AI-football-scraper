@@ -91,7 +91,7 @@ static IHost BuildHost(string[] cliArgs, string? sourceOverride)
         })
         .ConfigureAppConfiguration((context, config) =>
         {
-            // Allow environment variables to override config (e.g., DATABASE_URL, ConnectionStrings__DefaultConnection)
+            config.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
             config.AddEnvironmentVariables();
 
             if (sourceOverride != null)
