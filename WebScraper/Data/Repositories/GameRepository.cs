@@ -16,12 +16,14 @@ public class GameRepository : IGameRepository
         => await _context.Games
             .Include(g => g.HomeTeam)
             .Include(g => g.AwayTeam)
+            .Include(g => g.Venue)
             .FirstOrDefaultAsync(g => g.Id == id);
 
     public async Task<IEnumerable<Game>> GetAllAsync()
         => await _context.Games
             .Include(g => g.HomeTeam)
             .Include(g => g.AwayTeam)
+            .Include(g => g.Venue)
             .ToListAsync();
 
     public async Task<Game> AddAsync(Game entity)
@@ -54,6 +56,7 @@ public class GameRepository : IGameRepository
         => await _context.Games
             .Include(g => g.HomeTeam)
             .Include(g => g.AwayTeam)
+            .Include(g => g.Venue)
             .Where(g => g.Season == season)
             .OrderBy(g => g.Week)
             .ThenBy(g => g.GameDate)
@@ -63,6 +66,7 @@ public class GameRepository : IGameRepository
         => await _context.Games
             .Include(g => g.HomeTeam)
             .Include(g => g.AwayTeam)
+            .Include(g => g.Venue)
             .Where(g => g.Season == season && g.Week == week)
             .OrderBy(g => g.GameDate)
             .ToListAsync();
@@ -81,6 +85,22 @@ public class GameRepository : IGameRepository
             existing.GameDate = game.GameDate;
             existing.HomeScore = game.HomeScore;
             existing.AwayScore = game.AwayScore;
+            existing.VenueId = game.VenueId ?? existing.VenueId;
+            existing.Attendance = game.Attendance ?? existing.Attendance;
+            existing.NeutralSite = game.NeutralSite;
+            existing.EspnEventId = game.EspnEventId ?? existing.EspnEventId;
+            existing.GameStatus = game.GameStatus ?? existing.GameStatus;
+            existing.HomeWinner = game.HomeWinner ?? existing.HomeWinner;
+            existing.HomeQ1 = game.HomeQ1 ?? existing.HomeQ1;
+            existing.HomeQ2 = game.HomeQ2 ?? existing.HomeQ2;
+            existing.HomeQ3 = game.HomeQ3 ?? existing.HomeQ3;
+            existing.HomeQ4 = game.HomeQ4 ?? existing.HomeQ4;
+            existing.HomeOT = game.HomeOT ?? existing.HomeOT;
+            existing.AwayQ1 = game.AwayQ1 ?? existing.AwayQ1;
+            existing.AwayQ2 = game.AwayQ2 ?? existing.AwayQ2;
+            existing.AwayQ3 = game.AwayQ3 ?? existing.AwayQ3;
+            existing.AwayQ4 = game.AwayQ4 ?? existing.AwayQ4;
+            existing.AwayOT = game.AwayOT ?? existing.AwayOT;
             _context.Games.Update(existing);
         }
         else

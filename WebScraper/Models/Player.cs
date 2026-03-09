@@ -10,8 +10,10 @@ public class Player
     public string? Height { get; set; }
     public int? Weight { get; set; }
     public string? College { get; set; }
+    public string? EspnId { get; set; }
 
     // Navigation properties
     public Team? Team { get; set; }
     public ICollection<PlayerGameStats> GameStats { get; set; } = new List<PlayerGameStats>();
+    public ICollection<Injury> Injuries { get; set; } = new List<Injury>();
 }

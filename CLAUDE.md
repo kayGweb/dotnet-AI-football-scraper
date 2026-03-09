@@ -22,9 +22,13 @@ WebScraper/
 ├── appsettings.json                    # Config: DB provider, data provider, scraper settings, Serilog
 ├── Models/
 │   ├── Team.cs                         # NFL team entity
-│   ├── Player.cs                       # Player entity (FK -> Team)
-│   ├── Game.cs                         # Game entity (FKs -> HomeTeam, AwayTeam)
-│   ├── PlayerGameStats.cs              # Per-game player stats (FKs -> Player, Game)
+│   ├── Player.cs                       # Player entity (FK -> Team), EspnId field
+│   ├── Game.cs                         # Game entity (FKs -> HomeTeam, AwayTeam, Venue), quarter scores, ESPN metadata
+│   ├── PlayerGameStats.cs              # Per-game player stats (FKs -> Player, Game) — ~40 stat columns across 10 categories
+│   ├── Venue.cs                        # Stadium/venue entity (EspnId, grass/indoor, city/state)
+│   ├── TeamGameStats.cs                # Team-level per-game aggregates (first downs, yards, turnovers, possession)
+│   ├── Injury.cs                       # Player injury reports per game (status, type, body location)
+│   ├── ApiLink.cs                      # Catalog of ESPN API endpoints for future re-crawling
 │   ├── ScrapeResult.cs                # Scraper operation result (Success, RecordsProcessed, Errors)
 │   ├── ScraperSettings.cs             # Config POCO: scraper options + DataProvider + Providers dict
 │   ├── DataProvider.cs                # Enum: ProFootballReference, Espn, SportsDataIo, MySportsFeeds, NflCom
@@ -37,10 +41,18 @@ WebScraper/
 │       ├── IPlayerRepository.cs       # Player-specific repository interface
 │       ├── IGameRepository.cs         # Game-specific repository interface
 │       ├── IStatsRepository.cs        # Stats-specific repository interface
+│       ├── IVenueRepository.cs        # Venue-specific repository interface
+│       ├── ITeamGameStatsRepository.cs # Team game stats repository interface
+│       ├── IInjuryRepository.cs       # Injury repository interface
+│       ├── IApiLinkRepository.cs      # API link repository interface
 │       ├── TeamRepository.cs          # Team repository implementation
 │       ├── PlayerRepository.cs        # Player repository implementation
-│       ├── GameRepository.cs          # Game repository implementation
-│       └── StatsRepository.cs         # Stats repository implementation
+│       ├── GameRepository.cs          # Game repository implementation (includes Venue)
+│       ├── StatsRepository.cs         # Stats repository implementation (~40 stat fields)
+│       ├── VenueRepository.cs         # Venue repository implementation (upsert by EspnId)
+│       ├── TeamGameStatsRepository.cs # Team game stats implementation (upsert by GameId+TeamId)
+│       ├── InjuryRepository.cs        # Injury repository implementation (upsert by GameId+EspnAthleteId)
+│       └── ApiLinkRepository.cs       # API link repository implementation (upsert by Url)
 ├── Services/
 │   ├── RateLimiterService.cs          # Global rate limiter (SemaphoreSlim-based)
 │   ├── ConsoleDisplayService.cs       # User-facing console output (tables, banners, menus, progress)
@@ -55,12 +67,12 @@ WebScraper/
 │       ├── GameScraperService.cs      # PFR: Scrapes season schedules/scores
 │       ├── StatsScraperService.cs     # PFR: Scrapes per-game player stats from box scores
 │       ├── Espn/
-│       │   ├── EspnDtos.cs            # DTO classes matching ESPN JSON response shapes
+│       │   ├── EspnDtos.cs            # DTO classes for ESPN JSON (teams, scoreboard, summary, gameInfo, injuries, links)
 │       │   ├── EspnMappings.cs        # ESPN team ID ↔ NFL abbreviation + division lookup
 │       │   ├── EspnTeamService.cs     # ESPN API: Scrapes teams via /teams endpoint
 │       │   ├── EspnPlayerService.cs   # ESPN API: Scrapes rosters via /teams/{id}/roster
-│       │   ├── EspnGameService.cs     # ESPN API: Scrapes scores via /scoreboard
-│       │   └── EspnStatsService.cs    # ESPN API: Scrapes player stats via /summary?event={id}
+│       │   ├── EspnGameService.cs     # ESPN API: Scrapes scores, venues, quarter scores, API links via /scoreboard
+│       │   └── EspnStatsService.cs    # ESPN API: Scrapes all 10 stat categories, team stats, venue, injuries, API links via /summary
 │       ├── SportsDataIo/
 │       │   ├── SportsDataDtos.cs      # DTO classes for SportsData.io JSON responses
 │       │   ├── SportsDataTeamService.cs     # SportsData.io: Teams via /scores/json/Teams
@@ -82,6 +94,8 @@ WebScraper/
 ├── Migrations/
 │   ├── 20260207000000_InitialCreate.cs           # Initial migration (Up/Down)
 │   ├── 20260207000000_InitialCreate.Designer.cs  # Migration model snapshot
+│   ├── 20260309231025_ExpandedSchema.cs          # Expanded schema migration (4 new tables, ~40 new columns)
+│   ├── 20260309231025_ExpandedSchema.Designer.cs # Expanded schema model snapshot
 │   └── AppDbContextModelSnapshot.cs              # Current model snapshot
 └── Extensions/
     └── ServiceCollectionExtensions.cs # DI wiring: DB, repos, delegates to DataProviderFactory
@@ -170,17 +184,21 @@ Static helper that maps the `DataProvider` config string to the correct set of D
 |---------|-----------|---------------|-----------|
 | `EspnTeamService` | `ITeamScraperService` | `/teams` | Maps ESPN team IDs → NFL abbreviations via `EspnMappings` |
 | `EspnPlayerService` | `IPlayerScraperService` | `/teams/{espnId}/roster` | Converts ESPN height (inches) to "X-Y" format |
-| `EspnGameService` | `IGameScraperService` | `/scoreboard?dates={year}&week={n}&seasontype=2` | Stores ESPN event IDs in-memory for stats lookups |
-| `EspnStatsService` | `IStatsScraperService` | `/summary?event={eventId}` | Parses nested boxscore categories (passing/rushing/receiving) |
-| `EspnDtos` | — | — | DTO classes matching all ESPN JSON response shapes |
+| `EspnGameService` | `IGameScraperService` | `/scoreboard?dates={year}&week={n}&seasontype=2` | Stores ESPN event IDs, upserts venues, persists quarter scores & EspnEventId, stores API links |
+| `EspnStatsService` | `IStatsScraperService` | `/summary?event={eventId}` | Parses all 10 boxscore categories (passing, rushing, receiving, fumbles, defensive, interceptions, kick returns, punt returns, kicking, punting); extracts team-level stats → TeamGameStats; venues from gameInfo; injuries; API links from header |
+| `EspnDtos` | — | — | DTO classes for teams, scoreboard, summary, gameInfo, injuries, team statistics, linescores, header links |
 | `EspnMappings` | — | — | Bidirectional ESPN ID ↔ NFL abbreviation map for all 32 teams + division lookup |
 
 ## Database Schema
-Four tables with the following relationships:
-- **teams** — 32 NFL teams (id, name, abbreviation, city, conference, division)
-- **players** — FK to teams via `TeamId` (nullable for free agents)
-- **games** — Two FKs to teams: `HomeTeamId`, `AwayTeamId` (both use `DeleteBehavior.Restrict`)
-- **player_game_stats** — Composite FKs to `players` and `games`; columns for passing/rushing/receiving stats
+Eight tables with the following relationships:
+- **Teams** — 32 NFL teams (id, name, abbreviation, city, conference, division)
+- **Players** — FK to Teams via `TeamId` (nullable for free agents); `EspnId` for ESPN athlete matching
+- **Games** — Two FKs to Teams: `HomeTeamId`, `AwayTeamId` (both use `DeleteBehavior.Restrict`); optional FK to `Venues`; includes quarter scores (HomeQ1-Q4, HomeOT, AwayQ1-Q4, AwayOT), `EspnEventId`, `GameStatus`, `HomeWinner`, `Attendance`, `NeutralSite`
+- **PlayerGameStats** — Composite FKs to `Players` and `Games`; ~40 stat columns across 10 categories: passing (C/A, yards, TD, INT, QBR, sacks), rushing (attempts, yards, TD, long), receiving (rec, yards, TD, targets, long, YPR), fumbles, defensive (tackles, sacks, TFL, PD, QBH), interceptions (caught, yards, TD), kick returns, punt returns, kicking (FG, XP, points), punting (punts, yards, avg, TB, inside20)
+- **Venues** — Stadium info (EspnId UK, name, city, state, country, IsGrass, IsIndoor)
+- **TeamGameStats** — Team-level per-game aggregates (FKs to Games+Teams, UK on GameId+TeamId); first downs, yards, efficiency, red zone, turnovers, penalties, possession time
+- **Injuries** — Player injury reports per game (FKs to Games+Players, UK on GameId+EspnAthleteId); status, injury type, body location, return date
+- **ApiLinks** — Discovered ESPN API endpoints (UK on Url); endpoint type, relation, season/week, ESPN event ID, timestamps
 
 ## Key Patterns
 - **Repository Pattern** with generic `IRepository<T>` base and specialized interfaces per entity
@@ -233,11 +251,16 @@ Or use option **5** ("Push to server") in the interactive menu.
 ## Data Access Layer
 
 ### AppDbContext (`Data/AppDbContext.cs`)
-- EF Core `DbContext` with `DbSet<>` for Teams, Players, Games, PlayerGameStats
+- EF Core `DbContext` with `DbSet<>` for Teams, Players, Games, PlayerGameStats, Venues, TeamGameStats, Injuries, ApiLinks
 - `OnModelCreating` configures:
-  - `Game.HomeTeam` / `Game.AwayTeam` — two FKs to Team with `DeleteBehavior.Restrict`
-  - `PlayerGameStats` — FKs to Player and Game
-  - `Player.Team` — optional FK (`IsRequired(false)`)
+ - `Game.HomeTeam` / `Game.AwayTeam` — two FKs to Team with `DeleteBehavior.Restrict`
+ - `Game.Venue` — optional FK to Venue
+ - `PlayerGameStats` — FKs to Player and Game
+ - `Player.Team` — optional FK (`IsRequired(false)`)
+ - `TeamGameStats` — FKs to Game and Team; unique index on `GameId + TeamId`
+ - `Injury` — FK to Game; optional FK to Player; unique index on `GameId + EspnAthleteId`
+ - `ApiLink` — optional FKs to Game and Team; unique index on `Url`
+ - `Venue` — unique index on `EspnId`
 
 ### Repository Interfaces
 | Interface | Lookup Methods | Upsert Key |
@@ -246,6 +269,10 @@ Or use option **5** ("Push to server") in the interactive menu.
 | `IPlayerRepository` | `GetByTeamAsync`, `GetByNameAsync` | Name + TeamId |
 | `IGameRepository` | `GetBySeasonAsync`, `GetByWeekAsync` | Season + Week + HomeTeamId + AwayTeamId |
 | `IStatsRepository` | `GetPlayerStatsAsync`, `GetGameStatsAsync` | PlayerId + GameId |
+| `IVenueRepository` | `GetByEspnIdAsync` | EspnId |
+| `ITeamGameStatsRepository` | `GetByGameAsync`, `GetByGameAndTeamAsync` | GameId + TeamId |
+| `IInjuryRepository` | `GetByGameAsync`, `GetByGameAndAthleteAsync` | GameId + EspnAthleteId |
+| `IApiLinkRepository` | `GetByUrlAsync`, `GetByGameAsync`, `GetByEndpointTypeAsync` | Url |
 
 ### Repository Implementations
 All repositories follow the same pattern:
@@ -262,7 +289,7 @@ All repositories follow the same pattern:
   - `FetchJsonAsync<T>(url)` — fetches JSON, deserializes via System.Text.Json, handles auth, respects rate limits
 - **RateLimiterService** — singleton, uses `SemaphoreSlim` to enforce `RequestDelayMs` between requests globally
 - **ScrapeResult** — all scraper interface methods return `Task<ScrapeResult>` with `Success`, `RecordsProcessed`, `RecordsFailed`, `Message`, and `Errors` fields. Factory methods: `ScrapeResult.Succeeded(count, message)` and `ScrapeResult.Failed(message)`
-- **ConsoleDisplayService** — singleton for user-facing console output (separate from Serilog). Provides `PrintBanner()`, `PrintScrapeResult()`, `PrintTeamsTable()`, `PrintGamesTable()`, `PrintPlayersTable()`, `PrintStatsTable()`, `PrintDatabaseStatus()`, interactive menu methods (`PrintMainMenu`, `PrintScrapeMenu`, `PrintViewMenu`, `PrintSourceMenu`), and colored status output (`PrintError`, `PrintSuccess`, `PrintWarning`)
+- **ConsoleDisplayService** — singleton for user-facing console output (separate from Serilog). Provides `PrintBanner()`, `PrintScrapeResult()`, `PrintTeamsTable()`, `PrintGamesTable()` (auto-detects venue data for wider format), `PrintPlayersTable()`, `PrintStatsTable()` (groups by offense/defense/kicking/returns), `PrintVenuesTable()`, `PrintTeamGameStatsTable()`, `PrintInjuriesTable()`, `PrintDatabaseStatus()` (all 8 tables), interactive menu methods (`PrintMainMenu`, `PrintScrapeMenu`, `PrintViewMenu` with 8 options, `PrintSourceMenu`), and colored status output (`PrintError`, `PrintSuccess`, `PrintWarning`)
 
 ### PFR Scraper Details
 | Service | Interface | Data Source URL | Key Parse Logic |
@@ -280,8 +307,8 @@ Scrapers maintain a mapping between PFR team abbreviations (e.g., `kan`, `crd`, 
 |---------|-----------|---------------|-----------------|
 | `EspnTeamService` | `ITeamScraperService` | `/teams` | Traverses `sports[0].leagues[0].teams[]`; maps ESPN IDs to NFL abbreviations |
 | `EspnPlayerService` | `IPlayerScraperService` | `/teams/{espnId}/roster` | Iterates `athletes[].items[]`; converts height from inches to "X-Y" format |
-| `EspnGameService` | `IGameScraperService` | `/scoreboard?dates=&week=&seasontype=2` | Parses `events[].competitions[].competitors[]`; caches event IDs for stats |
-| `EspnStatsService` | `IStatsScraperService` | `/summary?event={eventId}` | Parses `boxscore.players[].statistics[]` by category (passing/rushing/receiving) |
+| `EspnGameService` | `IGameScraperService` | `/scoreboard?dates=&week=&seasontype=2` | Parses events; upserts venues from `competition.venue`; extracts quarter scores from `linescores`; persists `EspnEventId`, `GameStatus`, `HomeWinner`, `Attendance`; caches event IDs; stores summary API links |
+| `EspnStatsService` | `IStatsScraperService` | `/summary?event={eventId}` | Parses `boxscore.players[].statistics[]` across 10 categories (passing/rushing/receiving/fumbles/defensive/interceptions/kickReturns/puntReturns/kicking/punting); extracts `boxscore.teams[].statistics[]` → TeamGameStats; venue from `gameInfo`; injuries from `injuries[]`; API links from `header.links[]` |
 
 ### ESPN Team ID Mapping
 `EspnMappings` provides bidirectional lookup between ESPN numeric IDs and NFL abbreviations for all 32 teams. Also includes conference/division lookup by NFL abbreviation.
@@ -345,7 +372,8 @@ Each scraper's `HttpClient` (both HTML and API) is configured with a resilience 
 
 ## Database Migrations
 - Migration files live in `WebScraper/Migrations/`
-- `InitialCreate` migration creates all 4 tables (Teams, Players, Games, PlayerGameStats) with FKs and indexes
+- `InitialCreate` migration creates the original 4 tables (Teams, Players, Games, PlayerGameStats) with FKs and indexes
+- `ExpandedSchema` migration adds 4 new tables (Venues, TeamGameStats, Injuries, ApiLinks), new columns to Games (VenueId, Attendance, quarter scores, EspnEventId, etc.), new columns to PlayerGameStats (~40 stat fields), and Player.EspnId
 - `Program.cs` calls `db.Database.MigrateAsync()` on startup — auto-applies pending migrations
 - To add a new migration: `dotnet ef migrations add <Name> --project WebScraper`
 - To apply manually: `dotnet ef database update --project WebScraper`
@@ -380,11 +408,14 @@ dotnet run -- push                             # Push all SQLite data to Neon/Po
 dotnet run -- list teams                       # Show all teams in database
 dotnet run -- list teams --conference AFC      # Show teams by conference
 dotnet run -- list players --team KC           # Show roster for a team
-dotnet run -- list games --season 2025         # Show games for a season
+dotnet run -- list games --season 2025         # Show games for a season (venue/attendance if available)
 dotnet run -- list games --season 2025 --week 1  # Show games for a week
-dotnet run -- list stats --season 2025 --week 1  # Show player stats for a week
+dotnet run -- list stats --season 2025 --week 1  # Show player stats (offense/defense/kicking/returns)
 dotnet run -- list stats --player "Patrick Mahomes" --season 2025  # Individual player stats
-dotnet run -- status                           # Show database record counts
+dotnet run -- list venues                      # Show all venues in database
+dotnet run -- list teamstats --season 2025 --week 1  # Show team-level game stats
+dotnet run -- list injuries --season 2025 --week 1   # Show injury reports by game
+dotnet run -- status                           # Show database record counts (all 8 tables)
 ```
 
 To switch data sources permanently, set `DataProvider` in `appsettings.json`. To switch at runtime, use `--source <provider>`. SportsData.io and MySportsFeeds require API keys configured in `Providers` section.
@@ -409,7 +440,7 @@ Main Menu
 ```
 
 - **Scrape submenu** — all scrape operations (teams, single team, players, games, stats, full pipeline) with inline prompts for season/week/abbreviation
-- **View submenu** — query and display database data using formatted tables (teams, players by team, games by season/week, player stats)
+- **View submenu** — query and display database data using formatted tables (teams, players by team, games by season/week with venue/attendance, player stats grouped by offense/defense/kicking/returns, venues, team game stats, injuries)
 - **Database status** — quick record counts for all tables
 - **Change source** — switch between all 5 data providers at runtime; triggers host rebuild with new DI container
 - **Push to server** — reads all data from local SQLite and upserts it into remote PostgreSQL (requires `ConnectionStrings:PostgreSQL` in `appsettings.Local.json`)
@@ -491,6 +522,19 @@ Main Menu
 - [x] Push Phase 1: DatabasePushService — reads local SQLite, upserts to remote PostgreSQL
 - [x] Push Phase 2: CLI `push` command + interactive menu option (menu item 5)
 - [x] Push Phase 3: Config split — SQLite as default, PostgreSQL connection string in git-ignored `appsettings.Local.json`
+
+### ESPN Schema Expansion Phases
+- [x] Schema Phase 1: New models — Venue, TeamGameStats, Injury, ApiLink
+- [x] Schema Phase 2: Expanded models — Game (venue, attendance, quarter scores, EspnEventId), PlayerGameStats (~40 new stat columns), Team (nav props), Player (EspnId)
+- [x] Schema Phase 3: AppDbContext — 4 new DbSets, FK relationships, unique indexes
+- [x] Schema Phase 4: New repositories — Venue, TeamGameStats, Injury, ApiLink (interface + implementation)
+- [x] Schema Phase 5: Updated StatsRepository.UpsertAsync for all new stat columns + GameRepository.UpsertAsync for expanded Game fields
+- [x] Schema Phase 6: DI registration for new repositories
+- [x] Schema Phase 7: Expanded EspnDtos — gameInfo, injuries, team statistics, linescores, header links
+- [x] Schema Phase 8: EspnGameService — venue/attendance, EspnEventId, quarter scores, API links from scoreboard
+- [x] Schema Phase 9: EspnStatsService — all 10 stat categories, team stats, venue, injuries, API links from /summary
+- [x] Schema Phase 10: EF Core migration (ExpandedSchema)
+- [x] Schema Phase 11: Console UI updates — PrintGamesTable (venue/attendance), PrintStatsTable (offense/defense/kicking/returns), PrintDatabaseStatus (all 8 tables), new PrintVenuesTable/PrintTeamGameStatsTable/PrintInjuriesTable, expanded View menu (8 options), new CLI list subcommands (venues, teamstats, injuries)
 
 ## Adding a New Data Provider
 1. Create a folder: `Services/Scrapers/NewProvider/`

@@ -13,4 +13,6 @@ public class Team
     public ICollection<Player> Players { get; set; } = new List<Player>();
     public ICollection<Game> HomeGames { get; set; } = new List<Game>();
     public ICollection<Game> AwayGames { get; set; } = new List<Game>();
+    public ICollection<TeamGameStats> TeamStats { get; set; } = new List<TeamGameStats>();
+    public ICollection<ApiLink> ApiLinks { get; set; } = new List<ApiLink>();
 }
