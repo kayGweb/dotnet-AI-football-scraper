@@ -47,6 +47,10 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IPlayerRepository, PlayerRepository>();
         services.AddScoped<IGameRepository, GameRepository>();
         services.AddScoped<IStatsRepository, StatsRepository>();
+        services.AddScoped<IVenueRepository, VenueRepository>();
+        services.AddScoped<ITeamGameStatsRepository, TeamGameStatsRepository>();
+        services.AddScoped<IInjuryRepository, InjuryRepository>();
+        services.AddScoped<IApiLinkRepository, ApiLinkRepository>();
 
         // Register rate limiter, display service, and push service
         services.AddSingleton<RateLimiterService>();

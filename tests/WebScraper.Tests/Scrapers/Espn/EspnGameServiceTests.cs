@@ -54,8 +54,10 @@ public class EspnGameServiceTests
         var providerSettings = new ApiProviderSettings { AuthType = "None" };
         var gameRepo = new Mock<IGameRepository>();
         var teamRepo = new Mock<ITeamRepository>();
+        var venueRepo = new Mock<IVenueRepository>();
+        var apiLinkRepo = new Mock<IApiLinkRepository>();
         var service = new EspnGameService(httpClient, logger, providerSettings, CreateRateLimiter(),
-            gameRepo.Object, teamRepo.Object);
+            gameRepo.Object, teamRepo.Object, venueRepo.Object, apiLinkRepo.Object);
         return (service, gameRepo, teamRepo);
     }
 

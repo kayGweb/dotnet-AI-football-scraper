@@ -8,6 +8,8 @@ public class EspnGameService : BaseApiService, IGameScraperService
 {
     private readonly IGameRepository _gameRepository;
     private readonly ITeamRepository _teamRepository;
+    private readonly IVenueRepository _venueRepository;
+    private readonly IApiLinkRepository _apiLinkRepository;
 
     // Key: "season:week:homeTeamAbbr", Value: ESPN event ID
     private static readonly Dictionary<string, string> EventIdLookup = new();
@@ -20,18 +22,21 @@ public class EspnGameService : BaseApiService, IGameScraperService
         ApiProviderSettings providerSettings,
         RateLimiterService rateLimiter,
         IGameRepository gameRepository,
-        ITeamRepository teamRepository)
+        ITeamRepository teamRepository,
+        IVenueRepository venueRepository,
+        IApiLinkRepository apiLinkRepository)
         : base(httpClient, logger, providerSettings, rateLimiter)
     {
         _gameRepository = gameRepository;
         _teamRepository = teamRepository;
+        _venueRepository = venueRepository;
+        _apiLinkRepository = apiLinkRepository;
     }
 
     public async Task<ScrapeResult> ScrapeGamesAsync(int season)
     {
         _logger.LogInformation("Starting games scrape for season {Season} from ESPN API", season);
 
-        // Scrape all 18 regular season weeks
         int totalCount = 0;
         for (int week = 1; week <= 18; week++)
         {
@@ -104,14 +109,12 @@ public class EspnGameService : BaseApiService, IGameScraperService
                 return null;
             }
 
-            // Parse date
             DateTime gameDate = DateTime.MinValue;
             if (!string.IsNullOrEmpty(espnEvent.Date))
             {
                 DateTime.TryParse(espnEvent.Date, out gameDate);
             }
 
-            // Parse scores
             int? homeScore = int.TryParse(homeCompetitor.Score, out var hs) ? hs : null;
             int? awayScore = int.TryParse(awayCompetitor.Score, out var aws) ? aws : null;
 
@@ -119,7 +122,33 @@ public class EspnGameService : BaseApiService, IGameScraperService
             var lookupKey = $"{season}:{week}:{homeAbbr}";
             EventIdLookup[lookupKey] = espnEvent.Id;
 
-            return new Game
+            // Upsert venue if present
+            int? venueId = null;
+            if (competition.Venue != null && !string.IsNullOrEmpty(competition.Venue.Id))
+            {
+                var venue = new Venue
+                {
+                    EspnId = competition.Venue.Id,
+                    Name = competition.Venue.FullName,
+                    City = competition.Venue.Address?.City ?? string.Empty,
+                    State = competition.Venue.Address?.State ?? string.Empty,
+                    Country = competition.Venue.Address?.Country ?? string.Empty,
+                    IsGrass = competition.Venue.Grass,
+                    IsIndoor = competition.Venue.Indoor
+                };
+                await _venueRepository.UpsertAsync(venue);
+                var saved = await _venueRepository.GetByEspnIdAsync(competition.Venue.Id);
+                venueId = saved?.Id;
+            }
+
+            // Parse quarter scores from linescores
+            int?[] homeQuarters = ParseLinescores(homeCompetitor.Linescores);
+            int?[] awayQuarters = ParseLinescores(awayCompetitor.Linescores);
+
+            // Game status
+            string? gameStatus = competition.Status?.Type?.Name;
+
+            var game = new Game
             {
                 Season = season,
                 Week = week,
@@ -127,13 +156,76 @@ public class EspnGameService : BaseApiService, IGameScraperService
                 HomeTeamId = homeTeam.Id,
                 AwayTeamId = awayTeam.Id,
                 HomeScore = homeScore,
-                AwayScore = awayScore
+                AwayScore = awayScore,
+                VenueId = venueId,
+                Attendance = competition.Attendance,
+                NeutralSite = competition.NeutralSite,
+                EspnEventId = espnEvent.Id,
+                GameStatus = gameStatus,
+                HomeWinner = homeCompetitor.Winner,
+                HomeQ1 = homeQuarters[0],
+                HomeQ2 = homeQuarters[1],
+                HomeQ3 = homeQuarters[2],
+                HomeQ4 = homeQuarters[3],
+                HomeOT = homeQuarters[4],
+                AwayQ1 = awayQuarters[0],
+                AwayQ2 = awayQuarters[1],
+                AwayQ3 = awayQuarters[2],
+                AwayQ4 = awayQuarters[3],
+                AwayOT = awayQuarters[4]
             };
+
+            // Store scoreboard API link
+            await StoreApiLinkAsync(
+                $"https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event={espnEvent.Id}",
+                "summary", "boxscore", season, week, espnEvent.Id, null, homeTeam.Id);
+
+            return game;
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to map ESPN event {EventId} to game", espnEvent.Id);
             return null;
+        }
+    }
+
+    private static int?[] ParseLinescores(List<EspnLinescore>? linescores)
+    {
+        var result = new int?[5]; // Q1, Q2, Q3, Q4, OT
+        if (linescores == null) return result;
+
+        for (int i = 0; i < linescores.Count && i < 5; i++)
+        {
+            result[i] = (int)linescores[i].Value;
+        }
+        return result;
+    }
+
+    private async Task StoreApiLinkAsync(
+        string url, string endpointType, string relationType,
+        int season, int week, string espnEventId,
+        int? gameId, int? teamId)
+    {
+        try
+        {
+            var apiLink = new ApiLink
+            {
+                Url = url,
+                EndpointType = endpointType,
+                RelationType = relationType,
+                Season = season,
+                Week = week,
+                EspnEventId = espnEventId,
+                GameId = gameId,
+                TeamId = teamId,
+                DiscoveredAt = DateTime.UtcNow,
+                LastAccessedAt = DateTime.UtcNow
+            };
+            await _apiLinkRepository.UpsertAsync(apiLink);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to store API link: {Url}", url);
         }
     }
 
