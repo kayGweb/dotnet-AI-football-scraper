@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "seSQy0CIbL0=",
+  "dgSpecHash": "l85yc+NQV6Q=",
   "success": true,
-  "projectFilePath": "/Users/kendallgroup/Projects/WebScraper/dotnet-AI-football-scraper/WebScraper/WebScraper.csproj",
+  "projectFilePath": "/Users/kendallgroup/Projects/WebScraper2d/dotnet-AI-football-scraper/WebScraper/WebScraper.csproj",
   "expectedPackageFiles": [
     "/Users/kendallgroup/.nuget/packages/anglesharp/1.4.0/anglesharp.1.4.0.nupkg.sha512",
     "/Users/kendallgroup/.nuget/packages/azure.core/1.38.0/azure.core.1.38.0.nupkg.sha512",

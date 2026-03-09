@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "/Users/kendallgroup/Projects/WebScraper/dotnet-AI-football-scraper/WebScraper/WebScraper.csproj": {}
+    "/Users/kendallgroup/Projects/WebScraper2d/dotnet-AI-football-scraper/WebScraper/WebScraper.csproj": {}
   },
   "projects": {
-    "/Users/kendallgroup/Projects/WebScraper/dotnet-AI-football-scraper/WebScraper/WebScraper.csproj": {
+    "/Users/kendallgroup/Projects/WebScraper2d/dotnet-AI-football-scraper/WebScraper/WebScraper.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "/Users/kendallgroup/Projects/WebScraper/dotnet-AI-football-scraper/WebScraper/WebScraper.csproj",
+        "projectUniqueName": "/Users/kendallgroup/Projects/WebScraper2d/dotnet-AI-football-scraper/WebScraper/WebScraper.csproj",
         "projectName": "WebScraper",
-        "projectPath": "/Users/kendallgroup/Projects/WebScraper/dotnet-AI-football-scraper/WebScraper/WebScraper.csproj",
+        "projectPath": "/Users/kendallgroup/Projects/WebScraper2d/dotnet-AI-football-scraper/WebScraper/WebScraper.csproj",
         "packagesPath": "/Users/kendallgroup/.nuget/packages/",
-        "outputPath": "/Users/kendallgroup/Projects/WebScraper/dotnet-AI-football-scraper/WebScraper/obj/",
+        "outputPath": "/Users/kendallgroup/Projects/WebScraper2d/dotnet-AI-football-scraper/WebScraper/obj/",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "/Users/kendallgroup/.nuget/NuGet/NuGet.Config"

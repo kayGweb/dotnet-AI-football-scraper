@@ -91,7 +91,7 @@ static IHost BuildHost(string[] cliArgs, string? sourceOverride)
         })
         .ConfigureAppConfiguration((context, config) =>
         {
-            // Allow environment variables to override config (e.g., DATABASE_URL, ConnectionStrings__DefaultConnection)
+            config.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
             config.AddEnvironmentVariables();
 
             if (sourceOverride != null)
@@ -230,6 +230,14 @@ static async Task<int> RunCommandAsync(IHost host, string[] args, ConsoleDisplay
         case "status":
             await RunStatusCommandAsync(services, display);
             return 0;
+
+        case "push":
+            var pushService = services.GetRequiredService<DatabasePushService>();
+            display.PrintInfo("Pushing local SQLite data to remote PostgreSQL...");
+            Console.WriteLine();
+            var pushResult = await pushService.PushAsync();
+            display.PrintScrapeResult("Push", pushResult);
+            return pushResult.Success ? 0 : 1;
 
         default:
             display.PrintError($"Unknown command: '{command}'");
@@ -493,11 +501,22 @@ static async Task<int> RunInteractiveAsync(string? initialSource)
                     break;
 
                 case "5":
+                    using (var scope = host.Services.CreateScope())
+                    {
+                        var pushSvc = scope.ServiceProvider.GetRequiredService<DatabasePushService>();
+                        display.PrintInfo("Pushing local SQLite data to remote PostgreSQL...");
+                        Console.WriteLine();
+                        var pushResult = await pushSvc.PushAsync();
+                        display.PrintScrapeResult("Push", pushResult);
+                    }
+                    break;
+
+                case "6":
                     display.PrintSuccess("Goodbye!");
                     return 0;
 
                 default:
-                    display.PrintWarning("Invalid choice. Enter 1-5.");
+                    display.PrintWarning("Invalid choice. Enter 1-6.");
                     break;
             }
         }
@@ -806,6 +825,7 @@ static void PrintUsage()
           games    --season <year> --week <n> Scrape games for a specific week
           stats    --season <year> --week <n> Scrape player stats for a week
           all      --season <year>           Run full pipeline (teams, players, games)
+          push                               Push local SQLite data to remote PostgreSQL
 
         View Commands:
           list teams                         Show all teams in the database
@@ -843,5 +863,6 @@ static void PrintUsage()
           dotnet run -- list games --season 2025 --week 1
           dotnet run -- list stats --player "Patrick Mahomes" --season 2025
           dotnet run -- status
+          dotnet run -- push
         """);
 }
