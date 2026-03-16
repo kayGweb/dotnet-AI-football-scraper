@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Serilog;
 using WebScraper.Data;
 using WebScraper.Models;

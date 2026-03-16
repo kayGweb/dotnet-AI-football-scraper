@@ -148,13 +148,24 @@ public class ConsoleDisplayService
             return;
         }
 
+        bool hasVenueData = gamesList.Any(g => g.Venue != null || g.Attendance != null);
         var header = season != null ? $"Games: {season} Season" + (week != null ? $" Week {week}" : "") : "Games";
         Console.WriteLine();
         Console.ForegroundColor = ConsoleColor.Cyan;
         Console.WriteLine($"  {header}");
-        Console.WriteLine($"  {"Wk",-4} {"Date",-12} {"Away",-6} {"Score",-11} {"Home",-6}");
-        Console.ResetColor();
-        Console.WriteLine("  " + new string('-', 41));
+
+        if (hasVenueData)
+        {
+            Console.WriteLine($"  {"Wk",-4} {"Date",-12} {"Away",-6} {"Score",-11} {"Home",-6} {"Venue",-24} {"Att",7}");
+            Console.ResetColor();
+            Console.WriteLine("  " + new string('-', 74));
+        }
+        else
+        {
+            Console.WriteLine($"  {"Wk",-4} {"Date",-12} {"Away",-6} {"Score",-11} {"Home",-6}");
+            Console.ResetColor();
+            Console.WriteLine("  " + new string('-', 41));
+        }
 
         foreach (var game in gamesList.OrderBy(g => g.Week).ThenBy(g => g.GameDate))
         {
@@ -164,7 +175,18 @@ public class ConsoleDisplayService
             var score = game.AwayScore != null && game.HomeScore != null
                 ? $"{game.AwayScore,3} - {game.HomeScore,-3}"
                 : "   -   ";
-            Console.WriteLine($"  {game.Week,-4} {date,-12} {awayAbbr,-6} {score,-11} {homeAbbr,-6}");
+
+            if (hasVenueData)
+            {
+                var venueName = game.Venue?.Name ?? "";
+                if (venueName.Length > 23) venueName = venueName[..23];
+                var att = game.Attendance?.ToString("N0") ?? "";
+                Console.WriteLine($"  {game.Week,-4} {date,-12} {awayAbbr,-6} {score,-11} {homeAbbr,-6} {venueName,-24} {att,7}");
+            }
+            else
+            {
+                Console.WriteLine($"  {game.Week,-4} {date,-12} {awayAbbr,-6} {score,-11} {homeAbbr,-6}");
+            }
         }
 
         Console.WriteLine();
@@ -181,18 +203,93 @@ public class ConsoleDisplayService
             return;
         }
 
-        Console.WriteLine();
-        Console.ForegroundColor = ConsoleColor.Cyan;
-        Console.WriteLine($"  {"Player",-22} {"C/A",-8} {"PYd",-6} {"PTD",-4} {"INT",-4} {"RAtt",-5} {"RYd",-6} {"RTD",-4} {"Rec",-4} {"RecYd",-6} {"RecTD",-5}");
-        Console.ResetColor();
-        Console.WriteLine("  " + new string('-', 78));
+        // Offense stats (passing/rushing/receiving)
+        var offensePlayers = statsList
+            .Where(s => s.PassAttempts > 0 || s.RushAttempts > 0 || s.Receptions > 0)
+            .OrderByDescending(s => s.PassYards + s.RushYards + s.ReceivingYards)
+            .ToList();
 
-        foreach (var s in statsList.OrderByDescending(s => s.PassYards + s.RushYards + s.ReceivingYards))
+        if (offensePlayers.Count > 0)
         {
-            var playerName = s.Player?.Name ?? $"Player#{s.PlayerId}";
-            if (playerName.Length > 21) playerName = playerName[..21];
-            var compAtt = $"{s.PassCompletions}/{s.PassAttempts}";
-            Console.WriteLine($"  {playerName,-22} {compAtt,-8} {s.PassYards,-6} {s.PassTouchdowns,-4} {s.Interceptions,-4} {s.RushAttempts,-5} {s.RushYards,-6} {s.RushTouchdowns,-4} {s.Receptions,-4} {s.ReceivingYards,-6} {s.ReceivingTouchdowns,-5}");
+            Console.WriteLine();
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.WriteLine($"  {"Player",-22} {"C/A",-8} {"PYd",-6} {"PTD",-4} {"INT",-4} {"RAtt",-5} {"RYd",-6} {"RTD",-4} {"Rec",-4} {"RecYd",-6} {"RecTD",-5}");
+            Console.ResetColor();
+            Console.WriteLine("  " + new string('-', 78));
+
+            foreach (var s in offensePlayers)
+            {
+                var playerName = s.Player?.Name ?? $"Player#{s.PlayerId}";
+                if (playerName.Length > 21) playerName = playerName[..21];
+                var compAtt = $"{s.PassCompletions}/{s.PassAttempts}";
+                Console.WriteLine($"  {playerName,-22} {compAtt,-8} {s.PassYards,-6} {s.PassTouchdowns,-4} {s.Interceptions,-4} {s.RushAttempts,-5} {s.RushYards,-6} {s.RushTouchdowns,-4} {s.Receptions,-4} {s.ReceivingYards,-6} {s.ReceivingTouchdowns,-5}");
+            }
+        }
+
+        // Defensive stats
+        var defensivePlayers = statsList
+            .Where(s => s.TotalTackles > 0 || s.DefensiveSacks > 0 || s.InterceptionsCaught > 0)
+            .OrderByDescending(s => s.TotalTackles)
+            .ToList();
+
+        if (defensivePlayers.Count > 0)
+        {
+            Console.WriteLine();
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.WriteLine($"  {"Player",-22} {"Tkl",-5} {"Solo",-5} {"Sack",-5} {"TFL",-4} {"PD",-4} {"QBH",-4} {"INT",-4} {"DTD",-4}");
+            Console.ResetColor();
+            Console.WriteLine("  " + new string('-', 61));
+
+            foreach (var s in defensivePlayers)
+            {
+                var playerName = s.Player?.Name ?? $"Player#{s.PlayerId}";
+                if (playerName.Length > 21) playerName = playerName[..21];
+                Console.WriteLine($"  {playerName,-22} {s.TotalTackles,-5} {s.SoloTackles,-5} {s.DefensiveSacks,-5:0.#} {s.TacklesForLoss,-4} {s.PassesDefended,-4} {s.QBHits,-4} {s.InterceptionsCaught,-4} {s.DefensiveTouchdowns,-4}");
+            }
+        }
+
+        // Kicking stats
+        var kickers = statsList
+            .Where(s => s.FieldGoalAttempts > 0 || s.ExtraPointAttempts > 0)
+            .ToList();
+
+        if (kickers.Count > 0)
+        {
+            Console.WriteLine();
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.WriteLine($"  {"Player",-22} {"FG",-8} {"Long",-5} {"XP",-8} {"Pts",-4}");
+            Console.ResetColor();
+            Console.WriteLine("  " + new string('-', 51));
+
+            foreach (var s in kickers)
+            {
+                var playerName = s.Player?.Name ?? $"Player#{s.PlayerId}";
+                if (playerName.Length > 21) playerName = playerName[..21];
+                var fg = $"{s.FieldGoalsMade}/{s.FieldGoalAttempts}";
+                var xp = $"{s.ExtraPointsMade}/{s.ExtraPointAttempts}";
+                Console.WriteLine($"  {playerName,-22} {fg,-8} {s.LongFieldGoal,-5} {xp,-8} {s.TotalKickingPoints,-4}");
+            }
+        }
+
+        // Return stats
+        var returners = statsList
+            .Where(s => s.KickReturns > 0 || s.PuntReturns > 0)
+            .ToList();
+
+        if (returners.Count > 0)
+        {
+            Console.WriteLine();
+            Console.ForegroundColor = ConsoleColor.Cyan;
+            Console.WriteLine($"  {"Player",-22} {"KR",-4} {"KRYd",-6} {"KRLg",-5} {"KRTD",-5} {"PR",-4} {"PRYd",-6} {"PRLg",-5} {"PRTD",-5}");
+            Console.ResetColor();
+            Console.WriteLine("  " + new string('-', 68));
+
+            foreach (var s in returners)
+            {
+                var playerName = s.Player?.Name ?? $"Player#{s.PlayerId}";
+                if (playerName.Length > 21) playerName = playerName[..21];
+                Console.WriteLine($"  {playerName,-22} {s.KickReturns,-4} {s.KickReturnYards,-6} {s.LongKickReturn,-5} {s.KickReturnTouchdowns,-5} {s.PuntReturns,-4} {s.PuntReturnYards,-6} {s.LongPuntReturn,-5} {s.PuntReturnTouchdowns,-5}");
+            }
         }
 
         Console.WriteLine();
@@ -200,7 +297,8 @@ public class ConsoleDisplayService
         Console.WriteLine();
     }
 
-    public void PrintDatabaseStatus(int teams, int players, int games, int stats)
+    public void PrintDatabaseStatus(int teams, int players, int games, int stats,
+        int venues = 0, int teamGameStats = 0, int injuries = 0, int apiLinks = 0)
     {
         Console.WriteLine();
         Console.ForegroundColor = ConsoleColor.Cyan;
@@ -211,6 +309,91 @@ public class ConsoleDisplayService
         Console.WriteLine($"  Players:      {players,8:N0}");
         Console.WriteLine($"  Games:        {games,8:N0}");
         Console.WriteLine($"  Stat Lines:   {stats,8:N0}");
+        Console.WriteLine($"  Venues:       {venues,8:N0}");
+        Console.WriteLine($"  Team Stats:   {teamGameStats,8:N0}");
+        Console.WriteLine($"  Injuries:     {injuries,8:N0}");
+        Console.WriteLine($"  API Links:    {apiLinks,8:N0}");
+        Console.WriteLine();
+    }
+
+    public void PrintVenuesTable(IEnumerable<Venue> venues)
+    {
+        var venuesList = venues.ToList();
+        if (venuesList.Count == 0)
+        {
+            PrintWarning("No venues found in database.");
+            return;
+        }
+
+        Console.WriteLine();
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine($"  {"Name",-30} {"City",-18} {"State",-6} {"Surface",-8} {"Type",-8}");
+        Console.ResetColor();
+        Console.WriteLine("  " + new string('-', 72));
+
+        foreach (var v in venuesList.OrderBy(v => v.Name))
+        {
+            var surface = v.IsGrass ? "Grass" : "Turf";
+            var type = v.IsIndoor ? "Indoor" : "Outdoor";
+            Console.WriteLine($"  {v.Name,-30} {v.City,-18} {v.State,-6} {surface,-8} {type,-8}");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine($"  {venuesList.Count} venues total");
+        Console.WriteLine();
+    }
+
+    public void PrintTeamGameStatsTable(IEnumerable<TeamGameStats> teamStats)
+    {
+        var statsList = teamStats.ToList();
+        if (statsList.Count == 0)
+        {
+            PrintWarning("No team game stats found.");
+            return;
+        }
+
+        Console.WriteLine();
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine($"  {"Team",-6} {"1st",-4} {"TotYd",-7} {"Pass",-7} {"Rush",-7} {"TO",-3} {"Pen",-6} {"3rd%",-8} {"Poss",-6}");
+        Console.ResetColor();
+        Console.WriteLine("  " + new string('-', 56));
+
+        foreach (var s in statsList)
+        {
+            var teamAbbr = s.Team?.Abbreviation ?? $"T#{s.TeamId}";
+            var third = s.ThirdDownAttempts > 0
+                ? $"{s.ThirdDownMade}/{s.ThirdDownAttempts}"
+                : "-";
+            var pen = $"{s.Penalties}-{s.PenaltyYards}";
+            Console.WriteLine($"  {teamAbbr,-6} {s.FirstDowns,-4} {s.TotalYards,-7} {s.NetPassingYards,-7} {s.RushingYards,-7} {s.Turnovers,-3} {pen,-6} {third,-8} {s.PossessionTime,-6}");
+        }
+
+        Console.WriteLine();
+    }
+
+    public void PrintInjuriesTable(IEnumerable<Injury> injuries)
+    {
+        var injuriesList = injuries.ToList();
+        if (injuriesList.Count == 0)
+        {
+            PrintWarning("No injuries found.");
+            return;
+        }
+
+        Console.WriteLine();
+        Console.ForegroundColor = ConsoleColor.Cyan;
+        Console.WriteLine($"  {"Player",-24} {"Status",-14} {"Type",-16} {"Location",-12}");
+        Console.ResetColor();
+        Console.WriteLine("  " + new string('-', 68));
+
+        foreach (var inj in injuriesList.OrderBy(i => i.Status).ThenBy(i => i.PlayerName))
+        {
+            var name = inj.PlayerName.Length > 23 ? inj.PlayerName[..23] : inj.PlayerName;
+            Console.WriteLine($"  {name,-24} {inj.Status,-14} {inj.InjuryType,-16} {inj.BodyLocation,-12}");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine($"  {injuriesList.Count} injuries total");
         Console.WriteLine();
     }
 
@@ -258,6 +441,7 @@ public class ConsoleDisplayService
         Console.WriteLine("  3. Database status");
         Console.WriteLine($"  4. Change source (current: {GetProviderDisplayName(currentSource)})");
         Console.WriteLine("  5. Push to server (SQLite → PostgreSQL)");
+        Console.WriteLine("  5. Push to server (SQLite -> PostgreSQL)");
         Console.WriteLine("  6. Exit");
         Console.WriteLine();
     }
@@ -289,7 +473,10 @@ public class ConsoleDisplayService
         Console.WriteLine("  2. Players (by team)");
         Console.WriteLine("  3. Games (by season/week)");
         Console.WriteLine("  4. Player stats");
-        Console.WriteLine("  5. Back to main menu");
+        Console.WriteLine("  5. Venues");
+        Console.WriteLine("  6. Team game stats (by game)");
+        Console.WriteLine("  7. Injuries (by game)");
+        Console.WriteLine("  8. Back to main menu");
         Console.WriteLine();
     }
 

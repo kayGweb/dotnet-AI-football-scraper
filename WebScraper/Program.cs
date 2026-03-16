@@ -95,6 +95,7 @@ static IHost BuildHost(string[] cliArgs, string? sourceOverride)
             config.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: false);
 
             // Allow environment variables to override config (e.g., DATABASE_URL, ConnectionStrings__DefaultConnection)
+            config.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
             config.AddEnvironmentVariables();
 
             if (sourceOverride != null)
@@ -234,6 +235,14 @@ static async Task<int> RunCommandAsync(IHost host, string[] args, ConsoleDisplay
             await RunStatusCommandAsync(services, display);
             return 0;
 
+        case "push":
+            var pushService = services.GetRequiredService<DatabasePushService>();
+            display.PrintInfo("Pushing local SQLite data to remote PostgreSQL...");
+            Console.WriteLine();
+            var pushResult = await pushService.PushAsync();
+            display.PrintScrapeResult("Push", pushResult);
+            return pushResult.Success ? 0 : 1;
+
         default:
             display.PrintError($"Unknown command: '{command}'");
             PrintUsage();
@@ -249,7 +258,7 @@ static async Task<int> RunListCommandAsync(string[] args, IServiceProvider servi
 {
     if (args.Length < 2)
     {
-        display.PrintError("list requires a subcommand: teams, players, games, stats, or abbr");
+        display.PrintError("list requires a subcommand: teams, players, games, stats, venues, teamstats, injuries, or abbr");
         PrintUsage();
         return 1;
     }
@@ -346,13 +355,61 @@ static async Task<int> RunListCommandAsync(string[] args, IServiceProvider servi
             }
             return 0;
 
+        case "venues":
+            var venueRepo = services.GetRequiredService<IVenueRepository>();
+            var venues = await venueRepo.GetAllAsync();
+            display.PrintVenuesTable(venues);
+            return 0;
+
+        case "teamstats":
+            if (season == null || week == null)
+            {
+                display.PrintError("--season and --week are required for list teamstats");
+                return 1;
+            }
+            var tgsGameRepo = services.GetRequiredService<IGameRepository>();
+            var tgsGames = await tgsGameRepo.GetByWeekAsync(season.Value, week.Value);
+            var tgsRepo = services.GetRequiredService<ITeamGameStatsRepository>();
+            foreach (var game in tgsGames)
+            {
+                var homeAbbr = game.HomeTeam?.Abbreviation ?? "???";
+                var awayAbbr = game.AwayTeam?.Abbreviation ?? "???";
+                display.PrintInfo($"{awayAbbr} @ {homeAbbr} — Week {game.Week}");
+                var tgsStats = await tgsRepo.GetByGameAsync(game.Id);
+                display.PrintTeamGameStatsTable(tgsStats);
+            }
+            return 0;
+
+        case "injuries":
+            if (season == null || week == null)
+            {
+                display.PrintError("--season and --week are required for list injuries");
+                return 1;
+            }
+            var injGameRepo = services.GetRequiredService<IGameRepository>();
+            var injGames = await injGameRepo.GetByWeekAsync(season.Value, week.Value);
+            var injRepo = services.GetRequiredService<IInjuryRepository>();
+            foreach (var game in injGames)
+            {
+                var homeAbbr = game.HomeTeam?.Abbreviation ?? "???";
+                var awayAbbr = game.AwayTeam?.Abbreviation ?? "???";
+                var gameInjuries = await injRepo.GetByGameAsync(game.Id);
+                var injList = gameInjuries.ToList();
+                if (injList.Count > 0)
+                {
+                    display.PrintInfo($"{awayAbbr} @ {homeAbbr} — Week {game.Week}");
+                    display.PrintInjuriesTable(injList);
+                }
+            }
+            return 0;
+
         case "abbr":
         case "abbreviations":
             display.PrintAbbreviationsTable();
             return 0;
 
         default:
-            display.PrintError($"Unknown list subcommand: '{subcommand}'. Use: teams, players, games, stats, abbr");
+            display.PrintError($"Unknown list subcommand: '{subcommand}'. Use: teams, players, games, stats, venues, teamstats, injuries, abbr");
             return 1;
     }
 }
@@ -363,13 +420,21 @@ static async Task RunStatusCommandAsync(IServiceProvider services, ConsoleDispla
     var playerRepo = services.GetRequiredService<IPlayerRepository>();
     var gameRepo = services.GetRequiredService<IGameRepository>();
     var statsRepo = services.GetRequiredService<IStatsRepository>();
+    var venueRepo = services.GetRequiredService<IVenueRepository>();
+    var teamGameStatsRepo = services.GetRequiredService<ITeamGameStatsRepository>();
+    var injuryRepo = services.GetRequiredService<IInjuryRepository>();
+    var apiLinkRepo = services.GetRequiredService<IApiLinkRepository>();
 
     var teams = (await teamRepo.GetAllAsync()).Count();
     var players = (await playerRepo.GetAllAsync()).Count();
     var games = (await gameRepo.GetAllAsync()).Count();
     var stats = (await statsRepo.GetAllAsync()).Count();
+    var venues = (await venueRepo.GetAllAsync()).Count();
+    var teamGameStats = (await teamGameStatsRepo.GetAllAsync()).Count();
+    var injuries = (await injuryRepo.GetAllAsync()).Count();
+    var apiLinks = (await apiLinkRepo.GetAllAsync()).Count();
 
-    display.PrintDatabaseStatus(teams, players, games, stats);
+    display.PrintDatabaseStatus(teams, players, games, stats, venues, teamGameStats, injuries, apiLinks);
 }
 
 // --- Scrape pipeline ---
@@ -498,6 +563,13 @@ static async Task<int> RunInteractiveAsync(string? initialSource)
                 case "5":
                     using (var scope = host.Services.CreateScope())
                         await HandlePushToServerAsync(scope.ServiceProvider, configuration, display);
+                    {
+                        var pushSvc = scope.ServiceProvider.GetRequiredService<DatabasePushService>();
+                        display.PrintInfo("Pushing local SQLite data to remote PostgreSQL...");
+                        Console.WriteLine();
+                        var pushResult = await pushSvc.PushAsync();
+                        display.PrintScrapeResult("Push", pushResult);
+                    }
                     break;
 
                 case "6":
@@ -590,7 +662,7 @@ static async Task HandleViewMenuAsync(IServiceProvider services, ConsoleDisplayS
     Console.Write("  > ");
     var input = Console.ReadLine()?.Trim();
 
-    if (string.IsNullOrEmpty(input) || input == "5") return;
+    if (string.IsNullOrEmpty(input) || input == "8") return;
 
     switch (input)
     {
@@ -665,8 +737,54 @@ static async Task HandleViewMenuAsync(IServiceProvider services, ConsoleDisplayS
             }
             break;
 
+        case "5":
+            var venueRepo = services.GetRequiredService<IVenueRepository>();
+            var venues = await venueRepo.GetAllAsync();
+            display.PrintVenuesTable(venues);
+            break;
+
+        case "6":
+            var tgsSeason = PromptForInt("Season year (e.g., 2025)");
+            if (tgsSeason == null) break;
+            var tgsWeek = PromptForInt("Week number (1-22)");
+            if (tgsWeek == null) break;
+            var tgsGameRepo = services.GetRequiredService<IGameRepository>();
+            var tgsGames = await tgsGameRepo.GetByWeekAsync(tgsSeason.Value, tgsWeek.Value);
+            var tgsRepo = services.GetRequiredService<ITeamGameStatsRepository>();
+            foreach (var game in tgsGames)
+            {
+                var homeAbbr = game.HomeTeam?.Abbreviation ?? "???";
+                var awayAbbr = game.AwayTeam?.Abbreviation ?? "???";
+                display.PrintInfo($"{awayAbbr} @ {homeAbbr} — Week {game.Week}");
+                var tgsStats = await tgsRepo.GetByGameAsync(game.Id);
+                display.PrintTeamGameStatsTable(tgsStats);
+            }
+            break;
+
+        case "7":
+            var injSeason = PromptForInt("Season year (e.g., 2025)");
+            if (injSeason == null) break;
+            var injWeek = PromptForInt("Week number (1-22)");
+            if (injWeek == null) break;
+            var injGameRepo = services.GetRequiredService<IGameRepository>();
+            var injGames = await injGameRepo.GetByWeekAsync(injSeason.Value, injWeek.Value);
+            var injRepo = services.GetRequiredService<IInjuryRepository>();
+            foreach (var game in injGames)
+            {
+                var homeAbbr = game.HomeTeam?.Abbreviation ?? "???";
+                var awayAbbr = game.AwayTeam?.Abbreviation ?? "???";
+                var gameInjuries = await injRepo.GetByGameAsync(game.Id);
+                var injList = gameInjuries.ToList();
+                if (injList.Count > 0)
+                {
+                    display.PrintInfo($"{awayAbbr} @ {homeAbbr} — Week {game.Week}");
+                    display.PrintInjuriesTable(injList);
+                }
+            }
+            break;
+
         default:
-            display.PrintWarning("Invalid choice. Enter 1-5.");
+            display.PrintWarning("Invalid choice. Enter 1-8.");
             break;
     }
 }
@@ -851,18 +969,22 @@ static void PrintUsage()
           games    --season <year> --week <n> Scrape games for a specific week
           stats    --season <year> --week <n> Scrape player stats for a week
           all      --season <year>           Run full pipeline (teams, players, games)
+          push                               Push local SQLite data to remote PostgreSQL
 
         View Commands:
           list teams                         Show all teams in the database
           list teams --conference <AFC|NFC>  Show teams by conference
           list players                       Show all players
           list players --team <abbr>         Show roster for a team
-          list games --season <year>         Show games for a season
+          list games --season <year>         Show games for a season (with venue/attendance)
           list games --season <year> --week <n>  Show games for a specific week
-          list stats --season <year> --week <n>  Show player stats for a week
+          list stats --season <year> --week <n>  Show player stats (offense/defense/kicking/returns)
           list stats --player <name> --season <year>  Show a player's season stats
+          list venues                        Show all venues in the database
+          list teamstats --season <year> --week <n>  Show team-level game stats
+          list injuries --season <year> --week <n>   Show injury reports by game
           list abbr                          Show all 32 NFL team abbreviations
-          status                             Show database record counts
+          status                             Show database record counts (all 8 tables)
 
         Options:
           --team <abbr>       NFL team abbreviation (e.g., KC, NE, DAL)
@@ -887,6 +1009,10 @@ static void PrintUsage()
           dotnet run -- list players --team KC
           dotnet run -- list games --season 2025 --week 1
           dotnet run -- list stats --player "Patrick Mahomes" --season 2025
+          dotnet run -- list venues
+          dotnet run -- list teamstats --season 2025 --week 1
+          dotnet run -- list injuries --season 2025 --week 1
           dotnet run -- status
+          dotnet run -- push
         """);
 }

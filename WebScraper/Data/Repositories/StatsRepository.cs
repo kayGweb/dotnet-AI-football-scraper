@@ -71,17 +71,78 @@ public class StatsRepository : IStatsRepository
 
         if (existing != null)
         {
+            // Passing
             existing.PassAttempts = stats.PassAttempts;
             existing.PassCompletions = stats.PassCompletions;
             existing.PassYards = stats.PassYards;
             existing.PassTouchdowns = stats.PassTouchdowns;
             existing.Interceptions = stats.Interceptions;
+            existing.QBRating = stats.QBRating;
+            existing.AdjQBR = stats.AdjQBR;
+            existing.Sacks = stats.Sacks;
+            existing.SackYardsLost = stats.SackYardsLost;
+
+            // Rushing
             existing.RushAttempts = stats.RushAttempts;
             existing.RushYards = stats.RushYards;
             existing.RushTouchdowns = stats.RushTouchdowns;
+            existing.LongRushing = stats.LongRushing;
+
+            // Receiving
             existing.Receptions = stats.Receptions;
             existing.ReceivingYards = stats.ReceivingYards;
             existing.ReceivingTouchdowns = stats.ReceivingTouchdowns;
+            existing.ReceivingTargets = stats.ReceivingTargets;
+            existing.LongReception = stats.LongReception;
+            existing.YardsPerReception = stats.YardsPerReception;
+
+            // Fumbles
+            existing.Fumbles = stats.Fumbles;
+            existing.FumblesLost = stats.FumblesLost;
+            existing.FumblesRecovered = stats.FumblesRecovered;
+
+            // Defensive
+            existing.TotalTackles = stats.TotalTackles;
+            existing.SoloTackles = stats.SoloTackles;
+            existing.DefensiveSacks = stats.DefensiveSacks;
+            existing.TacklesForLoss = stats.TacklesForLoss;
+            existing.PassesDefended = stats.PassesDefended;
+            existing.QBHits = stats.QBHits;
+            existing.DefensiveTouchdowns = stats.DefensiveTouchdowns;
+
+            // Interceptions (defensive)
+            existing.InterceptionsCaught = stats.InterceptionsCaught;
+            existing.InterceptionYards = stats.InterceptionYards;
+            existing.InterceptionTouchdowns = stats.InterceptionTouchdowns;
+
+            // Kick returns
+            existing.KickReturns = stats.KickReturns;
+            existing.KickReturnYards = stats.KickReturnYards;
+            existing.LongKickReturn = stats.LongKickReturn;
+            existing.KickReturnTouchdowns = stats.KickReturnTouchdowns;
+
+            // Punt returns
+            existing.PuntReturns = stats.PuntReturns;
+            existing.PuntReturnYards = stats.PuntReturnYards;
+            existing.LongPuntReturn = stats.LongPuntReturn;
+            existing.PuntReturnTouchdowns = stats.PuntReturnTouchdowns;
+
+            // Kicking
+            existing.FieldGoalsMade = stats.FieldGoalsMade;
+            existing.FieldGoalAttempts = stats.FieldGoalAttempts;
+            existing.LongFieldGoal = stats.LongFieldGoal;
+            existing.ExtraPointsMade = stats.ExtraPointsMade;
+            existing.ExtraPointAttempts = stats.ExtraPointAttempts;
+            existing.TotalKickingPoints = stats.TotalKickingPoints;
+
+            // Punting
+            existing.Punts = stats.Punts;
+            existing.PuntYards = stats.PuntYards;
+            existing.GrossAvgPuntYards = stats.GrossAvgPuntYards;
+            existing.PuntTouchbacks = stats.PuntTouchbacks;
+            existing.PuntsInside20 = stats.PuntsInside20;
+            existing.LongPunt = stats.LongPunt;
+
             _context.PlayerGameStats.Update(existing);
         }
         else

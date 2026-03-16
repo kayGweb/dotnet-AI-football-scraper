@@ -54,8 +54,10 @@ public class EspnGameServiceTests
         var providerSettings = new ApiProviderSettings { AuthType = "None" };
         var gameRepo = new Mock<IGameRepository>();
         var teamRepo = new Mock<ITeamRepository>();
+        var venueRepo = new Mock<IVenueRepository>();
+        var apiLinkRepo = new Mock<IApiLinkRepository>();
         var service = new EspnGameService(httpClient, logger, providerSettings, CreateRateLimiter(),
-            gameRepo.Object, teamRepo.Object);
+            gameRepo.Object, teamRepo.Object, venueRepo.Object, apiLinkRepo.Object);
         return (service, gameRepo, teamRepo);
     }
 
@@ -192,6 +194,60 @@ public class EspnGameServiceTests
         gameRepo.Verify(r => r.UpsertAsync(It.IsAny<Game>()), Times.Never);
     }
 
+    [Fact]
+    public async Task ScrapeGamesAsync_ShouldPopulateEventIdCache()
+    {
+        EspnGameService.ClearEventIdCache();
+        var handler = new FakeHttpHandler(SampleScoreboardJson);
+        var (service, gameRepo, teamRepo) = CreateService(handler);
+        SetupTeamLookup(teamRepo);
+
+        await service.ScrapeGamesAsync(2025, 1);
+
+        Assert.True(EspnGameService.HasEventIdsForWeek(2025, 1));
+        Assert.Equal("401547417", EspnGameService.GetEventId(2025, 1, "KC"));
+    }
+
+    [Fact]
+    public async Task PopulateEventIdsAsync_ShouldHydrateCache()
+    {
+        EspnGameService.ClearEventIdCache();
+        var handler = new FakeHttpHandler(SampleScoreboardJson);
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://espn.test/") };
+        var rateLimiter = CreateRateLimiter();
+        var logger = NullLogger<EspnGameService>.Instance;
+
+        Assert.False(EspnGameService.HasEventIdsForWeek(2025, 1));
+
+        await EspnGameService.PopulateEventIdsAsync(httpClient, logger, rateLimiter, 2025, 1);
+
+        Assert.True(EspnGameService.HasEventIdsForWeek(2025, 1));
+        Assert.Equal("401547417", EspnGameService.GetEventId(2025, 1, "KC"));
+    }
+
+    [Fact]
+    public async Task PopulateEventIdsAsync_AlreadyPopulated_ShouldNotRefetch()
+    {
+        EspnGameService.ClearEventIdCache();
+        var callCount = 0;
+        var handler = new CountingHttpHandler(SampleScoreboardJson, () => callCount++);
+        var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://espn.test/") };
+        var rateLimiter = CreateRateLimiter();
+        var logger = NullLogger<EspnGameService>.Instance;
+
+        await EspnGameService.PopulateEventIdsAsync(httpClient, logger, rateLimiter, 2025, 1);
+        await EspnGameService.PopulateEventIdsAsync(httpClient, logger, rateLimiter, 2025, 1);
+
+        Assert.Equal(1, callCount);
+    }
+
+    [Fact]
+    public void ClearEventIdCache_ShouldResetState()
+    {
+        EspnGameService.ClearEventIdCache();
+        Assert.False(EspnGameService.HasEventIdsForWeek(2025, 1));
+    }
+
     private class FakeHttpHandler : HttpMessageHandler
     {
         private readonly string _responseBody;
@@ -213,6 +269,28 @@ public class EspnGameServiceTests
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
             return Task.FromResult(new HttpResponseMessage(_statusCode)
+            {
+                Content = new StringContent(_responseBody, Encoding.UTF8, "application/json")
+            });
+        }
+    }
+
+    private class CountingHttpHandler : HttpMessageHandler
+    {
+        private readonly string _responseBody;
+        private readonly Action _onSend;
+
+        public CountingHttpHandler(string responseBody, Action onSend)
+        {
+            _responseBody = responseBody;
+            _onSend = onSend;
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            _onSend();
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
             {
                 Content = new StringContent(_responseBody, Encoding.UTF8, "application/json")
             });
