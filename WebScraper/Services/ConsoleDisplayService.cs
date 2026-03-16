@@ -257,7 +257,8 @@ public class ConsoleDisplayService
         Console.WriteLine("  2. View data");
         Console.WriteLine("  3. Database status");
         Console.WriteLine($"  4. Change source (current: {GetProviderDisplayName(currentSource)})");
-        Console.WriteLine("  5. Exit");
+        Console.WriteLine("  5. Push to server (SQLite → PostgreSQL)");
+        Console.WriteLine("  6. Exit");
         Console.WriteLine();
     }
 
