@@ -91,6 +91,10 @@ static IHost BuildHost(string[] cliArgs, string? sourceOverride)
         })
         .ConfigureAppConfiguration((context, config) =>
         {
+            // Load optional local overrides (gitignored — used for PostgreSQL connection string, etc.)
+            config.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: false);
+
+            // Allow environment variables to override config (e.g., DATABASE_URL, ConnectionStrings__DefaultConnection)
             config.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
             config.AddEnvironmentVariables();
 
@@ -558,6 +562,7 @@ static async Task<int> RunInteractiveAsync(string? initialSource)
 
                 case "5":
                     using (var scope = host.Services.CreateScope())
+                        await HandlePushToServerAsync(scope.ServiceProvider, configuration, display);
                     {
                         var pushSvc = scope.ServiceProvider.GetRequiredService<DatabasePushService>();
                         display.PrintInfo("Pushing local SQLite data to remote PostgreSQL...");
@@ -811,6 +816,43 @@ static string? HandleChangeSource(ConsoleDisplayService display, string currentS
         display.PrintInfo($"Already using {ConsoleDisplayService.GetProviderDisplayName(newSource)}.");
 
     return null;
+}
+
+// --- Push to server ---
+
+static async Task HandlePushToServerAsync(IServiceProvider services, IConfiguration configuration, ConsoleDisplayService display)
+{
+    // Look for PostgreSQL connection string: DATABASE_URL env var, then ConnectionStrings:PostgreSQL in config
+    var postgresConnString = Environment.GetEnvironmentVariable("DATABASE_URL");
+
+    // Convert URI format to ADO.NET if needed
+    if (!string.IsNullOrEmpty(postgresConnString) && !postgresConnString.Contains("Host=", StringComparison.OrdinalIgnoreCase))
+    {
+        var uri = new Uri(postgresConnString);
+        var userInfo = uri.UserInfo.Split(':');
+        var username = Uri.UnescapeDataString(userInfo[0]);
+        var password = userInfo.Length > 1 ? Uri.UnescapeDataString(userInfo[1]) : "";
+        var port = uri.Port > 0 ? uri.Port : 5432;
+        var database = uri.AbsolutePath.TrimStart('/');
+        postgresConnString = $"Host={uri.Host};Port={port};Database={database};Username={username};Password={password};SSL Mode=Require";
+    }
+
+    // Fall back to config
+    if (string.IsNullOrEmpty(postgresConnString))
+    {
+        postgresConnString = configuration.GetConnectionString("PostgreSQL");
+    }
+
+    if (string.IsNullOrEmpty(postgresConnString))
+    {
+        display.PrintError("No PostgreSQL connection string configured. Add \"ConnectionStrings:PostgreSQL\" to appsettings.Local.json.");
+        return;
+    }
+
+    var localDb = services.GetRequiredService<AppDbContext>();
+    var pushService = new DatabasePushService();
+    var result = await pushService.PushToServerAsync(localDb, postgresConnString, display);
+    display.PrintScrapeResult("Push", result);
 }
 
 // --- Input helpers ---
