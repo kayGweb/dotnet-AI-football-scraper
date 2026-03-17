@@ -236,12 +236,9 @@ static async Task<int> RunCommandAsync(IHost host, string[] args, ConsoleDisplay
             return 0;
 
         case "push":
-            var pushService = services.GetRequiredService<DatabasePushService>();
-            display.PrintInfo("Pushing local SQLite data to remote PostgreSQL...");
-            Console.WriteLine();
-            var pushResult = await pushService.PushAsync();
-            display.PrintScrapeResult("Push", pushResult);
-            return pushResult.Success ? 0 : 1;
+            var configuration = host.Services.GetRequiredService<IConfiguration>();
+            await HandlePushToServerAsync(services, configuration, display);
+            return 0;
 
         default:
             display.PrintError($"Unknown command: '{command}'");
@@ -563,13 +560,6 @@ static async Task<int> RunInteractiveAsync(string? initialSource)
                 case "5":
                     using (var scope = host.Services.CreateScope())
                         await HandlePushToServerAsync(scope.ServiceProvider, configuration, display);
-                    {
-                        var pushSvc = scope.ServiceProvider.GetRequiredService<DatabasePushService>();
-                        display.PrintInfo("Pushing local SQLite data to remote PostgreSQL...");
-                        Console.WriteLine();
-                        var pushResult = await pushSvc.PushAsync();
-                        display.PrintScrapeResult("Push", pushResult);
-                    }
                     break;
 
                 case "6":
