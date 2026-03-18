@@ -36,7 +36,33 @@ public class DatabasePushService
 
             // Ensure remote schema is up to date
             display.PrintInfo("Applying migrations to remote database...");
-            await remoteDb.Database.MigrateAsync();
+            try
+            {
+                await remoteDb.Database.MigrateAsync();
+            }
+            catch (Npgsql.PostgresException ex) when (ex.SqlState == "42701" || ex.SqlState == "42P07")
+            {
+                // 42701 = column already exists, 42P07 = table already exists
+                // Remote DB has stale schema from a previous migration run.
+                // Safe to reset since push will re-create all data from local SQLite.
+                display.PrintWarning("Remote schema is stale — resetting and re-applying migrations...");
+                Logger.Warning(ex, "Migration conflict detected, resetting remote schema");
+
+                await remoteDb.Database.ExecuteSqlRawAsync(@"
+                    DROP TABLE IF EXISTS ""ApiLinks"" CASCADE;
+                    DROP TABLE IF EXISTS ""Injuries"" CASCADE;
+                    DROP TABLE IF EXISTS ""TeamGameStats"" CASCADE;
+                    DROP TABLE IF EXISTS ""PlayerGameStats"" CASCADE;
+                    DROP TABLE IF EXISTS ""Games"" CASCADE;
+                    DROP TABLE IF EXISTS ""Players"" CASCADE;
+                    DROP TABLE IF EXISTS ""Venues"" CASCADE;
+                    DROP TABLE IF EXISTS ""Teams"" CASCADE;
+                    DROP TABLE IF EXISTS ""__EFMigrationsHistory"" CASCADE;
+                ");
+
+                await remoteDb.Database.MigrateAsync();
+                display.PrintSuccess("Remote schema rebuilt successfully.");
+            }
 
             // ── Teams (no FK dependencies) ──
             var localTeams = await localDb.Teams.AsNoTracking().ToListAsync();
