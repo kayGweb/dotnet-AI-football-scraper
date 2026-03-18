@@ -1,5 +1,6 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
@@ -11,713 +12,357 @@ namespace WebScraper.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AlterColumn<string>(
-                name: "Name",
-                table: "Teams",
-                type: "TEXT",
-                nullable: false,
-                oldClrType: typeof(string),
-                oldType: "text");
-
-            migrationBuilder.AlterColumn<string>(
-                name: "Division",
-                table: "Teams",
-                type: "TEXT",
-                nullable: false,
-                oldClrType: typeof(string),
-                oldType: "text");
-
-            migrationBuilder.AlterColumn<string>(
-                name: "Conference",
-                table: "Teams",
-                type: "TEXT",
-                nullable: false,
-                oldClrType: typeof(string),
-                oldType: "text");
-
-            migrationBuilder.AlterColumn<string>(
-                name: "City",
-                table: "Teams",
-                type: "TEXT",
-                nullable: false,
-                oldClrType: typeof(string),
-                oldType: "text");
-
-            migrationBuilder.AlterColumn<string>(
-                name: "Abbreviation",
-                table: "Teams",
-                type: "TEXT",
-                nullable: false,
-                oldClrType: typeof(string),
-                oldType: "text");
-
-            migrationBuilder.AlterColumn<int>(
-                name: "Id",
-                table: "Teams",
-                type: "INTEGER",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "integer")
-                .Annotation("Sqlite:Autoincrement", true)
-                .OldAnnotation("Sqlite:Autoincrement", true);
-
-            migrationBuilder.AlterColumn<int>(
-                name: "Weight",
-                table: "Players",
-                type: "INTEGER",
-                nullable: true,
-                oldClrType: typeof(int),
-                oldType: "integer",
-                oldNullable: true);
-
-            migrationBuilder.AlterColumn<int>(
-                name: "TeamId",
-                table: "Players",
-                type: "INTEGER",
-                nullable: true,
-                oldClrType: typeof(int),
-                oldType: "integer",
-                oldNullable: true);
-
-            migrationBuilder.AlterColumn<string>(
-                name: "Position",
-                table: "Players",
-                type: "TEXT",
-                nullable: false,
-                oldClrType: typeof(string),
-                oldType: "text");
-
-            migrationBuilder.AlterColumn<string>(
-                name: "Name",
-                table: "Players",
-                type: "TEXT",
-                nullable: false,
-                oldClrType: typeof(string),
-                oldType: "text");
-
-            migrationBuilder.AlterColumn<int>(
-                name: "JerseyNumber",
-                table: "Players",
-                type: "INTEGER",
-                nullable: true,
-                oldClrType: typeof(int),
-                oldType: "integer",
-                oldNullable: true);
-
-            migrationBuilder.AlterColumn<string>(
-                name: "Height",
-                table: "Players",
-                type: "TEXT",
-                nullable: true,
-                oldClrType: typeof(string),
-                oldType: "text",
-                oldNullable: true);
-
-            migrationBuilder.AlterColumn<string>(
-                name: "College",
-                table: "Players",
-                type: "TEXT",
-                nullable: true,
-                oldClrType: typeof(string),
-                oldType: "text",
-                oldNullable: true);
-
-            migrationBuilder.AlterColumn<int>(
-                name: "Id",
-                table: "Players",
-                type: "INTEGER",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "integer")
-                .Annotation("Sqlite:Autoincrement", true)
-                .OldAnnotation("Sqlite:Autoincrement", true);
-
+            // ── New column on Players ──
             migrationBuilder.AddColumn<string>(
                 name: "EspnId",
                 table: "Players",
-                type: "TEXT",
                 nullable: true);
 
-            migrationBuilder.AlterColumn<int>(
-                name: "RushYards",
-                table: "PlayerGameStats",
-                type: "INTEGER",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "integer");
-
-            migrationBuilder.AlterColumn<int>(
-                name: "RushTouchdowns",
-                table: "PlayerGameStats",
-                type: "INTEGER",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "integer");
-
-            migrationBuilder.AlterColumn<int>(
-                name: "RushAttempts",
-                table: "PlayerGameStats",
-                type: "INTEGER",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "integer");
-
-            migrationBuilder.AlterColumn<int>(
-                name: "Receptions",
-                table: "PlayerGameStats",
-                type: "INTEGER",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "integer");
-
-            migrationBuilder.AlterColumn<int>(
-                name: "ReceivingYards",
-                table: "PlayerGameStats",
-                type: "INTEGER",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "integer");
-
-            migrationBuilder.AlterColumn<int>(
-                name: "ReceivingTouchdowns",
-                table: "PlayerGameStats",
-                type: "INTEGER",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "integer");
-
-            migrationBuilder.AlterColumn<int>(
-                name: "PlayerId",
-                table: "PlayerGameStats",
-                type: "INTEGER",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "integer");
-
-            migrationBuilder.AlterColumn<int>(
-                name: "PassYards",
-                table: "PlayerGameStats",
-                type: "INTEGER",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "integer");
-
-            migrationBuilder.AlterColumn<int>(
-                name: "PassTouchdowns",
-                table: "PlayerGameStats",
-                type: "INTEGER",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "integer");
-
-            migrationBuilder.AlterColumn<int>(
-                name: "PassCompletions",
-                table: "PlayerGameStats",
-                type: "INTEGER",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "integer");
-
-            migrationBuilder.AlterColumn<int>(
-                name: "PassAttempts",
-                table: "PlayerGameStats",
-                type: "INTEGER",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "integer");
-
-            migrationBuilder.AlterColumn<int>(
-                name: "Interceptions",
-                table: "PlayerGameStats",
-                type: "INTEGER",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "integer");
-
-            migrationBuilder.AlterColumn<int>(
-                name: "GameId",
-                table: "PlayerGameStats",
-                type: "INTEGER",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "integer");
-
-            migrationBuilder.AlterColumn<int>(
-                name: "Id",
-                table: "PlayerGameStats",
-                type: "INTEGER",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "integer")
-                .Annotation("Sqlite:Autoincrement", true)
-                .OldAnnotation("Sqlite:Autoincrement", true);
-
+            // ── New stat columns on PlayerGameStats ──
             migrationBuilder.AddColumn<double>(
                 name: "AdjQBR",
                 table: "PlayerGameStats",
-                type: "REAL",
                 nullable: true);
 
             migrationBuilder.AddColumn<double>(
                 name: "DefensiveSacks",
                 table: "PlayerGameStats",
-                type: "REAL",
                 nullable: false,
                 defaultValue: 0.0);
 
             migrationBuilder.AddColumn<int>(
                 name: "DefensiveTouchdowns",
                 table: "PlayerGameStats",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: 0);
 
             migrationBuilder.AddColumn<int>(
                 name: "ExtraPointAttempts",
                 table: "PlayerGameStats",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: 0);
 
             migrationBuilder.AddColumn<int>(
                 name: "ExtraPointsMade",
                 table: "PlayerGameStats",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: 0);
 
             migrationBuilder.AddColumn<int>(
                 name: "FieldGoalAttempts",
                 table: "PlayerGameStats",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: 0);
 
             migrationBuilder.AddColumn<int>(
                 name: "FieldGoalsMade",
                 table: "PlayerGameStats",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: 0);
 
             migrationBuilder.AddColumn<int>(
                 name: "Fumbles",
                 table: "PlayerGameStats",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: 0);
 
             migrationBuilder.AddColumn<int>(
                 name: "FumblesLost",
                 table: "PlayerGameStats",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: 0);
 
             migrationBuilder.AddColumn<int>(
                 name: "FumblesRecovered",
                 table: "PlayerGameStats",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: 0);
 
             migrationBuilder.AddColumn<double>(
                 name: "GrossAvgPuntYards",
                 table: "PlayerGameStats",
-                type: "REAL",
                 nullable: false,
                 defaultValue: 0.0);
 
             migrationBuilder.AddColumn<int>(
                 name: "InterceptionTouchdowns",
                 table: "PlayerGameStats",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: 0);
 
             migrationBuilder.AddColumn<int>(
                 name: "InterceptionYards",
                 table: "PlayerGameStats",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: 0);
 
             migrationBuilder.AddColumn<int>(
                 name: "InterceptionsCaught",
                 table: "PlayerGameStats",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: 0);
 
             migrationBuilder.AddColumn<int>(
                 name: "KickReturnTouchdowns",
                 table: "PlayerGameStats",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: 0);
 
             migrationBuilder.AddColumn<int>(
                 name: "KickReturnYards",
                 table: "PlayerGameStats",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: 0);
 
             migrationBuilder.AddColumn<int>(
                 name: "KickReturns",
                 table: "PlayerGameStats",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: 0);
 
             migrationBuilder.AddColumn<int>(
                 name: "LongFieldGoal",
                 table: "PlayerGameStats",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: 0);
 
             migrationBuilder.AddColumn<int>(
                 name: "LongKickReturn",
                 table: "PlayerGameStats",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: 0);
 
             migrationBuilder.AddColumn<int>(
                 name: "LongPunt",
                 table: "PlayerGameStats",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: 0);
 
             migrationBuilder.AddColumn<int>(
                 name: "LongPuntReturn",
                 table: "PlayerGameStats",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: 0);
 
             migrationBuilder.AddColumn<int>(
                 name: "LongReception",
                 table: "PlayerGameStats",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: 0);
 
             migrationBuilder.AddColumn<int>(
                 name: "LongRushing",
                 table: "PlayerGameStats",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: 0);
 
             migrationBuilder.AddColumn<int>(
                 name: "PassesDefended",
                 table: "PlayerGameStats",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: 0);
 
             migrationBuilder.AddColumn<int>(
                 name: "PuntReturnTouchdowns",
                 table: "PlayerGameStats",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: 0);
 
             migrationBuilder.AddColumn<int>(
                 name: "PuntReturnYards",
                 table: "PlayerGameStats",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: 0);
 
             migrationBuilder.AddColumn<int>(
                 name: "PuntReturns",
                 table: "PlayerGameStats",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: 0);
 
             migrationBuilder.AddColumn<int>(
                 name: "PuntTouchbacks",
                 table: "PlayerGameStats",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: 0);
 
             migrationBuilder.AddColumn<int>(
                 name: "PuntYards",
                 table: "PlayerGameStats",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: 0);
 
             migrationBuilder.AddColumn<int>(
                 name: "Punts",
                 table: "PlayerGameStats",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: 0);
 
             migrationBuilder.AddColumn<int>(
                 name: "PuntsInside20",
                 table: "PlayerGameStats",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: 0);
 
             migrationBuilder.AddColumn<int>(
                 name: "QBHits",
                 table: "PlayerGameStats",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: 0);
 
             migrationBuilder.AddColumn<double>(
                 name: "QBRating",
                 table: "PlayerGameStats",
-                type: "REAL",
                 nullable: true);
 
             migrationBuilder.AddColumn<int>(
                 name: "ReceivingTargets",
                 table: "PlayerGameStats",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: 0);
 
             migrationBuilder.AddColumn<int>(
                 name: "SackYardsLost",
                 table: "PlayerGameStats",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: 0);
 
             migrationBuilder.AddColumn<int>(
                 name: "Sacks",
                 table: "PlayerGameStats",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: 0);
 
             migrationBuilder.AddColumn<int>(
                 name: "SoloTackles",
                 table: "PlayerGameStats",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: 0);
 
             migrationBuilder.AddColumn<int>(
                 name: "TacklesForLoss",
                 table: "PlayerGameStats",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: 0);
 
             migrationBuilder.AddColumn<int>(
                 name: "TotalKickingPoints",
                 table: "PlayerGameStats",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: 0);
 
             migrationBuilder.AddColumn<int>(
                 name: "TotalTackles",
                 table: "PlayerGameStats",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: 0);
 
             migrationBuilder.AddColumn<double>(
                 name: "YardsPerReception",
                 table: "PlayerGameStats",
-                type: "REAL",
                 nullable: false,
                 defaultValue: 0.0);
 
-            migrationBuilder.AlterColumn<int>(
-                name: "Week",
-                table: "Games",
-                type: "INTEGER",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "integer");
-
-            migrationBuilder.AlterColumn<int>(
-                name: "Season",
-                table: "Games",
-                type: "INTEGER",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "integer");
-
-            migrationBuilder.AlterColumn<int>(
-                name: "HomeTeamId",
-                table: "Games",
-                type: "INTEGER",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "integer");
-
-            migrationBuilder.AlterColumn<int>(
-                name: "HomeScore",
-                table: "Games",
-                type: "INTEGER",
-                nullable: true,
-                oldClrType: typeof(int),
-                oldType: "integer",
-                oldNullable: true);
-
-            migrationBuilder.AlterColumn<DateTime>(
-                name: "GameDate",
-                table: "Games",
-                type: "TEXT",
-                nullable: false,
-                oldClrType: typeof(DateTime),
-                oldType: "timestamp with time zone");
-
-            migrationBuilder.AlterColumn<int>(
-                name: "AwayTeamId",
-                table: "Games",
-                type: "INTEGER",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "integer");
-
-            migrationBuilder.AlterColumn<int>(
-                name: "AwayScore",
-                table: "Games",
-                type: "INTEGER",
-                nullable: true,
-                oldClrType: typeof(int),
-                oldType: "integer",
-                oldNullable: true);
-
-            migrationBuilder.AlterColumn<int>(
-                name: "Id",
-                table: "Games",
-                type: "INTEGER",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "integer")
-                .Annotation("Sqlite:Autoincrement", true)
-                .OldAnnotation("Sqlite:Autoincrement", true);
-
+            // ── New columns on Games ──
             migrationBuilder.AddColumn<int>(
                 name: "Attendance",
                 table: "Games",
-                type: "INTEGER",
                 nullable: true);
 
             migrationBuilder.AddColumn<int>(
                 name: "AwayOT",
                 table: "Games",
-                type: "INTEGER",
                 nullable: true);
 
             migrationBuilder.AddColumn<int>(
                 name: "AwayQ1",
                 table: "Games",
-                type: "INTEGER",
                 nullable: true);
 
             migrationBuilder.AddColumn<int>(
                 name: "AwayQ2",
                 table: "Games",
-                type: "INTEGER",
                 nullable: true);
 
             migrationBuilder.AddColumn<int>(
                 name: "AwayQ3",
                 table: "Games",
-                type: "INTEGER",
                 nullable: true);
 
             migrationBuilder.AddColumn<int>(
                 name: "AwayQ4",
                 table: "Games",
-                type: "INTEGER",
                 nullable: true);
 
             migrationBuilder.AddColumn<string>(
                 name: "EspnEventId",
                 table: "Games",
-                type: "TEXT",
                 nullable: true);
 
             migrationBuilder.AddColumn<string>(
                 name: "GameStatus",
                 table: "Games",
-                type: "TEXT",
                 nullable: true);
 
             migrationBuilder.AddColumn<int>(
                 name: "HomeOT",
                 table: "Games",
-                type: "INTEGER",
                 nullable: true);
 
             migrationBuilder.AddColumn<int>(
                 name: "HomeQ1",
                 table: "Games",
-                type: "INTEGER",
                 nullable: true);
 
             migrationBuilder.AddColumn<int>(
                 name: "HomeQ2",
                 table: "Games",
-                type: "INTEGER",
                 nullable: true);
 
             migrationBuilder.AddColumn<int>(
                 name: "HomeQ3",
                 table: "Games",
-                type: "INTEGER",
                 nullable: true);
 
             migrationBuilder.AddColumn<int>(
                 name: "HomeQ4",
                 table: "Games",
-                type: "INTEGER",
                 nullable: true);
 
             migrationBuilder.AddColumn<bool>(
                 name: "HomeWinner",
                 table: "Games",
-                type: "INTEGER",
                 nullable: true);
 
             migrationBuilder.AddColumn<bool>(
                 name: "NeutralSite",
                 table: "Games",
-                type: "INTEGER",
                 nullable: false,
                 defaultValue: false);
 
             migrationBuilder.AddColumn<int>(
                 name: "VenueId",
                 table: "Games",
-                type: "INTEGER",
                 nullable: true);
 
+            // ── New tables ──
             migrationBuilder.CreateTable(
                 name: "ApiLinks",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    Url = table.Column<string>(type: "TEXT", nullable: false),
-                    EndpointType = table.Column<string>(type: "TEXT", nullable: false),
-                    RelationType = table.Column<string>(type: "TEXT", nullable: false),
-                    GameId = table.Column<int>(type: "INTEGER", nullable: true),
-                    TeamId = table.Column<int>(type: "INTEGER", nullable: true),
-                    Season = table.Column<int>(type: "INTEGER", nullable: true),
-                    Week = table.Column<int>(type: "INTEGER", nullable: true),
-                    EspnEventId = table.Column<string>(type: "TEXT", nullable: true),
-                    DiscoveredAt = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    LastAccessedAt = table.Column<DateTime>(type: "TEXT", nullable: true)
+                    Id = table.Column<int>(nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    Url = table.Column<string>(nullable: false),
+                    EndpointType = table.Column<string>(nullable: false),
+                    RelationType = table.Column<string>(nullable: false),
+                    GameId = table.Column<int>(nullable: true),
+                    TeamId = table.Column<int>(nullable: true),
+                    Season = table.Column<int>(nullable: true),
+                    Week = table.Column<int>(nullable: true),
+                    EspnEventId = table.Column<string>(nullable: true),
+                    DiscoveredAt = table.Column<DateTime>(nullable: false),
+                    LastAccessedAt = table.Column<DateTime>(nullable: true)
                 },
                 constraints: table =>
                 {
@@ -738,19 +383,20 @@ namespace WebScraper.Migrations
                 name: "Injuries",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    GameId = table.Column<int>(type: "INTEGER", nullable: false),
-                    PlayerId = table.Column<int>(type: "INTEGER", nullable: true),
-                    EspnAthleteId = table.Column<string>(type: "TEXT", nullable: false),
-                    PlayerName = table.Column<string>(type: "TEXT", nullable: false),
-                    Status = table.Column<string>(type: "TEXT", nullable: false),
-                    InjuryType = table.Column<string>(type: "TEXT", nullable: false),
-                    BodyLocation = table.Column<string>(type: "TEXT", nullable: false),
-                    Side = table.Column<string>(type: "TEXT", nullable: false),
-                    Detail = table.Column<string>(type: "TEXT", nullable: false),
-                    ReturnDate = table.Column<DateTime>(type: "TEXT", nullable: true),
-                    ReportDate = table.Column<DateTime>(type: "TEXT", nullable: false)
+                    Id = table.Column<int>(nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    GameId = table.Column<int>(nullable: false),
+                    PlayerId = table.Column<int>(nullable: true),
+                    EspnAthleteId = table.Column<string>(nullable: false),
+                    PlayerName = table.Column<string>(nullable: false),
+                    Status = table.Column<string>(nullable: false),
+                    InjuryType = table.Column<string>(nullable: false),
+                    BodyLocation = table.Column<string>(nullable: false),
+                    Side = table.Column<string>(nullable: false),
+                    Detail = table.Column<string>(nullable: false),
+                    ReturnDate = table.Column<DateTime>(nullable: true),
+                    ReportDate = table.Column<DateTime>(nullable: false)
                 },
                 constraints: table =>
                 {
@@ -772,38 +418,39 @@ namespace WebScraper.Migrations
                 name: "TeamGameStats",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    GameId = table.Column<int>(type: "INTEGER", nullable: false),
-                    TeamId = table.Column<int>(type: "INTEGER", nullable: false),
-                    FirstDowns = table.Column<int>(type: "INTEGER", nullable: false),
-                    FirstDownsPassing = table.Column<int>(type: "INTEGER", nullable: false),
-                    FirstDownsRushing = table.Column<int>(type: "INTEGER", nullable: false),
-                    FirstDownsPenalty = table.Column<int>(type: "INTEGER", nullable: false),
-                    ThirdDownMade = table.Column<int>(type: "INTEGER", nullable: false),
-                    ThirdDownAttempts = table.Column<int>(type: "INTEGER", nullable: false),
-                    FourthDownMade = table.Column<int>(type: "INTEGER", nullable: false),
-                    FourthDownAttempts = table.Column<int>(type: "INTEGER", nullable: false),
-                    TotalPlays = table.Column<int>(type: "INTEGER", nullable: false),
-                    TotalYards = table.Column<int>(type: "INTEGER", nullable: false),
-                    NetPassingYards = table.Column<int>(type: "INTEGER", nullable: false),
-                    PassCompletions = table.Column<int>(type: "INTEGER", nullable: false),
-                    PassAttempts = table.Column<int>(type: "INTEGER", nullable: false),
-                    YardsPerPass = table.Column<double>(type: "REAL", nullable: false),
-                    InterceptionsThrown = table.Column<int>(type: "INTEGER", nullable: false),
-                    SacksAgainst = table.Column<int>(type: "INTEGER", nullable: false),
-                    SackYardsLost = table.Column<int>(type: "INTEGER", nullable: false),
-                    RushingYards = table.Column<int>(type: "INTEGER", nullable: false),
-                    RushingAttempts = table.Column<int>(type: "INTEGER", nullable: false),
-                    YardsPerRush = table.Column<double>(type: "REAL", nullable: false),
-                    RedZoneMade = table.Column<int>(type: "INTEGER", nullable: false),
-                    RedZoneAttempts = table.Column<int>(type: "INTEGER", nullable: false),
-                    Turnovers = table.Column<int>(type: "INTEGER", nullable: false),
-                    FumblesLost = table.Column<int>(type: "INTEGER", nullable: false),
-                    Penalties = table.Column<int>(type: "INTEGER", nullable: false),
-                    PenaltyYards = table.Column<int>(type: "INTEGER", nullable: false),
-                    DefensiveTouchdowns = table.Column<int>(type: "INTEGER", nullable: false),
-                    PossessionTime = table.Column<string>(type: "TEXT", nullable: false)
+                    Id = table.Column<int>(nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    GameId = table.Column<int>(nullable: false),
+                    TeamId = table.Column<int>(nullable: false),
+                    FirstDowns = table.Column<int>(nullable: false),
+                    FirstDownsPassing = table.Column<int>(nullable: false),
+                    FirstDownsRushing = table.Column<int>(nullable: false),
+                    FirstDownsPenalty = table.Column<int>(nullable: false),
+                    ThirdDownMade = table.Column<int>(nullable: false),
+                    ThirdDownAttempts = table.Column<int>(nullable: false),
+                    FourthDownMade = table.Column<int>(nullable: false),
+                    FourthDownAttempts = table.Column<int>(nullable: false),
+                    TotalPlays = table.Column<int>(nullable: false),
+                    TotalYards = table.Column<int>(nullable: false),
+                    NetPassingYards = table.Column<int>(nullable: false),
+                    PassCompletions = table.Column<int>(nullable: false),
+                    PassAttempts = table.Column<int>(nullable: false),
+                    YardsPerPass = table.Column<double>(nullable: false),
+                    InterceptionsThrown = table.Column<int>(nullable: false),
+                    SacksAgainst = table.Column<int>(nullable: false),
+                    SackYardsLost = table.Column<int>(nullable: false),
+                    RushingYards = table.Column<int>(nullable: false),
+                    RushingAttempts = table.Column<int>(nullable: false),
+                    YardsPerRush = table.Column<double>(nullable: false),
+                    RedZoneMade = table.Column<int>(nullable: false),
+                    RedZoneAttempts = table.Column<int>(nullable: false),
+                    Turnovers = table.Column<int>(nullable: false),
+                    FumblesLost = table.Column<int>(nullable: false),
+                    Penalties = table.Column<int>(nullable: false),
+                    PenaltyYards = table.Column<int>(nullable: false),
+                    DefensiveTouchdowns = table.Column<int>(nullable: false),
+                    PossessionTime = table.Column<string>(nullable: false)
                 },
                 constraints: table =>
                 {
@@ -826,21 +473,23 @@ namespace WebScraper.Migrations
                 name: "Venues",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    EspnId = table.Column<string>(type: "TEXT", nullable: false),
-                    Name = table.Column<string>(type: "TEXT", nullable: false),
-                    City = table.Column<string>(type: "TEXT", nullable: false),
-                    State = table.Column<string>(type: "TEXT", nullable: false),
-                    Country = table.Column<string>(type: "TEXT", nullable: false),
-                    IsGrass = table.Column<bool>(type: "INTEGER", nullable: false),
-                    IsIndoor = table.Column<bool>(type: "INTEGER", nullable: false)
+                    Id = table.Column<int>(nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    EspnId = table.Column<string>(nullable: false),
+                    Name = table.Column<string>(nullable: false),
+                    City = table.Column<string>(nullable: false),
+                    State = table.Column<string>(nullable: false),
+                    Country = table.Column<string>(nullable: false),
+                    IsGrass = table.Column<bool>(nullable: false),
+                    IsIndoor = table.Column<bool>(nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Venues", x => x.Id);
                 });
 
+            // ── Indexes ──
             migrationBuilder.CreateIndex(
                 name: "IX_Games_VenueId",
                 table: "Games",
@@ -1152,309 +801,6 @@ namespace WebScraper.Migrations
             migrationBuilder.DropColumn(
                 name: "VenueId",
                 table: "Games");
-
-            migrationBuilder.AlterColumn<string>(
-                name: "Name",
-                table: "Teams",
-                type: "text",
-                nullable: false,
-                oldClrType: typeof(string),
-                oldType: "TEXT");
-
-            migrationBuilder.AlterColumn<string>(
-                name: "Division",
-                table: "Teams",
-                type: "text",
-                nullable: false,
-                oldClrType: typeof(string),
-                oldType: "TEXT");
-
-            migrationBuilder.AlterColumn<string>(
-                name: "Conference",
-                table: "Teams",
-                type: "text",
-                nullable: false,
-                oldClrType: typeof(string),
-                oldType: "TEXT");
-
-            migrationBuilder.AlterColumn<string>(
-                name: "City",
-                table: "Teams",
-                type: "text",
-                nullable: false,
-                oldClrType: typeof(string),
-                oldType: "TEXT");
-
-            migrationBuilder.AlterColumn<string>(
-                name: "Abbreviation",
-                table: "Teams",
-                type: "text",
-                nullable: false,
-                oldClrType: typeof(string),
-                oldType: "TEXT");
-
-            migrationBuilder.AlterColumn<int>(
-                name: "Id",
-                table: "Teams",
-                type: "integer",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "INTEGER")
-                .Annotation("Sqlite:Autoincrement", true)
-                .OldAnnotation("Sqlite:Autoincrement", true);
-
-            migrationBuilder.AlterColumn<int>(
-                name: "Weight",
-                table: "Players",
-                type: "integer",
-                nullable: true,
-                oldClrType: typeof(int),
-                oldType: "INTEGER",
-                oldNullable: true);
-
-            migrationBuilder.AlterColumn<int>(
-                name: "TeamId",
-                table: "Players",
-                type: "integer",
-                nullable: true,
-                oldClrType: typeof(int),
-                oldType: "INTEGER",
-                oldNullable: true);
-
-            migrationBuilder.AlterColumn<string>(
-                name: "Position",
-                table: "Players",
-                type: "text",
-                nullable: false,
-                oldClrType: typeof(string),
-                oldType: "TEXT");
-
-            migrationBuilder.AlterColumn<string>(
-                name: "Name",
-                table: "Players",
-                type: "text",
-                nullable: false,
-                oldClrType: typeof(string),
-                oldType: "TEXT");
-
-            migrationBuilder.AlterColumn<int>(
-                name: "JerseyNumber",
-                table: "Players",
-                type: "integer",
-                nullable: true,
-                oldClrType: typeof(int),
-                oldType: "INTEGER",
-                oldNullable: true);
-
-            migrationBuilder.AlterColumn<string>(
-                name: "Height",
-                table: "Players",
-                type: "text",
-                nullable: true,
-                oldClrType: typeof(string),
-                oldType: "TEXT",
-                oldNullable: true);
-
-            migrationBuilder.AlterColumn<string>(
-                name: "College",
-                table: "Players",
-                type: "text",
-                nullable: true,
-                oldClrType: typeof(string),
-                oldType: "TEXT",
-                oldNullable: true);
-
-            migrationBuilder.AlterColumn<int>(
-                name: "Id",
-                table: "Players",
-                type: "integer",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "INTEGER")
-                .Annotation("Sqlite:Autoincrement", true)
-                .OldAnnotation("Sqlite:Autoincrement", true);
-
-            migrationBuilder.AlterColumn<int>(
-                name: "RushYards",
-                table: "PlayerGameStats",
-                type: "integer",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "INTEGER");
-
-            migrationBuilder.AlterColumn<int>(
-                name: "RushTouchdowns",
-                table: "PlayerGameStats",
-                type: "integer",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "INTEGER");
-
-            migrationBuilder.AlterColumn<int>(
-                name: "RushAttempts",
-                table: "PlayerGameStats",
-                type: "integer",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "INTEGER");
-
-            migrationBuilder.AlterColumn<int>(
-                name: "Receptions",
-                table: "PlayerGameStats",
-                type: "integer",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "INTEGER");
-
-            migrationBuilder.AlterColumn<int>(
-                name: "ReceivingYards",
-                table: "PlayerGameStats",
-                type: "integer",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "INTEGER");
-
-            migrationBuilder.AlterColumn<int>(
-                name: "ReceivingTouchdowns",
-                table: "PlayerGameStats",
-                type: "integer",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "INTEGER");
-
-            migrationBuilder.AlterColumn<int>(
-                name: "PlayerId",
-                table: "PlayerGameStats",
-                type: "integer",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "INTEGER");
-
-            migrationBuilder.AlterColumn<int>(
-                name: "PassYards",
-                table: "PlayerGameStats",
-                type: "integer",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "INTEGER");
-
-            migrationBuilder.AlterColumn<int>(
-                name: "PassTouchdowns",
-                table: "PlayerGameStats",
-                type: "integer",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "INTEGER");
-
-            migrationBuilder.AlterColumn<int>(
-                name: "PassCompletions",
-                table: "PlayerGameStats",
-                type: "integer",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "INTEGER");
-
-            migrationBuilder.AlterColumn<int>(
-                name: "PassAttempts",
-                table: "PlayerGameStats",
-                type: "integer",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "INTEGER");
-
-            migrationBuilder.AlterColumn<int>(
-                name: "Interceptions",
-                table: "PlayerGameStats",
-                type: "integer",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "INTEGER");
-
-            migrationBuilder.AlterColumn<int>(
-                name: "GameId",
-                table: "PlayerGameStats",
-                type: "integer",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "INTEGER");
-
-            migrationBuilder.AlterColumn<int>(
-                name: "Id",
-                table: "PlayerGameStats",
-                type: "integer",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "INTEGER")
-                .Annotation("Sqlite:Autoincrement", true)
-                .OldAnnotation("Sqlite:Autoincrement", true);
-
-            migrationBuilder.AlterColumn<int>(
-                name: "Week",
-                table: "Games",
-                type: "integer",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "INTEGER");
-
-            migrationBuilder.AlterColumn<int>(
-                name: "Season",
-                table: "Games",
-                type: "integer",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "INTEGER");
-
-            migrationBuilder.AlterColumn<int>(
-                name: "HomeTeamId",
-                table: "Games",
-                type: "integer",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "INTEGER");
-
-            migrationBuilder.AlterColumn<int>(
-                name: "HomeScore",
-                table: "Games",
-                type: "integer",
-                nullable: true,
-                oldClrType: typeof(int),
-                oldType: "INTEGER",
-                oldNullable: true);
-
-            migrationBuilder.AlterColumn<DateTime>(
-                name: "GameDate",
-                table: "Games",
-                type: "timestamp with time zone",
-                nullable: false,
-                oldClrType: typeof(DateTime),
-                oldType: "TEXT");
-
-            migrationBuilder.AlterColumn<int>(
-                name: "AwayTeamId",
-                table: "Games",
-                type: "integer",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "INTEGER");
-
-            migrationBuilder.AlterColumn<int>(
-                name: "AwayScore",
-                table: "Games",
-                type: "integer",
-                nullable: true,
-                oldClrType: typeof(int),
-                oldType: "INTEGER",
-                oldNullable: true);
-
-            migrationBuilder.AlterColumn<int>(
-                name: "Id",
-                table: "Games",
-                type: "integer",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "INTEGER")
-                .Annotation("Sqlite:Autoincrement", true)
-                .OldAnnotation("Sqlite:Autoincrement", true);
         }
     }
 }
