@@ -17,6 +17,13 @@ public class AppDbContext : DbContext
     public DbSet<Injury> Injuries => Set<Injury>();
     public DbSet<ApiLink> ApiLinks => Set<ApiLink>();
 
+    /// <summary>
+    /// Observability log of every public API request. Written asynchronously by the
+    /// ApiQueryLoggingMiddleware (Phase 1) via a background Channel writer so the
+    /// hot path never blocks on the DB.
+    /// </summary>
+    public DbSet<ApiQueryLog> ApiQueryLogs => Set<ApiQueryLog>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         // Game has two FKs to Team — must use Restrict to avoid cascade cycles
@@ -116,6 +123,24 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Venue>()
             .HasIndex(v => v.EspnId)
             .IsUnique();
+
+        // ApiQueryLog — observability index for dashboard queries
+        modelBuilder.Entity<ApiQueryLog>()
+            .HasIndex(q => q.Timestamp);
+        modelBuilder.Entity<ApiQueryLog>()
+            .HasIndex(q => new { q.ApiKeyId, q.Timestamp });
+
+        // Global soft-delete query filters: any entity implementing ISoftDeletable is
+        // automatically hidden from normal queries. Admin code uses IgnoreQueryFilters()
+        // to see deleted rows in the review UI.
+        modelBuilder.Entity<Team>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<Player>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<Game>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<PlayerGameStats>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<Venue>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<TeamGameStats>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<Injury>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<ApiLink>().HasQueryFilter(e => !e.IsDeleted);
 
         // Ensure all DateTime properties are stored as UTC for PostgreSQL compatibility
         var utcConverter = new ValueConverter<DateTime, DateTime>(

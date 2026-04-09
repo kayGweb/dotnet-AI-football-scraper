@@ -10,6 +10,11 @@ namespace WebScraper.Extensions;
 
 public static class ServiceCollectionExtensions
 {
+    /// <summary>
+    /// Registers all core services required by any host (CLI, Web API, MCP server, Worker):
+    /// configuration binding, DbContext with the auditing interceptor, repositories,
+    /// rate limiter, display/push services, and the selected data-provider scrapers.
+    /// </summary>
     public static IServiceCollection AddWebScraperServices(
         this IServiceCollection services,
         IConfiguration configuration)
@@ -23,7 +28,10 @@ public static class ServiceCollectionExtensions
         var provider = configuration.GetValue<string>("DatabaseProvider") ?? "Sqlite";
         var connectionString = ResolveConnectionString(configuration, provider);
 
-        services.AddDbContext<AppDbContext>(options =>
+        // Auditing interceptor stamps CreatedAt/UpdatedAt and converts hard deletes to soft deletes
+        services.AddSingleton<AuditingSaveChangesInterceptor>();
+
+        services.AddDbContext<AppDbContext>((sp, options) =>
         {
             switch (provider.ToLowerInvariant())
             {
@@ -40,6 +48,8 @@ public static class ServiceCollectionExtensions
                 default:
                     throw new InvalidOperationException($"Unsupported database provider: {provider}");
             }
+
+            options.AddInterceptors(sp.GetRequiredService<AuditingSaveChangesInterceptor>());
         });
 
         // Register repositories

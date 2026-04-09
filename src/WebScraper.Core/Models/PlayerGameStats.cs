@@ -1,6 +1,6 @@
 namespace WebScraper.Models;
 
-public class PlayerGameStats
+public class PlayerGameStats : IAuditableEntity, ISoftDeletable
 {
     public int Id { get; set; }
     public int PlayerId { get; set; }
@@ -77,6 +77,19 @@ public class PlayerGameStats
     public int PuntTouchbacks { get; set; }
     public int PuntsInside20 { get; set; }
     public int LongPunt { get; set; }
+
+    // Data lineage
+    public string? DataSource { get; set; }
+    public DateTime? DataSourceFetchedAt { get; set; }
+    public string? DataSourceRecordId { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+
+    // Soft delete
+    public bool IsDeleted { get; set; }
+    public DateTime? DeletedAt { get; set; }
+    public string? DeletedBy { get; set; }
+    public string? DeleteReason { get; set; }
 
     // Navigation properties
     public Player Player { get; set; } = null!;

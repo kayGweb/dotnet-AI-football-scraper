@@ -1,107 +1,121 @@
 # NFL Web Scraper - Project Guide
 
 ## Overview
-A .NET 8 Console application that scrapes NFL football data from multiple sources (Pro Football Reference, ESPN API, and more) and stores it in a structured database. The architecture supports pluggable data providers — switch between HTML scraping and REST API sources via configuration. See `AGENT_MVP.md` for the original design specification and `API_INTEGRATION_PLAN.md` (on the review branch) for the multi-provider extension plan.
+Originally a .NET 8 Console application that scrapes NFL football data from multiple sources (Pro Football Reference, ESPN API, and more) and stores it in a structured database. As of the M0 refactor, the project is in the process of becoming a containerized microservice — a reusable `WebScraper.Core` class library backs the existing CLI and will back a new ASP.NET Core Web API (+ SignalR + Blazor Server admin) + MCP server for Claude consumption. The architecture supports pluggable data providers — switch between HTML scraping and REST API sources via configuration. See:
+- `AGENT_MVP.md` — original design specification
+- `API_INTEGRATION_PLAN.md` — multi-provider extension plan (on review branch)
+- `CHATBOT_MICROSERVICE_PLAN.md` — **current** microservice transformation plan (milestones M0–M6)
 
 ## Tech Stack
-- **Framework:** .NET 8 Console App
+- **Framework:** .NET 8 (class library + console app today; Web API + Blazor Server + MCP server coming in M1–M4)
 - **HTML Parsing:** HtmlAgilityPack, AngleSharp
 - **JSON Parsing:** System.Text.Json (built into .NET 8)
 - **ORM:** Entity Framework Core 8
-- **Database:** SQLite (dev default), PostgreSQL, SQL Server (swappable via config)
+- **Database:** SQLite (dev default), PostgreSQL (production target on DigitalOcean), SQL Server (future Azure target)
 - **DI:** Microsoft.Extensions.Hosting / DependencyInjection
 - **Logging:** Serilog (Console + File sinks)
 - **Resilience:** Polly v8 + Microsoft.Extensions.Http.Resilience (retry, circuit breaker, timeout)
 
-## Project Structure
+## Project Structure (post-M0)
 ```
-WebScraper.sln                          # Solution file
-WebScraper/
-├── WebScraper.csproj                   # Project file with all NuGet refs
-├── Program.cs                          # Entry point: CLI dispatch, interactive REPL, data display
-├── appsettings.json                    # Config: DB provider, data provider, scraper settings, Serilog
-├── Models/
-│   ├── Team.cs                         # NFL team entity
-│   ├── Player.cs                       # Player entity (FK -> Team), EspnId field
-│   ├── Game.cs                         # Game entity (FKs -> HomeTeam, AwayTeam, Venue), quarter scores, ESPN metadata
-│   ├── PlayerGameStats.cs              # Per-game player stats (FKs -> Player, Game) — ~40 stat columns across 10 categories
-│   ├── Venue.cs                        # Stadium/venue entity (EspnId, grass/indoor, city/state)
-│   ├── TeamGameStats.cs                # Team-level per-game aggregates (first downs, yards, turnovers, possession)
-│   ├── Injury.cs                       # Player injury reports per game (status, type, body location)
-│   ├── ApiLink.cs                      # Catalog of ESPN API endpoints for future re-crawling
-│   ├── ScrapeResult.cs                # Scraper operation result (Success, RecordsProcessed, Errors)
-│   ├── ScraperSettings.cs             # Config POCO: scraper options + DataProvider + Providers dict
-│   ├── DataProvider.cs                # Enum: ProFootballReference, Espn, SportsDataIo, MySportsFeeds, NflCom
-│   └── ApiProviderSettings.cs         # Config POCO: BaseUrl, ApiKey, AuthType, headers per provider
-├── Data/
-│   ├── AppDbContext.cs                 # EF Core DbContext
-│   └── Repositories/
-│       ├── IRepository.cs             # Generic repository interface
-│       ├── ITeamRepository.cs         # Team-specific repository interface
-│       ├── IPlayerRepository.cs       # Player-specific repository interface
-│       ├── IGameRepository.cs         # Game-specific repository interface
-│       ├── IStatsRepository.cs        # Stats-specific repository interface
-│       ├── IVenueRepository.cs        # Venue-specific repository interface
-│       ├── ITeamGameStatsRepository.cs # Team game stats repository interface
-│       ├── IInjuryRepository.cs       # Injury repository interface
-│       ├── IApiLinkRepository.cs      # API link repository interface
-│       ├── TeamRepository.cs          # Team repository implementation
-│       ├── PlayerRepository.cs        # Player repository implementation
-│       ├── GameRepository.cs          # Game repository implementation (includes Venue)
-│       ├── StatsRepository.cs         # Stats repository implementation (~40 stat fields)
-│       ├── VenueRepository.cs         # Venue repository implementation (upsert by EspnId)
-│       ├── TeamGameStatsRepository.cs # Team game stats implementation (upsert by GameId+TeamId)
-│       ├── InjuryRepository.cs        # Injury repository implementation (upsert by GameId+EspnAthleteId)
-│       └── ApiLinkRepository.cs       # API link repository implementation (upsert by Url)
-├── Services/
-│   ├── RateLimiterService.cs          # Global rate limiter (SemaphoreSlim-based)
-│   ├── ConsoleDisplayService.cs       # User-facing console output (tables, banners, menus, progress)
-│   ├── DatabasePushService.cs         # Push local SQLite data to remote PostgreSQL
-│   ├── DataProviderFactory.cs         # Maps DataProvider config to correct DI registrations
-│   └── Scrapers/
-│       ├── IScraperService.cs         # Scraper interfaces (ITeam/IPlayer/IGame/IStats)
-│       ├── BaseScraperService.cs      # Abstract base for HTML: FetchPageAsync, rate limiting
-│       ├── BaseApiService.cs          # Abstract base for JSON APIs: FetchJsonAsync<T>, auth, rate limiting
-│       ├── TeamScraperService.cs      # PFR: Scrapes 32 NFL teams
-│       ├── PlayerScraperService.cs    # PFR: Scrapes player rosters per team
-│       ├── GameScraperService.cs      # PFR: Scrapes season schedules/scores
-│       ├── StatsScraperService.cs     # PFR: Scrapes per-game player stats from box scores
-│       ├── Espn/
-│       │   ├── EspnDtos.cs            # DTO classes for ESPN JSON (teams, scoreboard, summary, gameInfo, injuries, links)
-│       │   ├── EspnMappings.cs        # ESPN team ID ↔ NFL abbreviation + division lookup
-│       │   ├── EspnTeamService.cs     # ESPN API: Scrapes teams via /teams endpoint
-│       │   ├── EspnPlayerService.cs   # ESPN API: Scrapes rosters via /teams/{id}/roster
-│       │   ├── EspnGameService.cs     # ESPN API: Scrapes scores, venues, quarter scores, API links via /scoreboard
-│       │   └── EspnStatsService.cs    # ESPN API: Scrapes all 10 stat categories, team stats, venue, injuries, API links via /summary
-│       ├── SportsDataIo/
-│       │   ├── SportsDataDtos.cs      # DTO classes for SportsData.io JSON responses
-│       │   ├── SportsDataTeamService.cs     # SportsData.io: Teams via /scores/json/Teams
-│       │   ├── SportsDataPlayerService.cs   # SportsData.io: Players via /scores/json/Players/{team}
-│       │   ├── SportsDataGameService.cs     # SportsData.io: Scores via /scores/json/ScoresByWeek
-│       │   └── SportsDataStatsService.cs    # SportsData.io: Stats via /stats/json/PlayerGameStatsByWeek
-│       ├── MySportsFeeds/
-│       │   ├── MySportsFeedsDtos.cs          # DTO classes for MySportsFeeds JSON responses
-│       │   ├── MySportsFeedsTeamService.cs   # MySportsFeeds: Teams via /{season}/teams.json
-│       │   ├── MySportsFeedsPlayerService.cs # MySportsFeeds: Players via /players.json
-│       │   ├── MySportsFeedsGameService.cs   # MySportsFeeds: Games via /{season}/games.json
-│       │   └── MySportsFeedsStatsService.cs  # MySportsFeeds: Stats via /{season}/week/{week}/player_gamelogs.json
-│       └── NflCom/
-│           ├── NflComDtos.cs                 # DTO classes for NFL.com JSON responses
-│           ├── NflComTeamService.cs          # NFL.com: Teams via /teams
-│           ├── NflComPlayerService.cs        # NFL.com: Rosters via /teams/{abbr}/roster
-│           ├── NflComGameService.cs          # NFL.com: Games via /games?season=&seasonType=REG&week=
-│           └── NflComStatsService.cs         # NFL.com: Stats via /games/{gameDetailId}/stats
-├── Migrations/
-│   ├── 20260207000000_InitialCreate.cs           # Initial migration (Up/Down)
-│   ├── 20260207000000_InitialCreate.Designer.cs  # Migration model snapshot
-│   ├── 20260309231025_ExpandedSchema.cs          # Expanded schema migration (4 new tables, ~40 new columns)
-│   ├── 20260309231025_ExpandedSchema.Designer.cs # Expanded schema model snapshot
-│   └── AppDbContextModelSnapshot.cs              # Current model snapshot
-└── Extensions/
-    └── ServiceCollectionExtensions.cs # DI wiring: DB, repos, delegates to DataProviderFactory
+WebScraper.sln                          # Solution file — references Core, Cli, Core.Tests
+src/
+├── WebScraper.Core/                    # Class library: models, DbContext, repos, scrapers
+│   ├── WebScraper.Core.csproj          # Library csproj (AssemblyName=WebScraper.Core, RootNamespace=WebScraper)
+│   ├── Models/
+│   │   ├── IAuditableEntity.cs         # M0: data lineage interface (DataSource/FetchedAt/RecordId + CreatedAt/UpdatedAt)
+│   │   ├── ISoftDeletable.cs           # M0: soft-delete interface (IsDeleted/DeletedAt/DeletedBy/DeleteReason)
+│   │   ├── ApiQueryLog.cs              # M0: observability log of every API consumer request
+│   │   ├── Team.cs                         # NFL team entity — implements IAuditableEntity + ISoftDeletable
+│   │   ├── Player.cs                       # Player entity (FK -> Team), EspnId field — implements IAuditableEntity + ISoftDeletable
+│   │   ├── Game.cs                         # Game entity (FKs -> HomeTeam, AwayTeam, Venue), quarter scores, ESPN metadata — implements IAuditableEntity + ISoftDeletable
+│   │   ├── PlayerGameStats.cs              # Per-game player stats — ~40 stat columns — implements IAuditableEntity + ISoftDeletable
+│   │   ├── Venue.cs                        # Stadium/venue entity — implements IAuditableEntity + ISoftDeletable
+│   │   ├── TeamGameStats.cs                # Team-level per-game aggregates — implements IAuditableEntity + ISoftDeletable
+│   │   ├── Injury.cs                       # Player injury reports per game — implements IAuditableEntity + ISoftDeletable
+│   │   ├── ApiLink.cs                      # Catalog of ESPN API endpoints — implements IAuditableEntity + ISoftDeletable
+│   │   ├── ScrapeResult.cs                # Scraper operation result (Success, RecordsProcessed, Errors)
+│   │   ├── ScraperSettings.cs             # Config POCO: scraper options + DataProvider + Providers dict
+│   │   ├── DataProvider.cs                # Enum: ProFootballReference, Espn, SportsDataIo, MySportsFeeds, NflCom
+│   │   └── ApiProviderSettings.cs         # Config POCO: BaseUrl, ApiKey, AuthType, headers per provider
+│   ├── Data/
+│   │   ├── AppDbContext.cs                # EF Core DbContext — 9 DbSets, global soft-delete query filters, registers interceptor
+│   │   ├── AuditingSaveChangesInterceptor.cs # M0: stamps CreatedAt/UpdatedAt, converts hard deletes to soft deletes
+│   │   └── Repositories/
+│   │       ├── IRepository.cs             # Generic repository interface
+│   │       ├── ITeamRepository.cs         # Team-specific repository interface
+│   │       ├── IPlayerRepository.cs       # Player-specific repository interface
+│   │       ├── IGameRepository.cs         # Game-specific repository interface
+│   │       ├── IStatsRepository.cs        # Stats-specific repository interface
+│   │       ├── IVenueRepository.cs        # Venue-specific repository interface
+│   │       ├── ITeamGameStatsRepository.cs # Team game stats repository interface
+│   │       ├── IInjuryRepository.cs       # Injury repository interface
+│   │       ├── IApiLinkRepository.cs      # API link repository interface
+│   │       ├── TeamRepository.cs          # Team repository implementation
+│   │       ├── PlayerRepository.cs        # Player repository implementation
+│   │       ├── GameRepository.cs          # Game repository implementation (includes Venue)
+│   │       ├── StatsRepository.cs         # Stats repository implementation (~40 stat fields)
+│   │       ├── VenueRepository.cs         # Venue repository implementation (upsert by EspnId)
+│   │       ├── TeamGameStatsRepository.cs # Team game stats implementation (upsert by GameId+TeamId)
+│   │       ├── InjuryRepository.cs        # Injury repository implementation (upsert by GameId+EspnAthleteId)
+│   │       └── ApiLinkRepository.cs       # API link repository implementation (upsert by Url)
+│   ├── Services/
+│   │   ├── RateLimiterService.cs          # Global rate limiter (SemaphoreSlim-based)
+│   │   ├── ConsoleDisplayService.cs       # User-facing console output (tables, banners, menus, progress) — CLI-specific but kept in Core for now
+│   │   ├── DatabasePushService.cs         # Push local SQLite data to remote PostgreSQL
+│   │   ├── DataProviderFactory.cs         # Maps DataProvider config to correct DI registrations
+│   │   └── Scrapers/
+│   │       ├── IScraperService.cs         # Scraper interfaces (ITeam/IPlayer/IGame/IStats)
+│   │       ├── BaseScraperService.cs      # Abstract base for HTML: FetchPageAsync, rate limiting
+│   │       ├── BaseApiService.cs          # Abstract base for JSON APIs: FetchJsonAsync<T>, auth, rate limiting
+│   │       ├── TeamScraperService.cs      # PFR: Scrapes 32 NFL teams
+│   │       ├── PlayerScraperService.cs    # PFR: Scrapes player rosters per team
+│   │       ├── GameScraperService.cs      # PFR: Scrapes season schedules/scores
+│   │       ├── StatsScraperService.cs     # PFR: Scrapes per-game player stats from box scores
+│   │       ├── Espn/
+│   │       │   ├── EspnDtos.cs            # DTO classes for ESPN JSON (teams, scoreboard, summary, gameInfo, injuries, links)
+│   │       │   ├── EspnMappings.cs        # ESPN team ID ↔ NFL abbreviation + division lookup
+│   │       │   ├── EspnTeamService.cs     # ESPN API: Scrapes teams via /teams endpoint
+│   │       │   ├── EspnPlayerService.cs   # ESPN API: Scrapes rosters via /teams/{id}/roster
+│   │       │   ├── EspnGameService.cs     # ESPN API: Scrapes scores, venues, quarter scores, API links via /scoreboard
+│   │       │   └── EspnStatsService.cs    # ESPN API: Scrapes all 10 stat categories, team stats, venue, injuries, API links via /summary
+│   │       ├── SportsDataIo/
+│   │       │   ├── SportsDataDtos.cs      # DTO classes for SportsData.io JSON responses
+│   │       │   ├── SportsDataTeamService.cs     # SportsData.io: Teams via /scores/json/Teams
+│   │       │   ├── SportsDataPlayerService.cs   # SportsData.io: Players via /scores/json/Players/{team}
+│   │       │   ├── SportsDataGameService.cs     # SportsData.io: Scores via /scores/json/ScoresByWeek
+│   │       │   └── SportsDataStatsService.cs    # SportsData.io: Stats via /stats/json/PlayerGameStatsByWeek
+│   │       ├── MySportsFeeds/
+│   │       │   ├── MySportsFeedsDtos.cs          # DTO classes for MySportsFeeds JSON responses
+│   │       │   ├── MySportsFeedsTeamService.cs   # MySportsFeeds: Teams via /{season}/teams.json
+│   │       │   ├── MySportsFeedsPlayerService.cs # MySportsFeeds: Players via /players.json
+│   │       │   ├── MySportsFeedsGameService.cs   # MySportsFeeds: Games via /{season}/games.json
+│   │       │   └── MySportsFeedsStatsService.cs  # MySportsFeeds: Stats via /{season}/week/{week}/player_gamelogs.json
+│   │       └── NflCom/
+│   │           ├── NflComDtos.cs                 # DTO classes for NFL.com JSON responses
+│   │           ├── NflComTeamService.cs          # NFL.com: Teams via /teams
+│   │           ├── NflComPlayerService.cs        # NFL.com: Rosters via /teams/{abbr}/roster
+│   │           ├── NflComGameService.cs          # NFL.com: Games via /games?season=&seasonType=REG&week=
+│   │           └── NflComStatsService.cs         # NFL.com: Stats via /games/{gameDetailId}/stats
+│   ├── Migrations/
+│   │   ├── 20260304000000_InitialPostgres.cs     # Initial migration (Up/Down)
+│   │   ├── 20260304000000_InitialPostgres.Designer.cs
+│   │   ├── 20260309231025_ExpandedSchema.cs          # Expanded schema migration (4 new tables, ~40 new columns)
+│   │   ├── 20260309231025_ExpandedSchema.Designer.cs
+│   │   └── AppDbContextModelSnapshot.cs              # Current model snapshot
+│   │   # NOTE: M0 adds lineage + soft-delete columns + ApiQueryLogs table. Run
+│   │   # `dotnet ef migrations add AuditableAndSoftDelete --project src/WebScraper.Core --startup-project src/WebScraper.Cli`
+│   │   # to generate the M0 migration before running the app — see CHATBOT_MICROSERVICE_PLAN.md M0.
+│   └── Extensions/
+│       └── ServiceCollectionExtensions.cs # DI wiring: DB (with interceptor), repos, delegates to DataProviderFactory
+└── WebScraper.Cli/                     # Console app (the existing CLI)
+    ├── WebScraper.Cli.csproj           # Exe csproj, references WebScraper.Core, Serilog + Hosting packages
+    ├── Program.cs                      # Entry point: CLI dispatch, interactive REPL, data display
+    ├── appsettings.json                # Config: DB provider, data provider, scraper settings, Serilog
+    └── Properties/AssemblyInfo.cs
 data/                                   # SQLite database directory
-tests/WebScraper.Tests/                 # xUnit test project
-├── WebScraper.Tests.csproj             # Test project with xUnit, Moq, in-memory SQLite
+tests/WebScraper.Core.Tests/            # xUnit test project (renamed from tests/WebScraper.Tests)
+├── WebScraper.Core.Tests.csproj        # Test project — references src/WebScraper.Core/WebScraper.Core.csproj
 ├── Helpers/
 │   └── TestDbContextFactory.cs         # In-memory SQLite factory for repository tests
 ├── Repositories/
@@ -190,7 +204,7 @@ Static helper that maps the `DataProvider` config string to the correct set of D
 | `EspnMappings` | — | — | Bidirectional ESPN ID ↔ NFL abbreviation map for all 32 teams + division lookup |
 
 ## Database Schema
-Eight tables with the following relationships:
+Nine tables with the following relationships:
 - **Teams** — 32 NFL teams (id, name, abbreviation, city, conference, division)
 - **Players** — FK to Teams via `TeamId` (nullable for free agents); `EspnId` for ESPN athlete matching
 - **Games** — Two FKs to Teams: `HomeTeamId`, `AwayTeamId` (both use `DeleteBehavior.Restrict`); optional FK to `Venues`; includes quarter scores (HomeQ1-Q4, HomeOT, AwayQ1-Q4, AwayOT), `EspnEventId`, `GameStatus`, `HomeWinner`, `Attendance`, `NeutralSite`
@@ -199,6 +213,14 @@ Eight tables with the following relationships:
 - **TeamGameStats** — Team-level per-game aggregates (FKs to Games+Teams, UK on GameId+TeamId); first downs, yards, efficiency, red zone, turnovers, penalties, possession time
 - **Injuries** — Player injury reports per game (FKs to Games+Players, UK on GameId+EspnAthleteId); status, injury type, body location, return date
 - **ApiLinks** — Discovered ESPN API endpoints (UK on Url); endpoint type, relation, season/week, ESPN event ID, timestamps
+- **ApiQueryLogs** (M0) — Observability log of every public API consumer request: `Id` (long PK), `Timestamp`, `ApiKeyId`, `ApiKeyName`, `Method`, `Path`, `QueryString`, `StatusCode`, `DurationMs`, `ResponseBytes`, `UserAgent`, `CorrelationId`. Indexes on `Timestamp` and on `(ApiKeyId, Timestamp)` for dashboard queries. Populated asynchronously by `ApiQueryLoggingMiddleware` via a background `Channel<T>` writer in the M1 Web API — the hot path never blocks on the DB.
+
+### Cross-cutting columns (M0)
+Every non-log entity (Teams through ApiLinks) now implements `IAuditableEntity` + `ISoftDeletable` and gains 9 columns:
+- **Data lineage (IAuditableEntity):** `DataSource`, `DataSourceFetchedAt`, `DataSourceRecordId`, `CreatedAt`, `UpdatedAt`
+- **Soft delete (ISoftDeletable):** `IsDeleted`, `DeletedAt`, `DeletedBy`, `DeleteReason`
+
+`AuditingSaveChangesInterceptor` stamps `CreatedAt`/`UpdatedAt` on insert/update and rewrites hard deletes into soft deletes (`EntityState.Modified` with `IsDeleted = true`, `DeletedAt = UtcNow`). `AppDbContext.OnModelCreating` adds a global query filter `e => !e.IsDeleted` on all 8 entities so normal queries automatically hide deleted rows — admin code uses `.IgnoreQueryFilters()` in the review UI.
 
 ## Key Patterns
 - **Repository Pattern** with generic `IRepository<T>` base and specialized interfaces per entity
@@ -345,12 +367,13 @@ Scrapers maintain a mapping between PFR team abbreviations (e.g., `kan`, `crd`, 
 
 ## DI & Program Entry Point
 
-### ServiceCollectionExtensions (`Extensions/ServiceCollectionExtensions.cs`)
-- `AddWebScraperServices(IServiceCollection, IConfiguration)` extension method wires everything:
+### ServiceCollectionExtensions (`src/WebScraper.Core/Extensions/ServiceCollectionExtensions.cs`)
+- `AddWebScraperServices(IServiceCollection, IConfiguration)` extension method wires everything. It is called by every host (CLI today; API + MCP + Worker in later milestones) so there is exactly one composition root for Core:
   - Binds `ScraperSettings` from config
-  - Configures `AppDbContext` with provider from `DatabaseProvider` setting (SQLite/PostgreSQL/SqlServer)
-  - Registers repositories as scoped services
-  - Registers `RateLimiterService` as singleton
+  - Registers `AuditingSaveChangesInterceptor` as singleton
+  - Configures `AppDbContext` with provider from `DatabaseProvider` setting (SQLite/PostgreSQL/SqlServer) and attaches the auditing interceptor via the `(sp, options)` overload
+  - Registers all 8 repositories as scoped services
+  - Registers `RateLimiterService`, `ConsoleDisplayService` as singletons; `DatabasePushService` as scoped
   - Delegates scraper registration to `DataProviderFactory.RegisterScrapers()`
 
 ### Polly Resilience Policies
@@ -371,51 +394,60 @@ Each scraper's `HttpClient` (both HTML and API) is configured with a resilience 
 - `--help` / `-h` flag for usage info
 
 ## Database Migrations
-- Migration files live in `WebScraper/Migrations/`
-- `InitialCreate` migration creates the original 4 tables (Teams, Players, Games, PlayerGameStats) with FKs and indexes
+- Migration files live in `src/WebScraper.Core/Migrations/`
+- `InitialPostgres` migration creates the original 4 tables (Teams, Players, Games, PlayerGameStats) with FKs and indexes
 - `ExpandedSchema` migration adds 4 new tables (Venues, TeamGameStats, Injuries, ApiLinks), new columns to Games (VenueId, Attendance, quarter scores, EspnEventId, etc.), new columns to PlayerGameStats (~40 stat fields), and Player.EspnId
+- **Pending (M0):** `AuditableAndSoftDelete` migration — adds data lineage columns (DataSource, DataSourceFetchedAt, DataSourceRecordId, CreatedAt, UpdatedAt) and soft-delete columns (IsDeleted, DeletedAt, DeletedBy, DeleteReason) to all 8 entities, plus the new `ApiQueryLogs` table with its indexes. Generate it with:
+  ```bash
+  dotnet ef migrations add AuditableAndSoftDelete \
+      --project src/WebScraper.Core \
+      --startup-project src/WebScraper.Cli
+  ```
+  This cannot be hand-written safely — run the command once the .NET SDK is available.
 - `Program.cs` calls `db.Database.MigrateAsync()` on startup — auto-applies pending migrations
-- To add a new migration: `dotnet ef migrations add <Name> --project WebScraper`
-- To apply manually: `dotnet ef database update --project WebScraper`
+- To add a new migration: `dotnet ef migrations add <Name> --project src/WebScraper.Core --startup-project src/WebScraper.Cli`
+- To apply manually: `dotnet ef database update --project src/WebScraper.Core --startup-project src/WebScraper.Cli`
 
 ## Build & Run
 ```bash
 dotnet restore
 dotnet build
-dotnet run --project WebScraper
+dotnet run --project src/WebScraper.Cli
 ```
 
 ## CLI Commands
+All `dotnet run` commands below must target the CLI project explicitly: `dotnet run --project src/WebScraper.Cli -- <args>`.
+
 ```bash
 # Interactive mode (menu-driven REPL)
-dotnet run                                     # Launch interactive mode (default)
-dotnet run -- interactive                      # Launch interactive mode (explicit)
+dotnet run --project src/WebScraper.Cli                                # Launch interactive mode (default)
+dotnet run --project src/WebScraper.Cli -- interactive                 # Launch interactive mode (explicit)
 
 # Scrape commands
-dotnet run -- teams                            # Scrape all 32 NFL teams
-dotnet run -- teams --team KC                  # Scrape a single team by abbreviation
-dotnet run -- players                          # Scrape rosters for all teams
-dotnet run -- games --season 2025              # Scrape full season schedule/scores
-dotnet run -- games --season 2025 --week 1     # Scrape games for a specific week
-dotnet run -- stats --season 2025 --week 1     # Scrape player stats for a week
-dotnet run -- all --season 2025                # Run full pipeline (teams, players, games)
-dotnet run -- teams --source Espn              # Override data source at runtime
+dotnet run --project src/WebScraper.Cli -- teams                       # Scrape all 32 NFL teams
+dotnet run --project src/WebScraper.Cli -- teams --team KC             # Scrape a single team by abbreviation
+dotnet run --project src/WebScraper.Cli -- players                     # Scrape rosters for all teams
+dotnet run --project src/WebScraper.Cli -- games --season 2025         # Scrape full season schedule/scores
+dotnet run --project src/WebScraper.Cli -- games --season 2025 --week 1  # Scrape games for a specific week
+dotnet run --project src/WebScraper.Cli -- stats --season 2025 --week 1  # Scrape player stats for a week
+dotnet run --project src/WebScraper.Cli -- all --season 2025           # Run full pipeline (teams, players, games)
+dotnet run --project src/WebScraper.Cli -- teams --source Espn         # Override data source at runtime
 
 # Push local data to remote PostgreSQL
-dotnet run -- push                             # Push all SQLite data to Neon/PostgreSQL
+dotnet run --project src/WebScraper.Cli -- push                        # Push all SQLite data to Neon/PostgreSQL
 
 # Data display commands
-dotnet run -- list teams                       # Show all teams in database
-dotnet run -- list teams --conference AFC      # Show teams by conference
-dotnet run -- list players --team KC           # Show roster for a team
-dotnet run -- list games --season 2025         # Show games for a season (venue/attendance if available)
-dotnet run -- list games --season 2025 --week 1  # Show games for a week
-dotnet run -- list stats --season 2025 --week 1  # Show player stats (offense/defense/kicking/returns)
-dotnet run -- list stats --player "Patrick Mahomes" --season 2025  # Individual player stats
-dotnet run -- list venues                      # Show all venues in database
-dotnet run -- list teamstats --season 2025 --week 1  # Show team-level game stats
-dotnet run -- list injuries --season 2025 --week 1   # Show injury reports by game
-dotnet run -- status                           # Show database record counts (all 8 tables)
+dotnet run --project src/WebScraper.Cli -- list teams                  # Show all teams in database
+dotnet run --project src/WebScraper.Cli -- list teams --conference AFC # Show teams by conference
+dotnet run --project src/WebScraper.Cli -- list players --team KC      # Show roster for a team
+dotnet run --project src/WebScraper.Cli -- list games --season 2025    # Show games for a season
+dotnet run --project src/WebScraper.Cli -- list games --season 2025 --week 1  # Show games for a week
+dotnet run --project src/WebScraper.Cli -- list stats --season 2025 --week 1  # Show player stats
+dotnet run --project src/WebScraper.Cli -- list stats --player "Patrick Mahomes" --season 2025
+dotnet run --project src/WebScraper.Cli -- list venues                 # Show all venues in database
+dotnet run --project src/WebScraper.Cli -- list teamstats --season 2025 --week 1
+dotnet run --project src/WebScraper.Cli -- list injuries --season 2025 --week 1
+dotnet run --project src/WebScraper.Cli -- status                      # Show database record counts (all 9 tables)
 ```
 
 To switch data sources permanently, set `DataProvider` in `appsettings.json`. To switch at runtime, use `--source <provider>`. SportsData.io and MySportsFeeds require API keys configured in `Providers` section.
@@ -450,7 +482,8 @@ Main Menu
 - **Framework:** xUnit with `Microsoft.NET.Test.Sdk`
 - **Mocking:** Moq
 - **Database:** In-memory SQLite via `TestDbContextFactory` helper
-- **Run tests:** `dotnet test` from repo root
+- **Project:** `tests/WebScraper.Core.Tests/` — references `src/WebScraper.Core/WebScraper.Core.csproj`
+- **Run tests:** `dotnet test` from repo root, or `dotnet test tests/WebScraper.Core.Tests`
 
 ### Test Coverage
 | Test File | Tests | What It Covers |
@@ -535,6 +568,22 @@ Main Menu
 - [x] Schema Phase 9: EspnStatsService — all 10 stat categories, team stats, venue, injuries, API links from /summary
 - [x] Schema Phase 10: EF Core migration (ExpandedSchema)
 - [x] Schema Phase 11: Console UI updates — PrintGamesTable (venue/attendance), PrintStatsTable (offense/defense/kicking/returns), PrintDatabaseStatus (all 8 tables), new PrintVenuesTable/PrintTeamGameStatsTable/PrintInjuriesTable, expanded View menu (8 options), new CLI list subcommands (venues, teamstats, injuries)
+
+### Microservice Transformation Phases (see `CHATBOT_MICROSERVICE_PLAN.md`)
+- [x] **M0 Phase 1:** Solution restructure — extract `src/WebScraper.Core` class library (AssemblyName=`WebScraper.Core`, RootNamespace=`WebScraper` so namespaces remain stable), rename existing console app to `src/WebScraper.Cli`, rename `tests/WebScraper.Tests` → `tests/WebScraper.Core.Tests` and retarget its project reference
+- [x] **M0 Phase 2:** Cross-cutting interfaces — `IAuditableEntity` (DataSource/FetchedAt/RecordId + CreatedAt/UpdatedAt), `ISoftDeletable` (IsDeleted/DeletedAt/DeletedBy/DeleteReason)
+- [x] **M0 Phase 3:** Implement interfaces on all 8 entities — Team, Player, Game, PlayerGameStats, Venue, TeamGameStats, Injury, ApiLink
+- [x] **M0 Phase 4:** `AuditingSaveChangesInterceptor` — stamps CreatedAt/UpdatedAt, converts hard deletes to soft deletes; wired in DI via `AddDbContext((sp, options) => options.AddInterceptors(...))`
+- [x] **M0 Phase 5:** Global query filters on all 8 entities in `AppDbContext.OnModelCreating` — deleted rows auto-hidden from normal queries
+- [x] **M0 Phase 6:** `ApiQueryLog` entity + `DbSet<ApiQueryLog>` + indexes on `Timestamp` and `(ApiKeyId, Timestamp)` for the M1 observability dashboard
+- [ ] **M0 Phase 7 (pending):** Generate EF Core migration `AuditableAndSoftDelete` — requires .NET SDK (`dotnet ef migrations add AuditableAndSoftDelete --project src/WebScraper.Core --startup-project src/WebScraper.Cli`)
+- [ ] **M0 Phase 8 (pending):** Verify build + test suite pass on local machine (blocked in Claude environment — no .NET SDK)
+- [ ] **M1:** ASP.NET Core Web API host (`src/WebScraper.Api`) — REST endpoints for teams/players/games/stats, API key auth, Problem Details, ApiQueryLoggingMiddleware
+- [ ] **M2:** SignalR hub for real-time scrape progress broadcasts
+- [ ] **M3:** Blazor Server admin dashboard — JWT auth, health, soft-delete review, ApiQueryLog viewer
+- [ ] **M4:** MCP server host — exposes Core data as tools callable by Claude anywhere
+- [ ] **M5:** Contract tests — recorded fixtures per provider
+- [ ] **M6:** Docker + DigitalOcean App Platform deployment (PostgreSQL); future Azure App Service + MSSQL migration path
 
 ## Adding a New Data Provider
 1. Create a folder: `Services/Scrapers/NewProvider/`
