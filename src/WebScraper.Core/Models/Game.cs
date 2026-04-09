@@ -1,6 +1,6 @@
 namespace WebScraper.Models;
 
-public class Game
+public class Game : IAuditableEntity, ISoftDeletable
 {
     public int Id { get; set; }
     public int Season { get; set; }
@@ -30,6 +30,19 @@ public class Game
     public int? AwayQ3 { get; set; }
     public int? AwayQ4 { get; set; }
     public int? AwayOT { get; set; }
+
+    // Data lineage
+    public string? DataSource { get; set; }
+    public DateTime? DataSourceFetchedAt { get; set; }
+    public string? DataSourceRecordId { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+
+    // Soft delete
+    public bool IsDeleted { get; set; }
+    public DateTime? DeletedAt { get; set; }
+    public string? DeletedBy { get; set; }
+    public string? DeleteReason { get; set; }
 
     // Navigation properties
     public Team HomeTeam { get; set; } = null!;

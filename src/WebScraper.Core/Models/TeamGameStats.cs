@@ -1,6 +1,6 @@
 namespace WebScraper.Models;
 
-public class TeamGameStats
+public class TeamGameStats : IAuditableEntity, ISoftDeletable
 {
     public int Id { get; set; }
     public int GameId { get; set; }
@@ -43,6 +43,19 @@ public class TeamGameStats
     public int PenaltyYards { get; set; }
     public int DefensiveTouchdowns { get; set; }
     public string PossessionTime { get; set; } = string.Empty;
+
+    // Data lineage
+    public string? DataSource { get; set; }
+    public DateTime? DataSourceFetchedAt { get; set; }
+    public string? DataSourceRecordId { get; set; }
+    public DateTime CreatedAt { get; set; }
+    public DateTime UpdatedAt { get; set; }
+
+    // Soft delete
+    public bool IsDeleted { get; set; }
+    public DateTime? DeletedAt { get; set; }
+    public string? DeletedBy { get; set; }
+    public string? DeleteReason { get; set; }
 
     public Game Game { get; set; } = null!;
     public Team Team { get; set; } = null!;

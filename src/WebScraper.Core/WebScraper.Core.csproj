@@ -1,13 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <RootNamespace>WebScraper</RootNamespace>
+    <AssemblyName>WebScraper.Core</AssemblyName>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
   </PropertyGroup>
-
 
   <ItemGroup>
     <!-- HTML Parsing -->
@@ -28,26 +28,12 @@
 
     <!-- Dependency Injection & Hosting -->
     <PackageReference Include="Microsoft.Extensions.Configuration" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="8.0.2" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
     <PackageReference Include="Microsoft.Extensions.Http" Version="8.0.1" />
 
     <!-- Resilience -->
     <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="8.10.0" />
-
-    <!-- Logging -->
-    <PackageReference Include="Serilog.Extensions.Hosting" Version="8.0.0" />
-    <PackageReference Include="Serilog.Settings.Configuration" Version="8.0.4" />
-    <PackageReference Include="Serilog.Sinks.Console" Version="5.0.1" />
-    <PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Content Include="appsettings.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="appsettings.Local.json" Condition="Exists('appsettings.Local.json')">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
   </ItemGroup>
 
 </Project>
