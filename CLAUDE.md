@@ -16,9 +16,9 @@ Originally a .NET 8 Console application that scrapes NFL football data from mult
 - **Logging:** Serilog (Console + File sinks)
 - **Resilience:** Polly v8 + Microsoft.Extensions.Http.Resilience (retry, circuit breaker, timeout)
 
-## Project Structure (post-M0)
+## Project Structure (post-M1)
 ```
-WebScraper.sln                          # Solution file — references Core, Cli, Core.Tests
+WebScraper.sln                          # Solution file — references Core, Cli, Api, Core.Tests
 src/
 ├── WebScraper.Core/                    # Class library: models, DbContext, repos, scrapers
 │   ├── WebScraper.Core.csproj          # Library csproj (AssemblyName=WebScraper.Core, RootNamespace=WebScraper)
@@ -108,11 +108,50 @@ src/
 │   │   # to generate the M0 migration before running the app — see CHATBOT_MICROSERVICE_PLAN.md M0.
 │   └── Extensions/
 │       └── ServiceCollectionExtensions.cs # DI wiring: DB (with interceptor), repos, delegates to DataProviderFactory
-└── WebScraper.Cli/                     # Console app (the existing CLI)
-    ├── WebScraper.Cli.csproj           # Exe csproj, references WebScraper.Core, Serilog + Hosting packages
-    ├── Program.cs                      # Entry point: CLI dispatch, interactive REPL, data display
-    ├── appsettings.json                # Config: DB provider, data provider, scraper settings, Serilog
-    └── Properties/AssemblyInfo.cs
+├── WebScraper.Cli/                     # Console app (the existing CLI)
+│   ├── WebScraper.Cli.csproj           # Exe csproj, references WebScraper.Core, Serilog + Hosting packages
+│   ├── Program.cs                      # Entry point: CLI dispatch, interactive REPL, data display
+│   ├── appsettings.json                # Config: DB provider, data provider, scraper settings, Serilog
+│   └── Properties/AssemblyInfo.cs
+└── WebScraper.Api/                     # M1: ASP.NET Core Web API host (read-only endpoints)
+    ├── WebScraper.Api.csproj           # Web SDK csproj — references WebScraper.Core, Swashbuckle, HealthChecks, Serilog.AspNetCore
+    ├── Program.cs                      # Host entry: Serilog, middleware pipeline, migrations, Swagger, health checks
+    ├── appsettings.json                # API config: DB, scraper, ApiKeys, Serilog (Console + File sinks)
+    ├── appsettings.Development.json    # Verbose logging overrides for dev
+    ├── Auth/
+    │   ├── ApiKeySettings.cs           # ApiKeyOptions / ApiKeyEntry POCOs (Id, Name, HashedKey, Scopes)
+    │   ├── ApiKeyAuthenticationHandler.cs # Custom AuthenticationHandler — validates X-Api-Key against SHA-256 hashes, emits scope claims
+    │   └── AuthorizationPolicies.cs    # Named policy: RequireReadScope (api_key scheme + scope=read)
+    ├── Controllers/
+    │   ├── TeamsController.cs          # GET /api/v1/teams (paged + ?conference=), /{id}, /by-abbreviation/{abbr}
+    │   ├── PlayersController.cs        # GET /api/v1/players (paged + filters), /{id}, /{id}/stats
+    │   ├── GamesController.cs          # GET /api/v1/games (paged + filters), /{id}, /{id}/team-stats, /player-stats, /injuries
+    │   ├── VenuesController.cs         # GET /api/v1/venues (paged + filters), /{id}
+    │   └── StatusController.cs         # GET /api/v1/status — record counts + latest update timestamp
+    ├── Dtos/
+    │   ├── MetaDto.cs                  # Data lineage envelope (Source, FetchedAt, SourceRecordId, CreatedAt, UpdatedAt)
+    │   ├── TeamDto.cs                  # Team + nested TeamSummaryDto
+    │   ├── PlayerDto.cs                # Player + team abbreviation
+    │   ├── GameDto.cs                  # Game + TeamSummaryDto home/away + VenueSummaryDto + QuarterScoresDto
+    │   ├── VenueDto.cs                 # Venue + nested VenueSummaryDto
+    │   ├── PlayerGameStatsDto.cs       # 10 nested category DTOs (passing, rushing, receiving, ...)
+    │   ├── TeamGameStatsDto.cs         # Flat team per-game aggregates
+    │   ├── InjuryDto.cs                # Injury with meta
+    │   └── StatusDto.cs                # 8 counts + LatestUpdate + ApiVersion
+    ├── Mapping/
+    │   └── EntityMappings.cs           # Hand-rolled entity → DTO extension methods (no AutoMapper)
+    ├── Middleware/
+    │   └── ApiQueryLoggingMiddleware.cs # Stamps X-Correlation-Id, builds ApiQueryLog, enqueues for async persistence
+    ├── Pagination/
+    │   └── PagedResult.cs              # Generic PagedResult<T> envelope + PaginationQuery (clamped Page/PageSize)
+    ├── Services/
+    │   ├── IApiQueryLogQueue.cs        # Write-only facade over Channel<ApiQueryLog>
+    │   ├── ApiQueryLogQueue.cs         # Bounded channel (capacity 10k, DropOldest) — hot path never blocks
+    │   └── ApiQueryLogWriter.cs        # BackgroundService — batch (100) + interval (2s) flush to ApiQueryLogs
+    ├── Extensions/
+    │   └── ApiServiceCollectionExtensions.cs # DI: auth scheme, authz policies, queue, Swagger + security requirement
+    └── Properties/
+        └── launchSettings.json         # dev profiles (http://localhost:5080, https://localhost:7080)
 data/                                   # SQLite database directory
 tests/WebScraper.Core.Tests/            # xUnit test project (renamed from tests/WebScraper.Tests)
 ├── WebScraper.Core.Tests.csproj        # Test project — references src/WebScraper.Core/WebScraper.Core.csproj
@@ -412,8 +451,96 @@ Each scraper's `HttpClient` (both HTML and API) is configured with a resilience 
 ```bash
 dotnet restore
 dotnet build
-dotnet run --project src/WebScraper.Cli
+dotnet run --project src/WebScraper.Cli              # Run the CLI
+dotnet run --project src/WebScraper.Api              # Run the Web API (http://localhost:5080, Swagger at /swagger)
 ```
+
+## WebScraper.Api (M1)
+
+ASP.NET Core Web API host exposing read-only REST endpoints over the scraped data. Shares a single `AppDbContext`/repository layer with the CLI via `AddWebScraperServices` — the API and the scraper CLI can point at the same local SQLite DB (or the same remote PostgreSQL) without duplicating schema or composition-root code.
+
+### Running the API
+```bash
+dotnet run --project src/WebScraper.Api              # http://localhost:5080 (Development profile opens /swagger)
+```
+On startup the API:
+1. Loads `appsettings.json` → `appsettings.Development.json` → `appsettings.Local.json` (git-ignored, for secrets).
+2. Binds `ScraperSettings`, `ApiKeyOptions`, and the DB provider from config.
+3. Applies pending EF migrations via `db.Database.MigrateAsync()` (same behavior as the CLI).
+4. Starts the `ApiQueryLogWriter` background service and begins accepting requests.
+
+### Middleware pipeline (in order)
+`UseSerilogRequestLogging` → `UseSwagger`/`UseSwaggerUI` (Development only) → `UseExceptionHandler` + `UseStatusCodePages` (RFC 7807 Problem Details) → `UseAuthentication` → `UseAuthorization` → `ApiQueryLoggingMiddleware` → `MapControllers` → `MapHealthChecks` (`/health`, `/health/live`, `/health/ready`).
+
+Query logging sits **after** auth so each `ApiQueryLog` row can be stamped with the caller's `api_key_id` / `api_key_name` claims.
+
+### Read-only endpoints (v1)
+All endpoints are under `/api/v1/` and require `X-Api-Key` (read scope). List endpoints return `PagedResult<T>` in the body and set `X-Total-Count` on the response.
+
+| Method | Route | Purpose |
+|--------|-------|---------|
+| GET | `/api/v1/teams` | Paged team list, optional `?conference=AFC\|NFC` |
+| GET | `/api/v1/teams/{id}` | Single team by primary key |
+| GET | `/api/v1/teams/by-abbreviation/{abbr}` | Single team by NFL abbreviation |
+| GET | `/api/v1/players` | Paged player list, optional `?teamId=`, `?teamAbbreviation=`, `?position=` |
+| GET | `/api/v1/players/{id}` | Single player (includes team abbreviation) |
+| GET | `/api/v1/players/{id}/stats` | All game stats for a player, optional `?season=`, `?week=` |
+| GET | `/api/v1/games` | Paged game list, optional `?season=`, `?week=`, `?teamId=` (home or away) |
+| GET | `/api/v1/games/{id}` | Single game with teams, venue, quarter scores |
+| GET | `/api/v1/games/{id}/team-stats` | Team-level aggregates for a game (home + away) |
+| GET | `/api/v1/games/{id}/player-stats` | All player stats lines for a game |
+| GET | `/api/v1/games/{id}/injuries` | Injury reports for a game |
+| GET | `/api/v1/venues` | Paged venue list, optional `?state=`, `?isIndoor=true\|false` |
+| GET | `/api/v1/venues/{id}` | Single venue |
+| GET | `/api/v1/status` | 8 entity counts + freshest `UpdatedAt` (domain status, not infra health) |
+
+All DTO responses include a `Meta` envelope (`Source`, `FetchedAt`, `SourceRecordId`, `CreatedAt`, `UpdatedAt`) populated from the `IAuditableEntity` lineage fields. Nav properties (team, venue) are eager-loaded in controllers with `.Include(...)` to avoid N+1.
+
+### Pagination
+`PaginationQuery` binds from `?page=` and `?pageSize=` query params. Defaults: `page=1`, `pageSize=25`. Max `pageSize=200` — anything larger is silently clamped. Invalid values (zero/negative) fall back to defaults.
+
+### API key authentication
+- Header: `X-Api-Key: <plaintext-key>`
+- Handler: `ApiKeyAuthenticationHandler` hashes the incoming key with SHA-256, compares against `ApiKeys.Keys[].HashedKey` from config using `CryptographicOperations.FixedTimeEquals` (constant-time to resist timing attacks).
+- On success, emits claims: `ClaimTypes.NameIdentifier = Id`, `ClaimTypes.Name = Name`, `api_key_id`, `api_key_name`, and one `scope` claim per entry in the `Scopes` list.
+- Authorization policy `RequireReadScope` (the only policy in M1) requires `scope=read`. M3 will add JWT + role policies for write endpoints.
+
+**Config shape** (`appsettings.Local.json`, git-ignored):
+```json
+{
+  "ApiKeys": {
+    "Keys": [
+      {
+        "Id": "local-dev",
+        "Name": "Local Development",
+        "HashedKey": "<sha256-hex-lowercase-of-plaintext-key>",
+        "Scopes": [ "read" ]
+      }
+    ]
+  }
+}
+```
+Generate a hash with `echo -n 'your-key' | sha256sum` (Linux/macOS) or `Get-FileHash -Algorithm SHA256` (PowerShell). The plaintext key never lives on disk.
+
+### Query logging (observability)
+The hot path (`ApiQueryLoggingMiddleware`) never blocks on the database. Flow:
+1. Middleware captures Method, Path, QueryString, StatusCode, DurationMs, ResponseBytes, UserAgent, CorrelationId, and the authenticated `api_key_id` / `api_key_name` claims.
+2. It calls `IApiQueryLogQueue.TryEnqueue(entry)` — writes to a `Channel.CreateBounded<ApiQueryLog>(10_000, FullMode = DropOldest)`.
+3. `ApiQueryLogWriter` (a `BackgroundService`) drains the channel, batching rows (up to 100 per batch, or a 2-second flush interval, whichever comes first) and inserting into `AppDbContext.ApiQueryLogs` via a fresh scoped context.
+4. On DB failure the batch is logged and dropped — we never retry into the hot path. On overflow, `ApiQueryLogQueue` increments a drop counter and logs a warning every 100 drops.
+
+`ApiQueryLoggingMiddleware` also sets `X-Correlation-Id` on every response — callers can pass one in the request header or get an auto-generated one back.
+
+### Health checks
+- `/health/live` — process is up (no dependency checks).
+- `/health/ready` — includes DB reachability (`AddNpgSql` for PostgreSQL, `AddSqlite` for SQLite).
+- `/health` — back-compat default endpoint (all registered checks).
+
+### Swagger / OpenAPI
+Available at `/swagger` in the Development environment. `AddSwaggerGen` is configured with:
+- `ApiKey` security scheme pointed at the `X-Api-Key` header.
+- A global security requirement so the "Authorize" button in Swagger UI applies the key to every request.
+- XML doc comments from `WebScraper.Api.xml` (generated by `GenerateDocumentationFile=true`) so `/// <summary>` blocks on controllers and DTOs appear in the UI.
 
 ## CLI Commands
 All `dotnet run` commands below must target the CLI project explicitly: `dotnet run --project src/WebScraper.Cli -- <args>`.
@@ -578,7 +705,16 @@ Main Menu
 - [x] **M0 Phase 6:** `ApiQueryLog` entity + `DbSet<ApiQueryLog>` + indexes on `Timestamp` and `(ApiKeyId, Timestamp)` for the M1 observability dashboard
 - [ ] **M0 Phase 7 (pending):** Generate EF Core migration `AuditableAndSoftDelete` — requires .NET SDK (`dotnet ef migrations add AuditableAndSoftDelete --project src/WebScraper.Core --startup-project src/WebScraper.Cli`)
 - [ ] **M0 Phase 8 (pending):** Verify build + test suite pass on local machine (blocked in Claude environment — no .NET SDK)
-- [ ] **M1:** ASP.NET Core Web API host (`src/WebScraper.Api`) — REST endpoints for teams/players/games/stats, API key auth, Problem Details, ApiQueryLoggingMiddleware
+- [x] **M1 Phase 1:** `WebScraper.Api.csproj` — Web SDK project with Swashbuckle, HealthChecks, Serilog.AspNetCore; added to solution
+- [x] **M1 Phase 2:** API key auth — `ApiKeyAuthenticationHandler` (SHA-256 + FixedTimeEquals), `ApiKeyOptions`/`ApiKeyEntry` POCOs, `RequireReadScope` policy
+- [x] **M1 Phase 3:** Query logging — `ApiQueryLoggingMiddleware` (X-Correlation-Id, /api/* only), `ApiQueryLogQueue` (bounded Channel 10k, DropOldest), `ApiQueryLogWriter` (BackgroundService, batch 100 / 2s flush)
+- [x] **M1 Phase 4:** DTOs — `MetaDto`, `TeamDto`/`TeamSummaryDto`, `PlayerDto`, `GameDto`/`VenueSummaryDto`/`QuarterScoresDto`, `VenueDto`, `PlayerGameStatsDto` (10 category sub-DTOs), `TeamGameStatsDto`, `InjuryDto`, `StatusDto`
+- [x] **M1 Phase 5:** Entity → DTO mapping — `EntityMappings.cs` hand-rolled extension methods with null-safe nav property handling
+- [x] **M1 Phase 6:** Read-only controllers — `TeamsController`, `PlayersController`, `GamesController`, `VenuesController`, `StatusController` with `PagedResult<T>`, `X-Total-Count`, RFC 7807 Problem Details for 404s
+- [x] **M1 Phase 7:** `Program.cs` — Serilog, middleware pipeline, EF migrations on startup, Swagger (dev only), health checks (/health, /health/live, /health/ready)
+- [x] **M1 Phase 8:** `ApiServiceCollectionExtensions` — DI wiring for auth scheme, authz policies, query log queue/writer, Swagger with security definition
+- [x] **M1 Phase 9:** Config — `appsettings.json` (DB, scraper, ApiKeys placeholder, Serilog), `appsettings.Development.json`, `launchSettings.json` (5080/7080)
+- [x] **M1 Phase 10:** CLAUDE.md updated with full M1 documentation
 - [ ] **M2:** SignalR hub for real-time scrape progress broadcasts
 - [ ] **M3:** Blazor Server admin dashboard — JWT auth, health, soft-delete review, ApiQueryLog viewer
 - [ ] **M4:** MCP server host — exposes Core data as tools callable by Claude anywhere
