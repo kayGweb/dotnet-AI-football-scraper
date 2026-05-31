@@ -16,9 +16,9 @@ Originally a .NET 8 Console application that scrapes NFL football data from mult
 - **Logging:** Serilog (Console + File sinks)
 - **Resilience:** Polly v8 + Microsoft.Extensions.Http.Resilience (retry, circuit breaker, timeout)
 
-## Project Structure (post-M1)
+## Project Structure (post-M2)
 ```
-WebScraper.sln                          # Solution file — references Core, Cli, Api, Core.Tests
+WebScraper.sln                          # Solution file — references Core, Cli, Api, Mcp, Core.Tests
 src/
 ├── WebScraper.Core/                    # Class library: models, DbContext, repos, scrapers
 │   ├── WebScraper.Core.csproj          # Library csproj (AssemblyName=WebScraper.Core, RootNamespace=WebScraper)
@@ -113,45 +113,59 @@ src/
 │   ├── Program.cs                      # Entry point: CLI dispatch, interactive REPL, data display
 │   ├── appsettings.json                # Config: DB provider, data provider, scraper settings, Serilog
 │   └── Properties/AssemblyInfo.cs
-└── WebScraper.Api/                     # M1: ASP.NET Core Web API host (read-only endpoints)
-    ├── WebScraper.Api.csproj           # Web SDK csproj — references WebScraper.Core, Swashbuckle, HealthChecks, Serilog.AspNetCore
-    ├── Program.cs                      # Host entry: Serilog, middleware pipeline, migrations, Swagger, health checks
-    ├── appsettings.json                # API config: DB, scraper, ApiKeys, Serilog (Console + File sinks)
-    ├── appsettings.Development.json    # Verbose logging overrides for dev
-    ├── Auth/
-    │   ├── ApiKeySettings.cs           # ApiKeyOptions / ApiKeyEntry POCOs (Id, Name, HashedKey, Scopes)
-    │   ├── ApiKeyAuthenticationHandler.cs # Custom AuthenticationHandler — validates X-Api-Key against SHA-256 hashes, emits scope claims
-    │   └── AuthorizationPolicies.cs    # Named policy: RequireReadScope (api_key scheme + scope=read)
-    ├── Controllers/
-    │   ├── TeamsController.cs          # GET /api/v1/teams (paged + ?conference=), /{id}, /by-abbreviation/{abbr}
-    │   ├── PlayersController.cs        # GET /api/v1/players (paged + filters), /{id}, /{id}/stats
-    │   ├── GamesController.cs          # GET /api/v1/games (paged + filters), /{id}, /{id}/team-stats, /player-stats, /injuries
-    │   ├── VenuesController.cs         # GET /api/v1/venues (paged + filters), /{id}
-    │   └── StatusController.cs         # GET /api/v1/status — record counts + latest update timestamp
-    ├── Dtos/
-    │   ├── MetaDto.cs                  # Data lineage envelope (Source, FetchedAt, SourceRecordId, CreatedAt, UpdatedAt)
-    │   ├── TeamDto.cs                  # Team + nested TeamSummaryDto
-    │   ├── PlayerDto.cs                # Player + team abbreviation
-    │   ├── GameDto.cs                  # Game + TeamSummaryDto home/away + VenueSummaryDto + QuarterScoresDto
-    │   ├── VenueDto.cs                 # Venue + nested VenueSummaryDto
-    │   ├── PlayerGameStatsDto.cs       # 10 nested category DTOs (passing, rushing, receiving, ...)
-    │   ├── TeamGameStatsDto.cs         # Flat team per-game aggregates
-    │   ├── InjuryDto.cs                # Injury with meta
-    │   └── StatusDto.cs                # 8 counts + LatestUpdate + ApiVersion
-    ├── Mapping/
-    │   └── EntityMappings.cs           # Hand-rolled entity → DTO extension methods (no AutoMapper)
-    ├── Middleware/
-    │   └── ApiQueryLoggingMiddleware.cs # Stamps X-Correlation-Id, builds ApiQueryLog, enqueues for async persistence
-    ├── Pagination/
-    │   └── PagedResult.cs              # Generic PagedResult<T> envelope + PaginationQuery (clamped Page/PageSize)
-    ├── Services/
-    │   ├── IApiQueryLogQueue.cs        # Write-only facade over Channel<ApiQueryLog>
-    │   ├── ApiQueryLogQueue.cs         # Bounded channel (capacity 10k, DropOldest) — hot path never blocks
-    │   └── ApiQueryLogWriter.cs        # BackgroundService — batch (100) + interval (2s) flush to ApiQueryLogs
-    ├── Extensions/
-    │   └── ApiServiceCollectionExtensions.cs # DI: auth scheme, authz policies, queue, Swagger + security requirement
-    └── Properties/
-        └── launchSettings.json         # dev profiles (http://localhost:5080, https://localhost:7080)
+├── WebScraper.Api/                     # M1: ASP.NET Core Web API host (read-only endpoints)
+│   ├── WebScraper.Api.csproj           # Web SDK csproj — references WebScraper.Core, Swashbuckle, HealthChecks, Serilog.AspNetCore
+│   ├── Program.cs                      # Host entry: Serilog, middleware pipeline, migrations, Swagger, health checks
+│   ├── appsettings.json                # API config: DB, scraper, ApiKeys, Serilog (Console + File sinks)
+│   ├── appsettings.Development.json    # Verbose logging overrides for dev
+│   ├── Auth/
+│   │   ├── ApiKeySettings.cs           # ApiKeyOptions / ApiKeyEntry POCOs (Id, Name, HashedKey, Scopes)
+│   │   ├── ApiKeyAuthenticationHandler.cs # Custom AuthenticationHandler — validates X-Api-Key against SHA-256 hashes, emits scope claims
+│   │   └── AuthorizationPolicies.cs    # Named policy: RequireReadScope (api_key scheme + scope=read)
+│   ├── Controllers/
+│   │   ├── TeamsController.cs          # GET /api/v1/teams (paged + ?conference=), /{id}, /by-abbreviation/{abbr}
+│   │   ├── PlayersController.cs        # GET /api/v1/players (paged + filters), /{id}, /{id}/stats
+│   │   ├── GamesController.cs          # GET /api/v1/games (paged + filters), /{id}, /{id}/team-stats, /player-stats, /injuries
+│   │   ├── VenuesController.cs         # GET /api/v1/venues (paged + filters), /{id}
+│   │   └── StatusController.cs         # GET /api/v1/status — record counts + latest update timestamp
+│   ├── Dtos/
+│   │   ├── MetaDto.cs                  # Data lineage envelope (Source, FetchedAt, SourceRecordId, CreatedAt, UpdatedAt)
+│   │   ├── TeamDto.cs                  # Team + nested TeamSummaryDto
+│   │   ├── PlayerDto.cs                # Player + team abbreviation
+│   │   ├── GameDto.cs                  # Game + TeamSummaryDto home/away + VenueSummaryDto + QuarterScoresDto
+│   │   ├── VenueDto.cs                 # Venue + nested VenueSummaryDto
+│   │   ├── PlayerGameStatsDto.cs       # 10 nested category DTOs (passing, rushing, receiving, ...)
+│   │   ├── TeamGameStatsDto.cs         # Flat team per-game aggregates
+│   │   ├── InjuryDto.cs                # Injury with meta
+│   │   └── StatusDto.cs                # 8 counts + LatestUpdate + ApiVersion
+│   ├── Mapping/
+│   │   └── EntityMappings.cs           # Hand-rolled entity → DTO extension methods (no AutoMapper)
+│   ├── Middleware/
+│   │   └── ApiQueryLoggingMiddleware.cs # Stamps X-Correlation-Id, builds ApiQueryLog, enqueues for async persistence
+│   ├── Pagination/
+│   │   └── PagedResult.cs              # Generic PagedResult<T> envelope + PaginationQuery (clamped Page/PageSize)
+│   ├── Services/
+│   │   ├── IApiQueryLogQueue.cs        # Write-only facade over Channel<ApiQueryLog>
+│   │   ├── ApiQueryLogQueue.cs         # Bounded channel (capacity 10k, DropOldest) — hot path never blocks
+│   │   └── ApiQueryLogWriter.cs        # BackgroundService — batch (100) + interval (2s) flush to ApiQueryLogs
+│   ├── Extensions/
+│   │   └── ApiServiceCollectionExtensions.cs # DI: auth scheme, authz policies, queue, Swagger + security requirement
+│   └── Properties/
+│       └── launchSettings.json         # dev profiles (http://localhost:5080, https://localhost:7080)
+└── WebScraper.Mcp/                     # M2: MCP server (stdio) — exposes the M1 API as tools for Claude
+    ├── WebScraper.Mcp.csproj           # Console app csproj — ModelContextProtocol SDK + Hosting + Http
+    ├── Program.cs                      # Host entry: stdio transport, env-driven config, stderr-only logging
+    ├── appsettings.json                # Defaults (overridden by NFL_API_URL / NFL_API_KEY env vars)
+    ├── README.md                       # Tool catalog + Claude Desktop / Claude Code wiring instructions
+    ├── NflApiClient.cs                 # Typed HttpClient wrapping every M1 endpoint; error envelope on failure
+    ├── Configuration/
+    │   └── McpSettings.cs              # ApiBaseUrl, ApiKey, TimeoutSeconds POCO
+    └── Tools/
+        ├── TeamTools.cs                # nfl_list_teams, nfl_get_team, nfl_get_team_by_abbreviation
+        ├── PlayerTools.cs              # nfl_list_players, nfl_get_player, nfl_get_player_stats
+        ├── GameTools.cs                # nfl_list_games, nfl_get_game, nfl_get_game_team_stats, nfl_get_game_player_stats, nfl_get_game_injuries
+        ├── VenueTools.cs               # nfl_list_venues, nfl_get_venue
+        └── StatusTools.cs              # nfl_get_status
 data/                                   # SQLite database directory
 tests/WebScraper.Core.Tests/            # xUnit test project (renamed from tests/WebScraper.Tests)
 ├── WebScraper.Core.Tests.csproj        # Test project — references src/WebScraper.Core/WebScraper.Core.csproj
@@ -453,6 +467,7 @@ dotnet restore
 dotnet build
 dotnet run --project src/WebScraper.Cli              # Run the CLI
 dotnet run --project src/WebScraper.Api              # Run the Web API (http://localhost:5080, Swagger at /swagger)
+dotnet build src/WebScraper.Mcp                       # Build the MCP server (launched on-demand by Claude Desktop / Claude Code)
 ```
 
 ## WebScraper.Api (M1)
@@ -541,6 +556,106 @@ Available at `/swagger` in the Development environment. `AddSwaggerGen` is confi
 - `ApiKey` security scheme pointed at the `X-Api-Key` header.
 - A global security requirement so the "Authorize" button in Swagger UI applies the key to every request.
 - XML doc comments from `WebScraper.Api.xml` (generated by `GenerateDocumentationFile=true`) so `/// <summary>` blocks on controllers and DTOs appear in the UI.
+
+## WebScraper.Mcp (M2)
+
+MCP (Model Context Protocol) server that wraps the M1 Web API and exposes it as
+tools callable by Claude Code, Claude Desktop, or any MCP client. Runs as a
+**stdio** transport: the client (e.g. Claude Desktop) launches the process and
+talks to it over stdin/stdout.
+
+### Running it
+```bash
+dotnet run --project src/WebScraper.Mcp                    # only useful for build verification — stdio expects a client
+NFL_API_URL=http://localhost:5080 NFL_API_KEY=sk_local_xyz dotnet run --project src/WebScraper.Mcp
+```
+In real use you don't invoke it directly — the MCP client launches it. See
+`src/WebScraper.Mcp/README.md` for Claude Desktop / Claude Code config snippets.
+
+### Tool catalog
+All tools are prefixed `nfl_` so they remain unambiguous when multiple MCP
+servers are attached. Each tool returns the raw JSON response from the M1 API,
+so Claude sees the full `Meta` lineage envelope and pagination metadata.
+
+| Tool | Wraps | Notes |
+|------|-------|-------|
+| `nfl_list_teams` | `GET /api/v1/teams` | Paged, optional `conference` filter |
+| `nfl_get_team` | `GET /api/v1/teams/{id}` | By PK |
+| `nfl_get_team_by_abbreviation` | `GET /api/v1/teams/by-abbreviation/{abbr}` | By NFL abbr |
+| `nfl_list_players` | `GET /api/v1/players` | Paged, filters: `teamId`/`teamAbbreviation`/`position` |
+| `nfl_get_player` | `GET /api/v1/players/{id}` | Includes team abbreviation |
+| `nfl_get_player_stats` | `GET /api/v1/players/{id}/stats` | Optional `season` / `week` |
+| `nfl_list_games` | `GET /api/v1/games` | Paged, filters: `season`/`week`/`teamId` |
+| `nfl_get_game` | `GET /api/v1/games/{id}` | Includes teams, venue, quarter scores |
+| `nfl_get_game_team_stats` | `GET /api/v1/games/{id}/team-stats` | Home + away aggregates |
+| `nfl_get_game_player_stats` | `GET /api/v1/games/{id}/player-stats` | Every stat line for a game |
+| `nfl_get_game_injuries` | `GET /api/v1/games/{id}/injuries` | Injury reports |
+| `nfl_list_venues` | `GET /api/v1/venues` | Paged, filters: `state`/`isIndoor` |
+| `nfl_get_venue` | `GET /api/v1/venues/{id}` | By PK |
+| `nfl_get_status` | `GET /api/v1/status` | DB counts + freshness heartbeat |
+
+### Configuration
+Driven by environment variables (passed by the MCP client in its `env` block):
+
+| Var | Required | Default | Purpose |
+|-----|----------|---------|---------|
+| `NFL_API_URL` | recommended | `http://localhost:5080` | Base URL of the M1 API |
+| `NFL_API_KEY` | yes | _empty_ | API key sent via `X-Api-Key` |
+
+`appsettings.json` provides defaults; env vars win. Anything bound to `Mcp:*`
+in config (e.g. `Mcp__TimeoutSeconds`) is also honored.
+
+### Critical implementation detail: stdout is reserved
+With the stdio transport, **stdout is for MCP protocol frames only**. Anything
+the server prints to stdout corrupts the framing and the client breaks with a
+"Unexpected token" error. `Program.cs` therefore:
+1. `ClearProviders()` on the logger.
+2. Adds the console provider with `LogToStandardErrorThreshold = LogLevel.Trace`
+   so every log line routes to stderr.
+
+Errors from the API (401, 404, network timeouts) are caught in `NflApiClient`
+and returned as a small JSON envelope (`{"error":true,"status":...,"reason":...}`)
+so the tool result is always valid JSON and Claude can decide whether to retry,
+ask the user, or surface the error.
+
+### Wiring to Claude Code
+```json
+{
+  "mcpServers": {
+    "nfl": {
+      "command": "dotnet",
+      "args": ["run", "--project", "src/WebScraper.Mcp", "--no-build"],
+      "env": {
+        "NFL_API_URL": "http://localhost:5080",
+        "NFL_API_KEY": "sk_local_..."
+      }
+    }
+  }
+}
+```
+Build once first (`dotnet build src/WebScraper.Mcp`) so `--no-build` works.
+
+### Wiring to Claude Desktop
+Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
+or `%APPDATA%\Claude\claude_desktop_config.json` (Windows). Prefer publishing
+the DLL so the user doesn't need the source tree:
+```bash
+dotnet publish -c Release src/WebScraper.Mcp
+```
+```json
+{
+  "mcpServers": {
+    "nfl": {
+      "command": "dotnet",
+      "args": ["/abs/path/to/src/WebScraper.Mcp/bin/Release/net8.0/WebScraper.Mcp.dll"],
+      "env": {
+        "NFL_API_URL": "https://your-nfl-api.example.com",
+        "NFL_API_KEY": "sk_live_..."
+      }
+    }
+  }
+}
+```
 
 ## CLI Commands
 All `dotnet run` commands below must target the CLI project explicitly: `dotnet run --project src/WebScraper.Cli -- <args>`.
@@ -715,11 +830,15 @@ Main Menu
 - [x] **M1 Phase 8:** `ApiServiceCollectionExtensions` — DI wiring for auth scheme, authz policies, query log queue/writer, Swagger with security definition
 - [x] **M1 Phase 9:** Config — `appsettings.json` (DB, scraper, ApiKeys placeholder, Serilog), `appsettings.Development.json`, `launchSettings.json` (5080/7080)
 - [x] **M1 Phase 10:** CLAUDE.md updated with full M1 documentation
-- [ ] **M2:** SignalR hub for real-time scrape progress broadcasts
-- [ ] **M3:** Blazor Server admin dashboard — JWT auth, health, soft-delete review, ApiQueryLog viewer
-- [ ] **M4:** MCP server host — exposes Core data as tools callable by Claude anywhere
-- [ ] **M5:** Contract tests — recorded fixtures per provider
-- [ ] **M6:** Docker + DigitalOcean App Platform deployment (PostgreSQL); future Azure App Service + MSSQL migration path
+- [x] **M2 Phase 1:** `WebScraper.Mcp.csproj` — console app with the official `ModelContextProtocol` SDK + `Microsoft.Extensions.Hosting` + `Microsoft.Extensions.Http`; added to solution
+- [x] **M2 Phase 2:** `NflApiClient` — typed `HttpClient` wrapper that calls every M1 endpoint and returns the raw JSON body; errors (401/404/network) wrapped in a small `{"error":true,...}` envelope so Claude sees actionable feedback
+- [x] **M2 Phase 3:** Tool classes — `TeamTools`, `PlayerTools`, `GameTools`, `VenueTools`, `StatusTools` (14 MCP tools total, all prefixed `nfl_*` to avoid collisions with other MCP servers)
+- [x] **M2 Phase 4:** `Program.cs` — Generic Host, env-var config (`NFL_API_URL`, `NFL_API_KEY`), `AddMcpServer().WithStdioServerTransport().WithToolsFromAssembly()`, logging to stderr only (stdout reserved for MCP protocol frames)
+- [x] **M2 Phase 5:** README documenting tool list, Claude Code / Claude Desktop wiring, and the stdout-is-protocol guardrail
+- [ ] **M3:** Write endpoints + job queue + SignalR hub (`/hubs/scraper`) for real-time scrape progress broadcasts; outbox pattern with `ScrapeEvent` table + `ScrapeEventRelay`
+- [ ] **M4:** Blazor Server admin dashboard — JWT auth, health, soft-delete review, ApiQueryLog viewer
+- [ ] **M5:** Contract tests — recorded fixtures per provider; Docker + DigitalOcean App Platform deployment (PostgreSQL); future Azure App Service + MSSQL migration path
+- [ ] **M6:** Production polish — scheduled scrapes, cross-provider reconciliation, OpenTelemetry, webhooks, full-text search, backups
 
 ## Adding a New Data Provider
 1. Create a folder: `Services/Scrapers/NewProvider/`
