@@ -36,6 +36,11 @@ public static class ApiServiceCollectionExtensions
         services.AddSingleton<IApiQueryLogQueue>(sp => sp.GetRequiredService<ApiQueryLogQueue>());
         services.AddHostedService<ApiQueryLogWriter>();
 
+        // --- Scrape job queue + background worker (M3 chunk b) ---
+        services.AddSingleton<JobQueue>();
+        services.AddSingleton<IJobQueue>(sp => sp.GetRequiredService<JobQueue>());
+        services.AddHostedService<ScrapeJobWorker>();
+
         // --- Expose HttpContext to services that need claim lookups ---
         services.AddHttpContextAccessor();
 
