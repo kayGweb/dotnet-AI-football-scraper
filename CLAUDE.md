@@ -26,6 +26,7 @@ src/
 │   │   ├── IAuditableEntity.cs         # M0: data lineage interface (DataSource/FetchedAt/RecordId + CreatedAt/UpdatedAt)
 │   │   ├── ISoftDeletable.cs           # M0: soft-delete interface (IsDeleted/DeletedAt/DeletedBy/DeleteReason)
 │   │   ├── ApiQueryLog.cs              # M0: observability log of every API consumer request
+│   │   ├── ApiKey.cs                   # M3: DB-backed API key (KeyId/HashedKey/Scopes/CreatedBy/LastUsedAt/ExpiresAt) — auditable + soft-deletable
 │   │   ├── Team.cs                         # NFL team entity — implements IAuditableEntity + ISoftDeletable
 │   │   ├── Player.cs                       # Player entity (FK -> Team), EspnId field — implements IAuditableEntity + ISoftDeletable
 │   │   ├── Game.cs                         # Game entity (FKs -> HomeTeam, AwayTeam, Venue), quarter scores, ESPN metadata — implements IAuditableEntity + ISoftDeletable
@@ -119,15 +120,27 @@ src/
 │   ├── appsettings.json                # API config: DB, scraper, ApiKeys, Serilog (Console + File sinks)
 │   ├── appsettings.Development.json    # Verbose logging overrides for dev
 │   ├── Auth/
-│   │   ├── ApiKeySettings.cs           # ApiKeyOptions / ApiKeyEntry POCOs (Id, Name, HashedKey, Scopes)
-│   │   ├── ApiKeyAuthenticationHandler.cs # Custom AuthenticationHandler — validates X-Api-Key against SHA-256 hashes, emits scope claims
-│   │   └── AuthorizationPolicies.cs    # Named policy: RequireReadScope (api_key scheme + scope=read)
+│   │   ├── ApiKeySettings.cs           # ApiKeyOptions / ApiKeyEntry POCOs (Id, Name, HashedKey, Scopes) — bootstrap fallback
+│   │   ├── ApiKeyAuthenticationHandler.cs # Custom AuthenticationHandler — DB lookup first, config fallback; fire-and-forget LastUsedAt
+│   │   ├── ApiKeyHasher.cs             # M3: SHA-256 hex + constant-time equals + GenerateRandomKey() helpers
+│   │   ├── AppUser.cs                  # M3: IdentityUser subclass (adds LastLoginAt)
+│   │   ├── AuthDbContext.cs            # M3: IdentityDbContext<AppUser> — separate context, __AuthMigrationsHistory table, Auth_* table prefix
+│   │   ├── AuthorizationPolicies.cs    # Policies: RequireReadScope (API key), RequireAdmin / RequireOperator / RequireViewer (JWT)
+│   │   ├── IdentitySeeder.cs           # M3: ensures Admin/Operator/Viewer roles exist + creates initial admin from config if user table is empty
+│   │   ├── InitialAdminSettings.cs     # M3: Email/Password POCO bound to "InitialAdmin" config section
+│   │   ├── JwtSettings.cs              # M3: Issuer/Audience/SigningKey/AccessTokenMinutes POCO
+│   │   ├── JwtTokenService.cs          # M3: issues JWTs with role claims (no extra DB round trip per request)
+│   │   └── Roles.cs                    # M3: Admin/Operator/Viewer constants + All[] for seeding
 │   ├── Controllers/
 │   │   ├── TeamsController.cs          # GET /api/v1/teams (paged + ?conference=), /{id}, /by-abbreviation/{abbr}
 │   │   ├── PlayersController.cs        # GET /api/v1/players (paged + filters), /{id}, /{id}/stats
 │   │   ├── GamesController.cs          # GET /api/v1/games (paged + filters), /{id}, /{id}/team-stats, /player-stats, /injuries
 │   │   ├── VenuesController.cs         # GET /api/v1/venues (paged + filters), /{id}
-│   │   └── StatusController.cs         # GET /api/v1/status — record counts + latest update timestamp
+│   │   ├── StatusController.cs         # GET /api/v1/status — record counts + latest update timestamp
+│   │   ├── AuthController.cs           # M3: POST /api/v1/auth/login, GET /me (any role), POST /users + GET /users (Admin)
+│   │   ├── ApiKeysController.cs        # M3: GET/POST/DELETE /api/v1/api-keys (Admin); plaintext returned ONCE on create
+│   │   ├── DeletedItemsController.cs   # M3: GET /api/v1/deleted-items?entityType=, POST /{entityType}/{id}/restore (Admin)
+│   │   └── PushController.cs           # M3: POST /api/v1/push (Admin) — wraps existing DatabasePushService
 │   ├── Dtos/
 │   │   ├── MetaDto.cs                  # Data lineage envelope (Source, FetchedAt, SourceRecordId, CreatedAt, UpdatedAt)
 │   │   ├── TeamDto.cs                  # Team + nested TeamSummaryDto
@@ -137,7 +150,12 @@ src/
 │   │   ├── PlayerGameStatsDto.cs       # 10 nested category DTOs (passing, rushing, receiving, ...)
 │   │   ├── TeamGameStatsDto.cs         # Flat team per-game aggregates
 │   │   ├── InjuryDto.cs                # Injury with meta
-│   │   └── StatusDto.cs                # 8 counts + LatestUpdate + ApiVersion
+│   │   ├── StatusDto.cs                # 8 counts + LatestUpdate + ApiVersion
+│   │   ├── Auth/
+│   │   │   └── AuthDtos.cs             # M3: LoginRequest/Response, RegisterUserRequest, UserDto
+│   │   └── Admin/
+│   │       ├── ApiKeyDtos.cs           # M3: CreateApiKeyRequest, RevokeApiKeyRequest, ApiKeyCreatedDto, ApiKeyDto
+│   │       └── DeletedItemDto.cs       # M3: EntityType/Id/Label/DeletedAt/DeletedBy/DeleteReason
 │   ├── Mapping/
 │   │   └── EntityMappings.cs           # Hand-rolled entity → DTO extension methods (no AutoMapper)
 │   ├── Middleware/
@@ -147,9 +165,10 @@ src/
 │   ├── Services/
 │   │   ├── IApiQueryLogQueue.cs        # Write-only facade over Channel<ApiQueryLog>
 │   │   ├── ApiQueryLogQueue.cs         # Bounded channel (capacity 10k, DropOldest) — hot path never blocks
-│   │   └── ApiQueryLogWriter.cs        # BackgroundService — batch (100) + interval (2s) flush to ApiQueryLogs
+│   │   ├── ApiQueryLogWriter.cs        # BackgroundService — batch (100) + interval (2s) flush to ApiQueryLogs
+│   │   └── ApiKeyManagementService.cs  # M3: create (returns plaintext once) / list / get / revoke (soft delete)
 │   ├── Extensions/
-│   │   └── ApiServiceCollectionExtensions.cs # DI: auth scheme, authz policies, queue, Swagger + security requirement
+│   │   └── ApiServiceCollectionExtensions.cs # DI: API key + JWT dual scheme, Identity, query log queue, Swagger (ApiKey + Bearer)
 │   └── Properties/
 │       └── launchSettings.json         # dev profiles (http://localhost:5080, https://localhost:7080)
 └── WebScraper.Mcp/                     # M2: MCP server (stdio) — exposes the M1 API as tools for Claude
@@ -657,6 +676,105 @@ dotnet publish -c Release src/WebScraper.Mcp
 }
 ```
 
+## WebScraper.Api admin layer (M3 chunk a)
+
+M3 chunk (a) layers JWT + ASP.NET Core Identity on top of the M1 API so the dashboard
+(M4) and write endpoints (M3 chunk b/c) have a real auth story. Read endpoints still
+work with `X-Api-Key` exactly as before — nothing about the M1 surface changed.
+
+### Two auth schemes coexist
+| Scheme | Header | Default policies | Typical caller |
+|--------|--------|------------------|----------------|
+| `ApiKey` (default) | `X-Api-Key: <plaintext>` | `RequireReadScope` | MCP server, CI jobs, Claude skills |
+| `Bearer` (JWT) | `Authorization: Bearer <jwt>` | `RequireAdmin` / `RequireOperator` / `RequireViewer` | Admin dashboard users |
+
+The auth handler is wired with the API key scheme as the default; JWT layers on top via
+policies that explicitly pin `AddAuthenticationSchemes(JwtBearerDefaults.AuthenticationScheme)`.
+That means an API key holder can't accidentally satisfy `RequireAdmin` and vice versa.
+
+### Identity tables live alongside the domain DB
+`AuthDbContext : IdentityDbContext<AppUser>` shares the same connection string as
+`AppDbContext` but uses:
+- A separate migration history table (`__AuthMigrationsHistory`) so EF Core migrations
+  for the two contexts don't collide.
+- An `Auth_*` table prefix (e.g. `Auth_Users`, `Auth_Roles`) so admins can tell the
+  Identity tables apart from the NFL data tables when poking at the DB directly.
+
+This keeps the Core library free of an Identity dependency — the CLI doesn't ship any
+ASP.NET Core Identity code.
+
+### DB-backed API keys
+`ApiKey` (in Core, alongside `ApiQueryLog`) is the canonical key store. The auth handler
+checks the DB first, then falls back to the legacy `ApiKeys.Keys[]` list in
+`appsettings.json` so a fresh install isn't locked out before the first admin user logs
+in and creates a key. Once you've created a DB key, you can empty out the config list.
+
+**Plaintext is shown exactly once** — the `POST /api/v1/api-keys` response is the only
+chance to capture it. Only the SHA-256 hex digest is persisted. Revocation is a soft
+delete so `ApiQueryLog` joins keep working historically.
+
+### Roles
+| Role | Granted by | Typical use |
+|------|-----------|-------------|
+| `Admin` | Seeded for initial user; assignable via `POST /api/v1/auth/users` | User management, key management, soft-delete restore, push |
+| `Operator` | Assignable | Trigger scrapes, view jobs (M3 chunk b) |
+| `Viewer` | Assignable | Read-only dashboard |
+
+Roles are seeded on startup by `IdentitySeeder`; the initial admin is only created when
+the user table is empty and `InitialAdmin:Email` + `InitialAdmin:Password` are both set
+in config.
+
+### New endpoints
+| Method | Route | Policy | Purpose |
+|--------|-------|--------|---------|
+| POST | `/api/v1/auth/login` | anonymous | Exchange email + password for a JWT |
+| GET | `/api/v1/auth/me` | `RequireViewer` | Calling user's profile + roles |
+| POST | `/api/v1/auth/users` | `RequireAdmin` | Create a new user with a specific role |
+| GET | `/api/v1/auth/users` | `RequireAdmin` | List all users |
+| GET | `/api/v1/api-keys` | `RequireAdmin` | List keys (optional `?includeRevoked=true`) |
+| GET | `/api/v1/api-keys/{keyId}` | `RequireAdmin` | Get one key (hash never returned) |
+| POST | `/api/v1/api-keys` | `RequireAdmin` | Create — returns plaintext once |
+| DELETE | `/api/v1/api-keys/{keyId}` | `RequireAdmin` | Revoke (soft delete) |
+| GET | `/api/v1/deleted-items?entityType=` | `RequireAdmin` | List soft-deleted rows across all 9 entity types |
+| POST | `/api/v1/deleted-items/{entityType}/{id}/restore` | `RequireAdmin` | Restore one soft-deleted row |
+| POST | `/api/v1/push` | `RequireAdmin` | Wraps existing `DatabasePushService` (SQLite → PostgreSQL) |
+
+### Config additions
+```json
+{
+  "Jwt": {
+    "Issuer": "WebScraper.Api",
+    "Audience": "WebScraper.Clients",
+    "SigningKey": "REPLACE_WITH_AT_LEAST_32_BYTES_OF_RANDOM_KEY_MATERIAL",
+    "AccessTokenMinutes": 60
+  },
+  "InitialAdmin": {
+    "Email": "admin@example.com",
+    "Password": "ChangeMeAfterFirstLogin123!"
+  }
+}
+```
+Both blocks belong in `appsettings.Local.json` (git-ignored) or environment variables —
+never check the signing key or password into source control. Generate a signing key
+with: `openssl rand -base64 48`.
+
+### Pending migrations
+Chunk (a) introduces two new sets of schema changes that need EF Core migrations:
+
+```bash
+# 1) New ApiKey table on the domain context
+dotnet ef migrations add ApiKeysTable \
+    --project src/WebScraper.Core \
+    --startup-project src/WebScraper.Cli
+
+# 2) Initial Identity schema on the auth context
+dotnet ef migrations add InitialIdentity \
+    --project src/WebScraper.Api \
+    --context AuthDbContext
+```
+Both are applied automatically on API startup via `db.Database.MigrateAsync()` /
+`authDb.Database.MigrateAsync()`.
+
 ## CLI Commands
 All `dotnet run` commands below must target the CLI project explicitly: `dotnet run --project src/WebScraper.Cli -- <args>`.
 
@@ -835,7 +953,17 @@ Main Menu
 - [x] **M2 Phase 3:** Tool classes — `TeamTools`, `PlayerTools`, `GameTools`, `VenueTools`, `StatusTools` (14 MCP tools total, all prefixed `nfl_*` to avoid collisions with other MCP servers)
 - [x] **M2 Phase 4:** `Program.cs` — Generic Host, env-var config (`NFL_API_URL`, `NFL_API_KEY`), `AddMcpServer().WithStdioServerTransport().WithToolsFromAssembly()`, logging to stderr only (stdout reserved for MCP protocol frames)
 - [x] **M2 Phase 5:** README documenting tool list, Claude Code / Claude Desktop wiring, and the stdout-is-protocol guardrail
-- [ ] **M3:** Write endpoints + job queue + SignalR hub (`/hubs/scraper`) for real-time scrape progress broadcasts; outbox pattern with `ScrapeEvent` table + `ScrapeEventRelay`
+- [x] **M3 chunk (a) Phase 1:** Identity infrastructure — `AppUser : IdentityUser`, `AuthDbContext : IdentityDbContext<AppUser>` (separate context, `__AuthMigrationsHistory` table, `Auth_*` table prefix), shared DB connection with domain `AppDbContext`. NuGet: `Microsoft.AspNetCore.Identity.EntityFrameworkCore 8.0.11` + `Microsoft.AspNetCore.Authentication.JwtBearer 8.0.11`
+- [x] **M3 chunk (a) Phase 2:** JWT auth — `JwtSettings` (Issuer/Audience/SigningKey/AccessTokenMinutes), `JwtTokenService` issues tokens with role claims, dual-scheme auth pipeline (API key default + JWT bearer layered via policy)
+- [x] **M3 chunk (a) Phase 3:** Roles + policies — `Admin`/`Operator`/`Viewer` constants in `Roles`, policies `RequireAdmin` (JWT+Admin), `RequireOperator` (JWT+Admin/Operator), `RequireViewer` (JWT+any role), existing `RequireReadScope` (API key) kept intact
+- [x] **M3 chunk (a) Phase 4:** DB-backed API keys — `ApiKey` entity in Core (`KeyId`, `HashedKey`, `Scopes`, `CreatedBy`, `LastUsedAt`, `ExpiresAt` + auditable + soft delete), `DbSet<ApiKey>` in `AppDbContext` with unique index on `KeyId` and lookup index on `HashedKey`, `ApiKeyHasher` (SHA-256 hex + constant-time equals + random key generator), `ApiKeyManagementService` (create/list/get/revoke), `ApiKeyAuthenticationHandler` now does DB lookup first then config fallback, fire-and-forget `LastUsedAt` update via `ExecuteUpdateAsync`
+- [x] **M3 chunk (a) Phase 5:** Identity seeder — `IdentitySeeder` creates `Admin`/`Operator`/`Viewer` roles on startup; creates initial admin from `InitialAdmin:Email`/`Password` config only when user table is empty (no overwrite on subsequent boots)
+- [x] **M3 chunk (a) Phase 6:** Controllers — `AuthController` (`POST /api/v1/auth/login`, `GET /me`, `POST /users` admin, `GET /users` admin), `ApiKeysController` (`GET/POST/DELETE /api/v1/api-keys`, plaintext returned ONCE on create), `DeletedItemsController` (`GET /api/v1/deleted-items?entityType=`, `POST /{entityType}/{id}/restore` — uses `ExecuteUpdateAsync` to clear `IsDeleted`+`DeletedAt`+`DeletedBy`+`DeleteReason`), `PushController` (`POST /api/v1/push` wraps the existing `DatabasePushService`)
+- [x] **M3 chunk (a) Phase 7:** DI wiring + startup — `ApiServiceCollectionExtensions` adds `AddIdentityInfrastructure` + `AddApiAuthentication`, Swagger gains a `Bearer` security definition alongside `ApiKey`, `Program.cs` migrates `AuthDbContext` and runs `IdentitySeeder` after `AppDbContext` migrate
+- [x] **M3 chunk (a) Phase 8:** Config — `Jwt` section (placeholder signing key, must be overridden in `appsettings.Local.json`), `InitialAdmin` section (empty by default), `ApiKeys` comment updated to clarify it's a bootstrap fallback
+- [ ] **M3 chunk (a) Phase 9 (pending):** Generate EF Core migrations — `dotnet ef migrations add ApiKeysTable --project src/WebScraper.Core --startup-project src/WebScraper.Cli` AND `dotnet ef migrations add InitialIdentity --project src/WebScraper.Api --context AuthDbContext`
+- [ ] **M3 chunk (b):** Job queue (`IJobQueue`, `ScrapeJob` entity, `ScrapeJobWorker : BackgroundService`) + write endpoints (`POST /api/v1/scrape/{type}` → 202 + jobId, `GET /api/v1/jobs`, `GET /api/v1/jobs/{id}`) + rate limiter partitioned by API key
+- [ ] **M3 chunk (c):** SignalR hub (`/hubs/scraper`) + `ScrapeEvent` outbox + `ScrapeEventRelay : BackgroundService` + replay via `GET /api/v1/events?since=`
 - [ ] **M4:** Blazor Server admin dashboard — JWT auth, health, soft-delete review, ApiQueryLog viewer
 - [ ] **M5:** Contract tests — recorded fixtures per provider; Docker + DigitalOcean App Platform deployment (PostgreSQL); future Azure App Service + MSSQL migration path
 - [ ] **M6:** Production polish — scheduled scrapes, cross-provider reconciliation, OpenTelemetry, webhooks, full-text search, backups

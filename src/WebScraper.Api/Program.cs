@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Serilog;
+using WebScraper.Api.Auth;
 using WebScraper.Api.Extensions;
 using WebScraper.Api.Middleware;
 using WebScraper.Data;
@@ -59,6 +60,14 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await db.Database.MigrateAsync();
+
+    // M3: Identity tables (separate context, separate migration history)
+    var authDb = scope.ServiceProvider.GetRequiredService<AuthDbContext>();
+    await authDb.Database.MigrateAsync();
+
+    // Seed roles + initial admin (idempotent)
+    var seeder = scope.ServiceProvider.GetRequiredService<IdentitySeeder>();
+    await seeder.SeedAsync();
 }
 
 // --- Middleware pipeline ---

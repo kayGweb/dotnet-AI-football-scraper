@@ -24,6 +24,12 @@ public class AppDbContext : DbContext
     /// </summary>
     public DbSet<ApiQueryLog> ApiQueryLogs => Set<ApiQueryLog>();
 
+    /// <summary>
+    /// Database-backed API keys (M3). Replaces the file-based ApiKeyOptions list.
+    /// Admin endpoints under /api/v1/api-keys manage lifecycle.
+    /// </summary>
+    public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         // Game has two FKs to Team — must use Restrict to avoid cascade cycles
@@ -130,6 +136,14 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<ApiQueryLog>()
             .HasIndex(q => new { q.ApiKeyId, q.Timestamp });
 
+        // ApiKey — unique index on KeyId so the auth handler can do a single point lookup
+        modelBuilder.Entity<ApiKey>()
+            .HasIndex(k => k.KeyId)
+            .IsUnique();
+        // Lookup-by-hash on the hot auth path
+        modelBuilder.Entity<ApiKey>()
+            .HasIndex(k => k.HashedKey);
+
         // Global soft-delete query filters: any entity implementing ISoftDeletable is
         // automatically hidden from normal queries. Admin code uses IgnoreQueryFilters()
         // to see deleted rows in the review UI.
@@ -141,6 +155,7 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<TeamGameStats>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<Injury>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<ApiLink>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<ApiKey>().HasQueryFilter(e => !e.IsDeleted);
 
         // Ensure all DateTime properties are stored as UTC for PostgreSQL compatibility
         var utcConverter = new ValueConverter<DateTime, DateTime>(
