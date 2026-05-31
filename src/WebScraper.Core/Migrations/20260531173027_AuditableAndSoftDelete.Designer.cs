@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using WebScraper.Data;
 
@@ -10,80 +11,14 @@ using WebScraper.Data;
 namespace WebScraper.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260531173027_AuditableAndSoftDelete")]
+    partial class AuditableAndSoftDelete
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "8.0.11");
-
-            modelBuilder.Entity("WebScraper.Models.ApiKey", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("CreatedBy")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("DataSource")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("DataSourceFetchedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("DataSourceRecordId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("DeleteReason")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("DeletedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("DeletedBy")
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("ExpiresAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("HashedKey")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("KeyId")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime?>("LastUsedAt")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Scopes")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("HashedKey");
-
-                    b.HasIndex("KeyId")
-                        .IsUnique();
-
-                    b.ToTable("ApiKeys");
-                });
 
             modelBuilder.Entity("WebScraper.Models.ApiLink", b =>
                 {

@@ -62,6 +62,12 @@ try
     // Parse CLI arguments and dispatch
     return await RunCommandAsync(host, args, display);
 }
+catch (HostAbortedException)
+{
+    // EF Core design-time tools (dotnet ef migrations add, etc.) build this host
+    // then abort it on purpose — not an application failure.
+    throw;
+}
 catch (Exception ex)
 {
     Log.Fatal(ex, "Application terminated unexpectedly");

@@ -28,6 +28,11 @@
 
     <!-- Blazor admin dashboard (M4) -->
     <PackageReference Include="MudBlazor" Version="6.12.0" />
+    <!-- EF Core Tools (startup project for AuthDbContext migrations) -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.11">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
 
     <!-- Logging -->
     <PackageReference Include="Serilog.AspNetCore" Version="8.0.3" />
@@ -36,13 +41,8 @@
     <PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
   </ItemGroup>
 
+  <!-- appsettings.json + appsettings.Development.json are included automatically by Sdk.Web -->
   <ItemGroup>
-    <Content Include="appsettings.json">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="appsettings.Development.json" Condition="Exists('appsettings.Development.json')">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
     <Content Include="appsettings.Local.json" Condition="Exists('appsettings.Local.json')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
