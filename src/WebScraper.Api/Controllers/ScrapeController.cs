@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
@@ -115,6 +116,22 @@ public class ScrapeController : ControllerBase
         };
 
         _db.ScrapeJobs.Add(job);
+        await _db.SaveChangesAsync();
+
+        _db.ScrapeEvents.Add(new ScrapeEvent
+        {
+            JobId = job.Id,
+            EventType = ScrapeEventType.JobQueued,
+            Timestamp = DateTime.UtcNow,
+            Payload = JsonSerializer.Serialize(new
+            {
+                type = job.Type.ToString(),
+                source = job.Source,
+                season = job.Season,
+                week = job.Week,
+                requestedBy = job.RequestedBy,
+            }),
+        });
         await _db.SaveChangesAsync();
 
         _queue.TryEnqueue(job.Id);

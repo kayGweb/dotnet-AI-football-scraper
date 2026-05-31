@@ -4,8 +4,10 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using MudBlazor.Services;
 using WebScraper.Api.Auth;
 using WebScraper.Api.Services;
+using WebScraper.Data;
 
 namespace WebScraper.Api.Extensions;
 
@@ -40,6 +42,15 @@ public static class ApiServiceCollectionExtensions
         services.AddSingleton<JobQueue>();
         services.AddSingleton<IJobQueue>(sp => sp.GetRequiredService<JobQueue>());
         services.AddHostedService<ScrapeJobWorker>();
+
+        // --- SignalR hub + outbox relay (M3 chunk c) ---
+        services.AddSignalR();
+        services.AddHostedService<ScrapeEventRelay>();
+
+        // --- Blazor admin dashboard (M4) ---
+        services.AddRazorComponents().AddInteractiveServerComponents();
+        services.AddMudServices();
+        services.AddCascadingAuthenticationState();
 
         // --- Expose HttpContext to services that need claim lookups ---
         services.AddHttpContextAccessor();
@@ -171,6 +182,16 @@ public static class ApiServiceCollectionExtensions
                 options.DefaultAuthenticateScheme = ApiKeyAuthenticationOptions.SchemeName;
                 options.DefaultChallengeScheme = ApiKeyAuthenticationOptions.SchemeName;
             })
+            .AddCookie(AuthorizationPolicies.CookieSchemeName, options =>
+            {
+                options.LoginPath = "/admin/login";
+                options.AccessDeniedPath = "/admin/login";
+                options.Cookie.Name = "WebScraper.Admin";
+                options.Cookie.HttpOnly = true;
+                options.Cookie.SameSite = SameSiteMode.Strict;
+                options.ExpireTimeSpan = TimeSpan.FromHours(8);
+                options.SlidingExpiration = true;
+            })
             .AddScheme<ApiKeyAuthenticationOptions, ApiKeyAuthenticationHandler>(
                 ApiKeyAuthenticationOptions.SchemeName, _ => { })
             .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, options =>
@@ -189,6 +210,23 @@ public static class ApiServiceCollectionExtensions
                         ? new SymmetricSecurityKey(Encoding.UTF8.GetBytes("dev-placeholder-key-replace-in-config-32-chars!"))
                         : new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.SigningKey)),
                     ClockSkew = TimeSpan.FromMinutes(1),
+                };
+
+                // SignalR WebSocket connections can't set Authorization headers from the
+                // browser — accept the JWT via the standard ?access_token=… query string
+                // for any request targeting /hubs/*.
+                options.Events = new Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerEvents
+                {
+                    OnMessageReceived = context =>
+                    {
+                        var accessToken = context.Request.Query["access_token"];
+                        var path = context.HttpContext.Request.Path;
+                        if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+                        {
+                            context.Token = accessToken;
+                        }
+                        return Task.CompletedTask;
+                    }
                 };
             });
 

@@ -36,6 +36,13 @@ public class AppDbContext : DbContext
     /// </summary>
     public DbSet<ScrapeJob> ScrapeJobs => Set<ScrapeJob>();
 
+    /// <summary>
+    /// Outbox of scrape lifecycle events (M3 chunk c). Written transactionally with
+    /// ScrapeJob state changes; the ScrapeEventRelay broadcasts them via SignalR and
+    /// the /api/v1/events?since= endpoint replays missed events for reconnecting clients.
+    /// </summary>
+    public DbSet<ScrapeEvent> ScrapeEvents => Set<ScrapeEvent>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         // Game has two FKs to Team — must use Restrict to avoid cascade cycles
@@ -153,6 +160,10 @@ public class AppDbContext : DbContext
         // ScrapeJob — index on Status + CreatedAt for the worker's startup recovery query
         modelBuilder.Entity<ScrapeJob>()
             .HasIndex(j => new { j.Status, j.CreatedAt });
+
+        // ScrapeEvent — JobId index for per-job timelines; the relay polls by Id (PK) directly
+        modelBuilder.Entity<ScrapeEvent>()
+            .HasIndex(e => e.JobId);
 
         // Global soft-delete query filters: any entity implementing ISoftDeletable is
         // automatically hidden from normal queries. Admin code uses IgnoreQueryFilters()

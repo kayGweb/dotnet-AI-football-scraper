@@ -1,0 +1,134 @@
+@page "/admin/jobs"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@using Microsoft.EntityFrameworkCore
+@using WebScraper.Data
+@using WebScraper.Models
+@inject IServiceScopeFactory ScopeFactory
+@implements IDisposable
+
+<MudText Typo="Typo.h4" Class="mb-4">Scrape Jobs</MudText>
+
+<MudGrid Class="mb-4">
+    <MudItem xs="12" sm="4">
+        <MudSelect T="string" Label="Status Filter" Value="_statusFilter" ValueChanged="OnStatusFilterChanged"
+                   Variant="Variant.Outlined" Clearable="true">
+            <MudSelectItem Value="@("Queued")">Queued</MudSelectItem>
+            <MudSelectItem Value="@("Running")">Running</MudSelectItem>
+            <MudSelectItem Value="@("Succeeded")">Succeeded</MudSelectItem>
+            <MudSelectItem Value="@("Failed")">Failed</MudSelectItem>
+        </MudSelect>
+    </MudItem>
+    <MudItem xs="12" sm="4" Class="d-flex align-end">
+        <MudButton Variant="Variant.Outlined" Color="Color.Primary" OnClick="RefreshAsync"
+                   StartIcon="@Icons.Material.Filled.Refresh">Refresh</MudButton>
+    </MudItem>
+</MudGrid>
+
+<MudTable Items="_jobs" Dense="true" Hover="true" Loading="_loading" Striped="true">
+    <HeaderContent>
+        <MudTh>ID</MudTh>
+        <MudTh>Type</MudTh>
+        <MudTh>Source</MudTh>
+        <MudTh>Season</MudTh>
+        <MudTh>Week</MudTh>
+        <MudTh>Status</MudTh>
+        <MudTh>Records</MudTh>
+        <MudTh>Failed</MudTh>
+        <MudTh>Created</MudTh>
+        <MudTh>Duration</MudTh>
+        <MudTh>Requested By</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd>@context.Id</MudTd>
+        <MudTd>@context.Type</MudTd>
+        <MudTd>@context.Source</MudTd>
+        <MudTd>@(context.Season?.ToString() ?? "—")</MudTd>
+        <MudTd>@(context.Week?.ToString() ?? "—")</MudTd>
+        <MudTd>
+            <MudChip T="string" Size="Size.Small" Color="@StatusColor(context.Status)">
+                @context.Status
+            </MudChip>
+        </MudTd>
+        <MudTd>@context.RecordsProcessed</MudTd>
+        <MudTd>@context.RecordsFailed</MudTd>
+        <MudTd>@context.CreatedAt.ToString("g")</MudTd>
+        <MudTd>@FormatDuration(context)</MudTd>
+        <MudTd>@(context.RequestedBy ?? "—")</MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText>No jobs found.</MudText>
+    </NoRecordsContent>
+</MudTable>
+
+@code {
+    private List<ScrapeJob> _jobs = new();
+    private bool _loading = true;
+    private string? _statusFilter;
+    private Timer? _refreshTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAsync();
+        _refreshTimer = new Timer(async _ =>
+        {
+            await InvokeAsync(async () =>
+            {
+                await RefreshAsync();
+                StateHasChanged();
+            });
+        }, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+    }
+
+    private async Task OnStatusFilterChanged(string? value)
+    {
+        _statusFilter = value;
+        await RefreshAsync();
+    }
+
+    private async Task RefreshAsync()
+    {
+        _loading = true;
+        using var scope = ScopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var query = db.ScrapeJobs.AsNoTracking().AsQueryable();
+
+        if (!string.IsNullOrEmpty(_statusFilter) &&
+            Enum.TryParse<ScrapeJobStatus>(_statusFilter, out var status))
+        {
+            query = query.Where(j => j.Status == status);
+        }
+
+        _jobs = await query
+            .OrderByDescending(j => j.CreatedAt)
+            .Take(50)
+            .ToListAsync();
+
+        _loading = false;
+    }
+
+    private static string FormatDuration(ScrapeJob job)
+    {
+        if (job.StartedAt is null) return "—";
+        var end = job.CompletedAt ?? DateTime.UtcNow;
+        var span = end - job.StartedAt.Value;
+        return span.TotalMinutes >= 1
+            ? $"{span.Minutes}m {span.Seconds}s"
+            : $"{span.TotalSeconds:F0}s";
+    }
+
+    private static Color StatusColor(ScrapeJobStatus status) => status switch
+    {
+        ScrapeJobStatus.Queued => Color.Default,
+        ScrapeJobStatus.Running => Color.Info,
+        ScrapeJobStatus.Succeeded => Color.Success,
+        ScrapeJobStatus.Failed => Color.Error,
+        _ => Color.Default,
+    };
+
+    public void Dispose()
+    {
+        _refreshTimer?.Dispose();
+    }
+}

@@ -1,0 +1,160 @@
+@page "/admin/api-usage"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@using Microsoft.EntityFrameworkCore
+@using WebScraper.Data
+@inject IServiceScopeFactory ScopeFactory
+
+<MudText Typo="Typo.h4" Class="mb-4">API Usage</MudText>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" />
+}
+else
+{
+    <MudGrid>
+        <MudItem xs="12" md="6">
+            <MudCard>
+                <MudCardHeader>
+                    <MudText Typo="Typo.h6">Requests per Day (Last 7 Days)</MudText>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudChart ChartType="ChartType.Bar" ChartSeries="@_dailySeries"
+                              XAxisLabels="@_dailyLabels" Width="100%" Height="300px" />
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudCard>
+                <MudCardHeader>
+                    <MudText Typo="Typo.h6">Top Endpoints</MudText>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudSimpleTable Dense="true" Hover="true">
+                        <thead>
+                            <tr>
+                                <th>Path</th>
+                                <th>Calls</th>
+                                <th>Avg Latency (ms)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var ep in _topEndpoints)
+                            {
+                                <tr>
+                                    <td>@ep.Path</td>
+                                    <td>@ep.Count</td>
+                                    <td>@ep.AvgMs.ToString("F0")</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudCard>
+                <MudCardHeader>
+                    <MudText Typo="Typo.h6">Response Codes</MudText>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudChart ChartType="ChartType.Donut" InputData="@_statusData"
+                              InputLabels="@_statusLabels" Width="100%" Height="300px" />
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudCard>
+                <MudCardHeader>
+                    <MudText Typo="Typo.h6">Top API Key Consumers</MudText>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudSimpleTable Dense="true" Hover="true">
+                        <thead>
+                            <tr>
+                                <th>Key Name</th>
+                                <th>Calls (7d)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var c in _topConsumers)
+                            {
+                                <tr>
+                                    <td>@(c.Name ?? "Anonymous")</td>
+                                    <td>@c.Count</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </MudSimpleTable>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    private record EndpointStat(string Path, int Count, double AvgMs);
+    private record ConsumerStat(string? Name, int Count);
+
+    private bool _loading = true;
+    private List<ChartSeries> _dailySeries = new();
+    private string[] _dailyLabels = Array.Empty<string>();
+    private List<EndpointStat> _topEndpoints = new();
+    private double[] _statusData = Array.Empty<double>();
+    private string[] _statusLabels = Array.Empty<string>();
+    private List<ConsumerStat> _topConsumers = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var scope = ScopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var cutoff = DateTime.UtcNow.AddDays(-7);
+
+        var logs = await db.ApiQueryLogs
+            .Where(q => q.Timestamp >= cutoff)
+            .ToListAsync();
+
+        // Daily counts
+        var daily = logs
+            .GroupBy(q => q.Timestamp.Date)
+            .OrderBy(g => g.Key)
+            .ToList();
+
+        _dailyLabels = daily.Select(g => g.Key.ToString("MMM dd")).ToArray();
+        _dailySeries = new List<ChartSeries>
+        {
+            new() { Name = "Requests", Data = daily.Select(g => (double)g.Count()).ToArray() }
+        };
+
+        // Top endpoints
+        _topEndpoints = logs
+            .GroupBy(q => q.Path)
+            .OrderByDescending(g => g.Count())
+            .Take(10)
+            .Select(g => new EndpointStat(g.Key, g.Count(), g.Average(q => q.DurationMs)))
+            .ToList();
+
+        // Status codes
+        var statusGroups = logs
+            .GroupBy(q => q.StatusCode / 100)
+            .OrderBy(g => g.Key)
+            .ToList();
+
+        _statusLabels = statusGroups.Select(g => $"{g.Key}xx").ToArray();
+        _statusData = statusGroups.Select(g => (double)g.Count()).ToArray();
+
+        // Top consumers
+        _topConsumers = logs
+            .GroupBy(q => q.ApiKeyName ?? "Anonymous")
+            .OrderByDescending(g => g.Count())
+            .Take(5)
+            .Select(g => new ConsumerStat(g.Key, g.Count()))
+            .ToList();
+
+        _loading = false;
+    }
+}

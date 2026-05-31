@@ -1,0 +1,82 @@
+@using Microsoft.AspNetCore.Identity
+@using WebScraper.Api.Auth
+@inject IServiceScopeFactory ScopeFactory
+
+<MudDialog>
+    <DialogContent>
+        <MudTextField @bind-Value="_email" Label="Email" InputType="InputType.Email"
+                      Variant="Variant.Outlined" Class="mb-3" Required="true" />
+        <MudTextField @bind-Value="_password" Label="Password" InputType="InputType.Password"
+                      Variant="Variant.Outlined" Class="mb-3" Required="true" />
+        <MudSelect T="string" @bind-Value="_role" Label="Role" Variant="Variant.Outlined">
+            <MudSelectItem Value="@Roles.Admin">Admin</MudSelectItem>
+            <MudSelectItem Value="@Roles.Operator">Operator</MudSelectItem>
+            <MudSelectItem Value="@Roles.Viewer">Viewer</MudSelectItem>
+        </MudSelect>
+
+        @if (!string.IsNullOrEmpty(_error))
+        {
+            <MudAlert Severity="Severity.Error" Class="mt-3" Dense="true">@_error</MudAlert>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="CreateAsync" Disabled="_creating">
+            @(_creating ? "Creating..." : "Create")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    private string _email = string.Empty;
+    private string _password = string.Empty;
+    private string _role = Roles.Viewer;
+    private string? _error;
+    private bool _creating;
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task CreateAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_email) || string.IsNullOrWhiteSpace(_password))
+        {
+            _error = "Email and password are required.";
+            return;
+        }
+
+        _creating = true;
+        _error = null;
+
+        using var scope = ScopeFactory.CreateScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
+
+        var user = new AppUser
+        {
+            UserName = _email,
+            Email = _email,
+            EmailConfirmed = true,
+        };
+
+        var result = await userManager.CreateAsync(user, _password);
+        if (!result.Succeeded)
+        {
+            _error = string.Join("; ", result.Errors.Select(e => e.Description));
+            _creating = false;
+            return;
+        }
+
+        var roleResult = await userManager.AddToRoleAsync(user, _role);
+        if (!roleResult.Succeeded)
+        {
+            await userManager.DeleteAsync(user);
+            _error = string.Join("; ", roleResult.Errors.Select(e => e.Description));
+            _creating = false;
+            return;
+        }
+
+        _creating = false;
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+}

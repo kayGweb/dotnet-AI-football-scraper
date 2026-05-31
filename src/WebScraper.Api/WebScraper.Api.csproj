@@ -26,6 +26,8 @@
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="8.0.11" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.11" />
 
+    <!-- Blazor admin dashboard (M4) -->
+    <PackageReference Include="MudBlazor" Version="6.12.0" />
     <!-- EF Core Tools (startup project for AuthDbContext migrations) -->
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.11">
       <PrivateAssets>all</PrivateAssets>

@@ -22,6 +22,8 @@ public static class AuthorizationPolicies
     public const string RequireOperator = "RequireOperator";
     public const string RequireViewer = "RequireViewer";
 
+    public const string CookieSchemeName = "AdminCookie";
+
     public static void AddWebScraperApiAuthorization(this AuthorizationOptions options)
     {
         // API key with scope=read — covers all M1 read endpoints
@@ -52,6 +54,13 @@ public static class AuthorizationPolicies
         options.AddPolicy(RequireViewer, policy =>
         {
             policy.AddAuthenticationSchemes(JwtBearerDefaults.AuthenticationScheme);
+            policy.RequireAuthenticatedUser();
+            policy.RequireRole(Roles.Admin, Roles.Operator, Roles.Viewer);
+        });
+        // Cookie + any dashboard role — Blazor admin pages
+        options.AddPolicy("DashboardAccess", policy =>
+        {
+            policy.AddAuthenticationSchemes(CookieSchemeName);
             policy.RequireAuthenticatedUser();
             policy.RequireRole(Roles.Admin, Roles.Operator, Roles.Viewer);
         });

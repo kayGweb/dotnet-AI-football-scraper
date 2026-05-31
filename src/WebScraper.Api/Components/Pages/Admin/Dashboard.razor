@@ -1,0 +1,198 @@
+@page "/admin"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@using Microsoft.EntityFrameworkCore
+@using WebScraper.Data
+@using WebScraper.Models
+@inject IServiceScopeFactory ScopeFactory
+
+<MudText Typo="Typo.h4" Class="mb-4">Dashboard</MudText>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" />
+}
+else
+{
+    <MudGrid>
+        <MudItem xs="12" sm="6" md="3">
+            <MudCard Class="status-card">
+                <MudCardContent>
+                    <MudText Typo="Typo.h3" Color="Color.Primary">@_teamCount</MudText>
+                    <MudText Typo="Typo.subtitle1">Teams</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudCard Class="status-card">
+                <MudCardContent>
+                    <MudText Typo="Typo.h3" Color="Color.Primary">@_playerCount</MudText>
+                    <MudText Typo="Typo.subtitle1">Players</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudCard Class="status-card">
+                <MudCardContent>
+                    <MudText Typo="Typo.h3" Color="Color.Primary">@_gameCount</MudText>
+                    <MudText Typo="Typo.subtitle1">Games</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudCard Class="status-card">
+                <MudCardContent>
+                    <MudText Typo="Typo.h3" Color="Color.Primary">@_statsCount</MudText>
+                    <MudText Typo="Typo.subtitle1">Stat Lines</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" sm="6" md="3">
+            <MudCard Class="status-card">
+                <MudCardContent>
+                    <MudText Typo="Typo.h3" Color="Color.Secondary">@_venueCount</MudText>
+                    <MudText Typo="Typo.subtitle1">Venues</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudCard Class="status-card">
+                <MudCardContent>
+                    <MudText Typo="Typo.h3" Color="Color.Secondary">@_injuryCount</MudText>
+                    <MudText Typo="Typo.subtitle1">Injuries</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudCard Class="status-card">
+                <MudCardContent>
+                    <MudText Typo="Typo.h3" Color="Color.Secondary">@_apiKeyCount</MudText>
+                    <MudText Typo="Typo.subtitle1">API Keys</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudCard Class="status-card">
+                <MudCardContent>
+                    <MudText Typo="Typo.h3" Color="Color.Tertiary">@_activeJobs</MudText>
+                    <MudText Typo="Typo.subtitle1">Active Jobs</MudText>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+
+    <MudGrid Class="mt-4">
+        <MudItem xs="12" md="6">
+            <MudCard>
+                <MudCardHeader>
+                    <MudText Typo="Typo.h6">Recent Jobs</MudText>
+                </MudCardHeader>
+                <MudCardContent>
+                    @if (_recentJobs.Count == 0)
+                    {
+                        <MudText Color="Color.Secondary">No jobs yet.</MudText>
+                    }
+                    else
+                    {
+                        <MudSimpleTable Dense="true" Hover="true">
+                            <thead>
+                                <tr>
+                                    <th>Type</th>
+                                    <th>Status</th>
+                                    <th>Records</th>
+                                    <th>Time</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var job in _recentJobs)
+                                {
+                                    <tr>
+                                        <td>@job.Type</td>
+                                        <td>
+                                            <MudChip T="string" Size="Size.Small"
+                                                     Color="@StatusColor(job.Status)">
+                                                @job.Status
+                                            </MudChip>
+                                        </td>
+                                        <td>@job.RecordsProcessed</td>
+                                        <td>@job.CreatedAt.ToString("g")</td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </MudSimpleTable>
+                    }
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudCard>
+                <MudCardHeader>
+                    <MudText Typo="Typo.h6">System Info</MudText>
+                </MudCardHeader>
+                <MudCardContent>
+                    <MudSimpleTable Dense="true">
+                        <tbody>
+                            <tr><td>Latest Update</td><td>@(_latestUpdate?.ToString("g") ?? "N/A")</td></tr>
+                            <tr><td>API Queries (24h)</td><td>@_recentQueryCount</td></tr>
+                            <tr><td>Total Query Logs</td><td>@_totalQueryLogs</td></tr>
+                        </tbody>
+                    </MudSimpleTable>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    private bool _loading = true;
+    private int _teamCount, _playerCount, _gameCount, _statsCount;
+    private int _venueCount, _injuryCount, _apiKeyCount, _activeJobs;
+    private int _recentQueryCount, _totalQueryLogs;
+    private DateTime? _latestUpdate;
+    private List<ScrapeJob> _recentJobs = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        using var scope = ScopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        _teamCount = await db.Teams.CountAsync();
+        _playerCount = await db.Players.CountAsync();
+        _gameCount = await db.Games.CountAsync();
+        _statsCount = await db.PlayerGameStats.CountAsync();
+        _venueCount = await db.Venues.CountAsync();
+        _injuryCount = await db.Injuries.CountAsync();
+        _apiKeyCount = await db.ApiKeys.CountAsync();
+
+        _activeJobs = await db.ScrapeJobs
+            .CountAsync(j => j.Status == ScrapeJobStatus.Queued || j.Status == ScrapeJobStatus.Running);
+
+        _recentJobs = await db.ScrapeJobs
+            .OrderByDescending(j => j.CreatedAt)
+            .Take(5)
+            .ToListAsync();
+
+        var cutoff = DateTime.UtcNow.AddHours(-24);
+        _recentQueryCount = await db.ApiQueryLogs.CountAsync(q => q.Timestamp >= cutoff);
+        _totalQueryLogs = await db.ApiQueryLogs.CountAsync();
+
+        _latestUpdate = await db.Teams
+            .Select(t => t.UpdatedAt)
+            .Union(db.Players.Select(p => p.UpdatedAt))
+            .Union(db.Games.Select(g => g.UpdatedAt))
+            .MaxAsync(d => (DateTime?)d);
+
+        _loading = false;
+    }
+
+    private static Color StatusColor(ScrapeJobStatus status) => status switch
+    {
+        ScrapeJobStatus.Queued => Color.Default,
+        ScrapeJobStatus.Running => Color.Info,
+        ScrapeJobStatus.Succeeded => Color.Success,
+        ScrapeJobStatus.Failed => Color.Error,
+        _ => Color.Default,
+    };
+}

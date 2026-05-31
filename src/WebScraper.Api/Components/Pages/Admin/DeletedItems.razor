@@ -1,0 +1,122 @@
+@page "/admin/deleted-items"
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = "Admin")]
+@using Microsoft.EntityFrameworkCore
+@using WebScraper.Data
+@using WebScraper.Models
+@inject IServiceScopeFactory ScopeFactory
+@inject ISnackbar Snackbar
+
+<MudText Typo="Typo.h4" Class="mb-4">Deleted Items</MudText>
+
+<MudSelect T="string" @bind-Value="_entityType" Label="Entity Type" Variant="Variant.Outlined"
+           Class="mb-4" Style="max-width: 300px;" ValueChanged="@(async (string _) => await RefreshAsync())">
+    <MudSelectItem Value="@("Team")">Teams</MudSelectItem>
+    <MudSelectItem Value="@("Player")">Players</MudSelectItem>
+    <MudSelectItem Value="@("Game")">Games</MudSelectItem>
+    <MudSelectItem Value="@("Venue")">Venues</MudSelectItem>
+    <MudSelectItem Value="@("ApiKey")">API Keys</MudSelectItem>
+</MudSelect>
+
+<MudTable Items="_items" Dense="true" Hover="true" Loading="_loading" Striped="true">
+    <HeaderContent>
+        <MudTh>ID</MudTh>
+        <MudTh>Label</MudTh>
+        <MudTh>Deleted At</MudTh>
+        <MudTh>Deleted By</MudTh>
+        <MudTh>Reason</MudTh>
+        <MudTh>Actions</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd>@context.Id</MudTd>
+        <MudTd>@context.Label</MudTd>
+        <MudTd>@context.DeletedAt?.ToString("g")</MudTd>
+        <MudTd>@(context.DeletedBy ?? "—")</MudTd>
+        <MudTd>@(context.Reason ?? "—")</MudTd>
+        <MudTd>
+            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Success"
+                       OnClick="@(() => RestoreAsync(context.Id))">Restore</MudButton>
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText>No deleted items of this type.</MudText>
+    </NoRecordsContent>
+</MudTable>
+
+@code {
+    private record DeletedRow(int Id, string Label, DateTime? DeletedAt, string? DeletedBy, string? Reason);
+
+    private string _entityType = "Team";
+    private List<DeletedRow> _items = new();
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAsync();
+    }
+
+    private async Task RefreshAsync()
+    {
+        _loading = true;
+        using var scope = ScopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        _items = _entityType switch
+        {
+            "Team" => await QueryDeleted(db.Teams.IgnoreQueryFilters().Where(e => e.IsDeleted),
+                e => new DeletedRow(e.Id, e.Name, e.DeletedAt, e.DeletedBy, e.DeleteReason)),
+            "Player" => await QueryDeleted(db.Players.IgnoreQueryFilters().Where(e => e.IsDeleted),
+                e => new DeletedRow(e.Id, e.Name, e.DeletedAt, e.DeletedBy, e.DeleteReason)),
+            "Game" => await QueryDeleted(db.Games.IgnoreQueryFilters().Where(e => e.IsDeleted),
+                e => new DeletedRow(e.Id, $"S{e.Season} W{e.Week}", e.DeletedAt, e.DeletedBy, e.DeleteReason)),
+            "Venue" => await QueryDeleted(db.Venues.IgnoreQueryFilters().Where(e => e.IsDeleted),
+                e => new DeletedRow(e.Id, e.Name, e.DeletedAt, e.DeletedBy, e.DeleteReason)),
+            "ApiKey" => await QueryDeleted(db.ApiKeys.IgnoreQueryFilters().Where(e => e.IsDeleted),
+                e => new DeletedRow(e.Id, e.Name, e.DeletedAt, e.DeletedBy, e.DeleteReason)),
+            _ => new(),
+        };
+
+        _loading = false;
+    }
+
+    private static async Task<List<DeletedRow>> QueryDeleted<T>(
+        IQueryable<T> query, Func<T, DeletedRow> map) where T : class
+    {
+        var items = await query.Take(100).ToListAsync();
+        return items.Select(map).ToList();
+    }
+
+    private async Task RestoreAsync(int id)
+    {
+        using var scope = ScopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var restored = _entityType switch
+        {
+            "Team" => await ClearDelete<Team>(db, id),
+            "Player" => await ClearDelete<Player>(db, id),
+            "Game" => await ClearDelete<Game>(db, id),
+            "Venue" => await ClearDelete<Venue>(db, id),
+            "ApiKey" => await ClearDelete<ApiKey>(db, id),
+            _ => false,
+        };
+
+        if (restored)
+        {
+            Snackbar.Add($"Restored {_entityType} #{id}.", Severity.Success);
+            await RefreshAsync();
+        }
+    }
+
+    private static async Task<bool> ClearDelete<T>(AppDbContext db, int id) where T : class, ISoftDeletable
+    {
+        return await db.Set<T>()
+            .IgnoreQueryFilters()
+            .Where(e => EF.Property<int>(e, "Id") == id)
+            .ExecuteUpdateAsync(s => s
+                .SetProperty(e => e.IsDeleted, false)
+                .SetProperty(e => e.DeletedAt, (DateTime?)null)
+                .SetProperty(e => e.DeletedBy, (string?)null)
+                .SetProperty(e => e.DeleteReason, (string?)null)) > 0;
+    }
+}

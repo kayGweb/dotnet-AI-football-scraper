@@ -1,0 +1,95 @@
+@page "/admin/api-keys"
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = "Admin")]
+@using WebScraper.Api.Services
+@inject ApiKeyManagementService KeyService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudText Typo="Typo.h4" Class="mb-4">API Keys</MudText>
+
+<MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="OpenCreateDialog" Class="mb-4"
+           StartIcon="@Icons.Material.Filled.Add">Create Key</MudButton>
+
+<MudSwitch T="bool" @bind-Value="_includeRevoked" Label="Include Revoked" Color="Color.Secondary"
+           Class="mb-4" ValueChanged="@(async (bool _) => await RefreshAsync())" />
+
+<MudTable Items="_keys" Dense="true" Hover="true" Loading="_loading" Striped="true">
+    <HeaderContent>
+        <MudTh>Key ID</MudTh>
+        <MudTh>Name</MudTh>
+        <MudTh>Scopes</MudTh>
+        <MudTh>Created</MudTh>
+        <MudTh>Last Used</MudTh>
+        <MudTh>Expires</MudTh>
+        <MudTh>Status</MudTh>
+        <MudTh>Actions</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd>@context.KeyId</MudTd>
+        <MudTd>@context.Name</MudTd>
+        <MudTd>@context.Scopes</MudTd>
+        <MudTd>@context.CreatedAt.ToString("g")</MudTd>
+        <MudTd>@(context.LastUsedAt?.ToString("g") ?? "Never")</MudTd>
+        <MudTd>@(context.ExpiresAt?.ToString("d") ?? "Never")</MudTd>
+        <MudTd>
+            <MudChip T="string" Size="Size.Small"
+                     Color="@(context.IsDeleted ? Color.Error : Color.Success)">
+                @(context.IsDeleted ? "Revoked" : "Active")
+            </MudChip>
+        </MudTd>
+        <MudTd>
+            @if (!context.IsDeleted)
+            {
+                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                               OnClick="@(() => RevokeAsync(context.KeyId))" Title="Revoke" />
+            }
+        </MudTd>
+    </RowTemplate>
+</MudTable>
+
+@code {
+    private IReadOnlyList<WebScraper.Models.ApiKey> _keys = Array.Empty<WebScraper.Models.ApiKey>();
+    private bool _loading = true;
+    private bool _includeRevoked;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAsync();
+    }
+
+    private async Task RefreshAsync()
+    {
+        _loading = true;
+        _keys = await KeyService.ListAsync(_includeRevoked);
+        _loading = false;
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        var parameters = new DialogParameters();
+        var dialog = await DialogService.ShowAsync<CreateApiKeyDialog>("Create API Key", parameters,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false, Data: string plaintext })
+        {
+            Snackbar.Add("Key created. Copy the plaintext key now — it won't be shown again.", Severity.Warning);
+            Snackbar.Add(plaintext, Severity.Info, config => config.VisibleStateDuration = 30000);
+            await RefreshAsync();
+        }
+    }
+
+    private async Task RevokeAsync(string keyId)
+    {
+        var confirm = await DialogService.ShowMessageBox(
+            "Revoke Key", $"Revoke API key {keyId}? This cannot be undone.",
+            yesText: "Revoke", cancelText: "Cancel");
+
+        if (confirm != true) return;
+
+        await KeyService.RevokeAsync(keyId, "admin-dashboard", "Revoked via admin dashboard");
+        Snackbar.Add("Key revoked.", Severity.Success);
+        await RefreshAsync();
+    }
+}

@@ -1,0 +1,76 @@
+@page "/admin/users"
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = "Admin")]
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@using WebScraper.Api.Auth
+@inject IServiceScopeFactory ScopeFactory
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudText Typo="Typo.h4" Class="mb-4">Users</MudText>
+
+<MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="OpenCreateDialog" Class="mb-4"
+           StartIcon="@Icons.Material.Filled.PersonAdd">Create User</MudButton>
+
+<MudTable Items="_users" Dense="true" Hover="true" Loading="_loading" Striped="true">
+    <HeaderContent>
+        <MudTh>Email</MudTh>
+        <MudTh>Roles</MudTh>
+        <MudTh>Last Login</MudTh>
+        <MudTh>Locked</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd>@context.Email</MudTd>
+        <MudTd>@string.Join(", ", context.Roles)</MudTd>
+        <MudTd>@(context.LastLoginAt?.ToString("g") ?? "Never")</MudTd>
+        <MudTd>
+            @if (context.IsLockedOut)
+            {
+                <MudChip T="string" Size="Size.Small" Color="Color.Error">Locked</MudChip>
+            }
+        </MudTd>
+    </RowTemplate>
+</MudTable>
+
+@code {
+    private record UserRow(string Email, IList<string> Roles, DateTime? LastLoginAt, bool IsLockedOut);
+
+    private List<UserRow> _users = new();
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAsync();
+    }
+
+    private async Task RefreshAsync()
+    {
+        _loading = true;
+        using var scope = ScopeFactory.CreateScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<AppUser>>();
+
+        var users = await userManager.Users.ToListAsync();
+        var rows = new List<UserRow>(users.Count);
+        foreach (var u in users)
+        {
+            var roles = await userManager.GetRolesAsync(u);
+            rows.Add(new UserRow(u.Email ?? "", roles, u.LastLoginAt, await userManager.IsLockedOutAsync(u)));
+        }
+        _users = rows;
+        _loading = false;
+    }
+
+    private async Task OpenCreateDialog()
+    {
+        var dialog = await DialogService.ShowAsync<CreateUserDialog>("Create User",
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false })
+        {
+            Snackbar.Add("User created.", Severity.Success);
+            await RefreshAsync();
+        }
+    }
+}

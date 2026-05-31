@@ -1,0 +1,50 @@
+@page "/admin/login"
+@layout EmptyLayout
+@using Microsoft.AspNetCore.Identity
+@using WebScraper.Api.Auth
+@inject SignInManager<AppUser> SignInManager
+@inject NavigationManager Nav
+
+<MudThemeProvider IsDarkMode="true" />
+
+<div style="display: flex; align-items: center; justify-content: center; min-height: 100vh;">
+    <MudCard Style="width: 400px; padding: 24px;">
+        <MudCardContent>
+            <MudText Typo="Typo.h5" Align="Align.Center" Class="mb-4">NFL WebScraper</MudText>
+            <MudText Typo="Typo.subtitle1" Align="Align.Center" Color="Color.Secondary" Class="mb-6">Admin Dashboard</MudText>
+
+            @if (!string.IsNullOrEmpty(_error))
+            {
+                <MudAlert Severity="Severity.Error" Class="mb-4" Dense="true">@_error</MudAlert>
+            }
+
+            <form method="post" action="/admin/login">
+                <input type="hidden" name="returnUrl" value="/admin" />
+                <MudTextField T="string" Name="email" Label="Email" Variant="Variant.Outlined"
+                              InputType="InputType.Email" Required="true" Class="mb-3" />
+                <MudTextField T="string" Name="password" Label="Password" Variant="Variant.Outlined"
+                              InputType="InputType.Password" Required="true" Class="mb-4" />
+                <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled"
+                           Color="Color.Primary" FullWidth="true">Login</MudButton>
+            </form>
+        </MudCardContent>
+    </MudCard>
+</div>
+
+@code {
+    private string? _error;
+
+    [SupplyParameterFromQuery]
+    public string? Error { get; set; }
+
+    [SupplyParameterFromQuery]
+    public string? Action { get; set; }
+
+    protected override void OnInitialized()
+    {
+        if (Error == "invalid")
+            _error = "Invalid email or password.";
+        else if (Error == "locked")
+            _error = "Account locked. Try again later.";
+    }
+}

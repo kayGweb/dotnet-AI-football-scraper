@@ -1,0 +1,121 @@
+@page "/admin/scrapes/new"
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = "Admin,Operator")]
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.Extensions.Options
+@using WebScraper.Api.Services
+@using WebScraper.Data
+@using WebScraper.Models
+@inject IServiceScopeFactory ScopeFactory
+@inject IJobQueue JobQueue
+@inject IOptions<ScraperSettings> ScraperSettings
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+@inject AuthenticationStateProvider AuthState
+
+<MudText Typo="Typo.h4" Class="mb-4">Trigger Scrape</MudText>
+
+<MudCard Style="max-width: 500px;">
+    <MudCardContent>
+        <MudSelect T="string" @bind-Value="_jobType" Label="Job Type" Variant="Variant.Outlined" Class="mb-3">
+            <MudSelectItem Value="@("Teams")">Teams</MudSelectItem>
+            <MudSelectItem Value="@("Players")">Players</MudSelectItem>
+            <MudSelectItem Value="@("Games")">Games</MudSelectItem>
+            <MudSelectItem Value="@("Stats")">Stats</MudSelectItem>
+            <MudSelectItem Value="@("All")">Full Pipeline</MudSelectItem>
+        </MudSelect>
+
+        @if (NeedsSeason)
+        {
+            <MudNumericField T="int?" @bind-Value="_season" Label="Season" Variant="Variant.Outlined"
+                             Min="1920" Max="@DateTime.UtcNow.Year" Class="mb-3" />
+        }
+
+        @if (NeedsWeek)
+        {
+            <MudNumericField T="int?" @bind-Value="_week" Label="Week (optional for Games/All)" Variant="Variant.Outlined"
+                             Min="1" Max="22" Class="mb-3" />
+        }
+
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+            Source: @ScraperSettings.Value.DataProvider
+        </MudText>
+    </MudCardContent>
+    <MudCardActions>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SubmitAsync"
+                   Disabled="_submitting" StartIcon="@Icons.Material.Filled.PlayArrow">
+            @(_submitting ? "Queuing..." : "Start Scrape")
+        </MudButton>
+    </MudCardActions>
+</MudCard>
+
+@code {
+    private string _jobType = "Teams";
+    private int? _season;
+    private int? _week;
+    private bool _submitting;
+
+    private bool NeedsSeason => _jobType is "Games" or "Stats" or "All";
+    private bool NeedsWeek => _jobType is "Stats" or "Games" or "All";
+
+    private async Task SubmitAsync()
+    {
+        if (NeedsSeason && _season is null)
+        {
+            Snackbar.Add("Season is required.", Severity.Warning);
+            return;
+        }
+
+        if (_jobType == "Stats" && _week is null)
+        {
+            Snackbar.Add("Week is required for stats scrape.", Severity.Warning);
+            return;
+        }
+
+        _submitting = true;
+
+        var authState = await AuthState.GetAuthenticationStateAsync();
+        var email = authState.User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value;
+
+        var jobType = Enum.Parse<ScrapeJobType>(_jobType);
+
+        using var scope = ScopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var job = new ScrapeJob
+        {
+            Type = jobType,
+            Source = ScraperSettings.Value.DataProvider,
+            Season = _season,
+            Week = _week,
+            Status = ScrapeJobStatus.Queued,
+            CreatedAt = DateTime.UtcNow,
+            RequestedBy = email,
+        };
+
+        db.ScrapeJobs.Add(job);
+        await db.SaveChangesAsync();
+
+        db.ScrapeEvents.Add(new ScrapeEvent
+        {
+            JobId = job.Id,
+            EventType = ScrapeEventType.JobQueued,
+            Timestamp = DateTime.UtcNow,
+            Payload = System.Text.Json.JsonSerializer.Serialize(new
+            {
+                type = job.Type.ToString(),
+                source = job.Source,
+                season = job.Season,
+                week = job.Week,
+                requestedBy = job.RequestedBy,
+            }),
+        });
+        await db.SaveChangesAsync();
+
+        JobQueue.TryEnqueue(job.Id);
+
+        Snackbar.Add($"Job #{job.Id} queued ({_jobType}).", Severity.Success);
+        _submitting = false;
+        Nav.NavigateTo("/admin/jobs");
+    }
+}
