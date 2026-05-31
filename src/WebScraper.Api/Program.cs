@@ -1,9 +1,13 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Serilog;
 using WebScraper.Api.Auth;
+using WebScraper.Api.Components;
 using WebScraper.Api.Extensions;
 using WebScraper.Api.Hubs;
 using WebScraper.Api.Middleware;
@@ -88,8 +92,12 @@ if (app.Environment.IsDevelopment())
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 
+app.UseStaticFiles();
+
 app.UseAuthentication();
 app.UseAuthorization();
+
+app.UseAntiforgery();
 
 // Rate limiter sits AFTER auth so we can partition by API key / user identity.
 app.UseMiddleware<RateLimitingMiddleware>();
@@ -102,6 +110,55 @@ app.MapControllers();
 // Real-time scrape event hub (M3 chunk c). Clients authenticate with a JWT;
 // browsers must pass it via ?access_token=… on the WebSocket URL.
 app.MapHub<ScraperHub>("/hubs/scraper");
+
+// M4: Blazor admin dashboard at /admin/*
+app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
+
+// Dashboard login/logout — minimal API endpoints that set/clear the admin cookie.
+app.MapPost("/admin/login", async (
+    HttpContext httpContext,
+    SignInManager<AppUser> signInManager,
+    UserManager<AppUser> userManager) =>
+{
+    var form = await httpContext.Request.ReadFormAsync();
+    var email = form["email"].ToString();
+    var password = form["password"].ToString();
+
+    var user = await userManager.FindByEmailAsync(email);
+    if (user is null)
+        return Results.Redirect("/admin/login?error=invalid");
+
+    var result = await signInManager.CheckPasswordSignInAsync(user, password, lockoutOnFailure: true);
+    if (result.IsLockedOut)
+        return Results.Redirect("/admin/login?error=locked");
+    if (!result.Succeeded)
+        return Results.Redirect("/admin/login?error=invalid");
+
+    var roles = await userManager.GetRolesAsync(user);
+    var claims = new List<Claim>
+    {
+        new(ClaimTypes.NameIdentifier, user.Id),
+        new(ClaimTypes.Name, user.Email ?? user.Id),
+        new(ClaimTypes.Email, user.Email ?? string.Empty),
+    };
+    claims.AddRange(roles.Select(r => new Claim(ClaimTypes.Role, r)));
+
+    var identity = new ClaimsIdentity(claims, AuthorizationPolicies.CookieSchemeName);
+    await httpContext.SignInAsync(
+        AuthorizationPolicies.CookieSchemeName,
+        new ClaimsPrincipal(identity));
+
+    user.LastLoginAt = DateTime.UtcNow;
+    await userManager.UpdateAsync(user);
+
+    return Results.Redirect("/admin");
+}).AllowAnonymous();
+
+app.MapGet("/admin/logout", async (HttpContext httpContext) =>
+{
+    await httpContext.SignOutAsync(AuthorizationPolicies.CookieSchemeName);
+    return Results.Redirect("/admin/login");
+}).AllowAnonymous();
 
 // Liveness: process is up.
 app.MapHealthChecks("/health/live", new HealthCheckOptions

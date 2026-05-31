@@ -1,0 +1,40 @@
+@using WebScraper.Api.Services
+@inject ApiKeyManagementService KeyService
+
+<MudDialog>
+    <DialogContent>
+        <MudTextField @bind-Value="_name" Label="Key Name" Variant="Variant.Outlined" Class="mb-3" Required="true" />
+        <MudTextField @bind-Value="_scopes" Label="Scopes (comma-separated)" Variant="Variant.Outlined"
+                      Placeholder="read" Class="mb-3" />
+        <MudDatePicker @bind-Date="_expiresAt" Label="Expires (optional)" Variant="Variant.Outlined" Clearable="true" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="CreateAsync" Disabled="_creating">
+            @(_creating ? "Creating..." : "Create")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = null!;
+
+    private string _name = string.Empty;
+    private string _scopes = "read";
+    private DateTime? _expiresAt;
+    private bool _creating;
+
+    private void Cancel() => MudDialog.Cancel();
+
+    private async Task CreateAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_name)) return;
+
+        _creating = true;
+        var scopeList = _scopes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+        var created = await KeyService.CreateAsync(_name, scopeList, _expiresAt, "admin-dashboard");
+        var plaintext = created.PlaintextKey;
+        _creating = false;
+        MudDialog.Close(DialogResult.Ok(plaintext));
+    }
+}

@@ -4,8 +4,10 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using MudBlazor.Services;
 using WebScraper.Api.Auth;
 using WebScraper.Api.Services;
+using WebScraper.Data;
 
 namespace WebScraper.Api.Extensions;
 
@@ -44,6 +46,11 @@ public static class ApiServiceCollectionExtensions
         // --- SignalR hub + outbox relay (M3 chunk c) ---
         services.AddSignalR();
         services.AddHostedService<ScrapeEventRelay>();
+
+        // --- Blazor admin dashboard (M4) ---
+        services.AddRazorComponents().AddInteractiveServerComponents();
+        services.AddMudServices();
+        services.AddCascadingAuthenticationState();
 
         // --- Expose HttpContext to services that need claim lookups ---
         services.AddHttpContextAccessor();
@@ -174,6 +181,16 @@ public static class ApiServiceCollectionExtensions
                 // API key is the default — JWT layers on top via [Authorize] policies
                 options.DefaultAuthenticateScheme = ApiKeyAuthenticationOptions.SchemeName;
                 options.DefaultChallengeScheme = ApiKeyAuthenticationOptions.SchemeName;
+            })
+            .AddCookie(AuthorizationPolicies.CookieSchemeName, options =>
+            {
+                options.LoginPath = "/admin/login";
+                options.AccessDeniedPath = "/admin/login";
+                options.Cookie.Name = "WebScraper.Admin";
+                options.Cookie.HttpOnly = true;
+                options.Cookie.SameSite = SameSiteMode.Strict;
+                options.ExpireTimeSpan = TimeSpan.FromHours(8);
+                options.SlidingExpiration = true;
             })
             .AddScheme<ApiKeyAuthenticationOptions, ApiKeyAuthenticationHandler>(
                 ApiKeyAuthenticationOptions.SchemeName, _ => { })
