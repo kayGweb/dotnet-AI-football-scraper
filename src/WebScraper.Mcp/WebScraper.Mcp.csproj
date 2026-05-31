@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>WebScraper.Mcp</RootNamespace>
+    <AssemblyName>WebScraper.Mcp</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!--
+      Official C# MCP SDK. This is a pre-release package — bump as needed when a
+      newer preview lands. The API surface used here (AddMcpServer,
+      WithStdioServerTransport, [McpServerToolType], [McpServerTool]) has been
+      stable since 0.2 previews.
+    -->
+    <PackageReference Include="ModelContextProtocol" Version="0.3.0-preview.3" />
+
+    <!-- Generic host + DI + config (env vars) + logging -->
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Http" Version="8.0.1" />
+  </ItemGroup>
+
+</Project>
