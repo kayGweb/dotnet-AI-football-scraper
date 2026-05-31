@@ -41,6 +41,10 @@ public static class ApiServiceCollectionExtensions
         services.AddSingleton<IJobQueue>(sp => sp.GetRequiredService<JobQueue>());
         services.AddHostedService<ScrapeJobWorker>();
 
+        // --- SignalR hub + outbox relay (M3 chunk c) ---
+        services.AddSignalR();
+        services.AddHostedService<ScrapeEventRelay>();
+
         // --- Expose HttpContext to services that need claim lookups ---
         services.AddHttpContextAccessor();
 
@@ -189,6 +193,23 @@ public static class ApiServiceCollectionExtensions
                         ? new SymmetricSecurityKey(Encoding.UTF8.GetBytes("dev-placeholder-key-replace-in-config-32-chars!"))
                         : new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.SigningKey)),
                     ClockSkew = TimeSpan.FromMinutes(1),
+                };
+
+                // SignalR WebSocket connections can't set Authorization headers from the
+                // browser — accept the JWT via the standard ?access_token=… query string
+                // for any request targeting /hubs/*.
+                options.Events = new Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerEvents
+                {
+                    OnMessageReceived = context =>
+                    {
+                        var accessToken = context.Request.Query["access_token"];
+                        var path = context.HttpContext.Request.Path;
+                        if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+                        {
+                            context.Token = accessToken;
+                        }
+                        return Task.CompletedTask;
+                    }
                 };
             });
 

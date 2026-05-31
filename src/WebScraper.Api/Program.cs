@@ -5,6 +5,7 @@ using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Serilog;
 using WebScraper.Api.Auth;
 using WebScraper.Api.Extensions;
+using WebScraper.Api.Hubs;
 using WebScraper.Api.Middleware;
 using WebScraper.Data;
 using WebScraper.Extensions;
@@ -97,6 +98,10 @@ app.UseMiddleware<RateLimitingMiddleware>();
 app.UseMiddleware<ApiQueryLoggingMiddleware>();
 
 app.MapControllers();
+
+// Real-time scrape event hub (M3 chunk c). Clients authenticate with a JWT;
+// browsers must pass it via ?access_token=… on the WebSocket URL.
+app.MapHub<ScraperHub>("/hubs/scraper");
 
 // Liveness: process is up.
 app.MapHealthChecks("/health/live", new HealthCheckOptions

@@ -36,12 +36,13 @@ src/
 │   │   ├── Injury.cs                       # Player injury reports per game — implements IAuditableEntity + ISoftDeletable
 │   │   ├── ApiLink.cs                      # Catalog of ESPN API endpoints — implements IAuditableEntity + ISoftDeletable
 │   │   ├── ScrapeJob.cs                   # M3b: Persisted scrape job (Id, Type, Source, Season, Week, Status, Progress, Error, timestamps, RequestedBy) + ScrapeJobType/ScrapeJobStatus enums
+│   │   ├── ScrapeEvent.cs                 # M3c: Outbox event row (Id, JobId, EventType, Timestamp, JSON Payload) + ScrapeEventType enum
 │   │   ├── ScrapeResult.cs                # Scraper operation result (Success, RecordsProcessed, Errors)
 │   │   ├── ScraperSettings.cs             # Config POCO: scraper options + DataProvider + Providers dict
 │   │   ├── DataProvider.cs                # Enum: ProFootballReference, Espn, SportsDataIo, MySportsFeeds, NflCom
 │   │   └── ApiProviderSettings.cs         # Config POCO: BaseUrl, ApiKey, AuthType, headers per provider
 │   ├── Data/
-│   │   ├── AppDbContext.cs                # EF Core DbContext — 10 DbSets (+ ScrapeJobs), global soft-delete query filters, registers interceptor
+│   │   ├── AppDbContext.cs                # EF Core DbContext — 11 DbSets (+ ScrapeJobs, ScrapeEvents), global soft-delete query filters, registers interceptor
 │   │   ├── AuditingSaveChangesInterceptor.cs # M0: stamps CreatedAt/UpdatedAt, converts hard deletes to soft deletes
 │   │   └── Repositories/
 │   │       ├── IRepository.cs             # Generic repository interface
@@ -143,7 +144,8 @@ src/
 │   │   ├── DeletedItemsController.cs   # M3: GET /api/v1/deleted-items?entityType=, POST /{entityType}/{id}/restore (Admin)
 │   │   ├── PushController.cs           # M3: POST /api/v1/push (Admin) — wraps existing DatabasePushService
 │   │   ├── ScrapeController.cs         # M3b: POST /api/v1/scrape/{teams|players|games|stats|all} → 202 + jobId (Operator)
-│   │   └── JobsController.cs           # M3b: GET /api/v1/jobs (paged + ?status=), GET /api/v1/jobs/{id} (Operator)
+│   │   ├── JobsController.cs           # M3b: GET /api/v1/jobs (paged + ?status=), GET /api/v1/jobs/{id} (Operator)
+│   │   └── EventsController.cs         # M3c: GET /api/v1/events?since=&take= — replay missed scrape events (Viewer)
 │   ├── Dtos/
 │   │   ├── MetaDto.cs                  # Data lineage envelope (Source, FetchedAt, SourceRecordId, CreatedAt, UpdatedAt)
 │   │   ├── TeamDto.cs                  # Team + nested TeamSummaryDto
@@ -159,7 +161,8 @@ src/
 │   │   └── Admin/
 │   │       ├── ApiKeyDtos.cs           # M3: CreateApiKeyRequest, RevokeApiKeyRequest, ApiKeyCreatedDto, ApiKeyDto
 │   │       ├── DeletedItemDto.cs       # M3: EntityType/Id/Label/DeletedAt/DeletedBy/DeleteReason
-│   │       └── ScrapeJobDtos.cs        # M3b: CreateScrapeJobRequest, ScrapeJobDto + mapping extension
+│   │       ├── ScrapeJobDtos.cs        # M3b: CreateScrapeJobRequest, ScrapeJobDto + mapping extension
+│   │       └── ScrapeEventDtos.cs      # M3c: ScrapeEventDto + ScrapeEvent.ToDto() extension
 │   ├── Mapping/
 │   │   └── EntityMappings.cs           # Hand-rolled entity → DTO extension methods (no AutoMapper)
 │   ├── Middleware/
@@ -174,9 +177,12 @@ src/
 │   │   ├── ApiKeyManagementService.cs  # M3: create (returns plaintext once) / list / get / revoke (soft delete)
 │   │   ├── IJobQueue.cs                # M3b: write-only facade over Channel<int> (job IDs)
 │   │   ├── JobQueue.cs                 # M3b: bounded channel (capacity 200, Wait) for scrape job IDs
-│   │   └── ScrapeJobWorker.cs          # M3b: BackgroundService — dequeues job IDs, runs matching scraper, updates ScrapeJob row
+│   │   ├── ScrapeJobWorker.cs          # M3b: BackgroundService — dequeues job IDs, runs matching scraper, writes ScrapeEvents
+│   │   └── ScrapeEventRelay.cs         # M3c: BackgroundService — polls ScrapeEvents (1s) and broadcasts to ScraperHub
+│   ├── Hubs/
+│   │   └── ScraperHub.cs               # M3c: SignalR hub at /hubs/scraper — broadcasts "ScrapeEvent" to subscribers (Viewer)
 │   ├── Extensions/
-│   │   └── ApiServiceCollectionExtensions.cs # DI: API key + JWT dual scheme, Identity, query log queue, job queue + worker, Swagger (ApiKey + Bearer)
+│   │   └── ApiServiceCollectionExtensions.cs # DI: API key + JWT dual scheme (with SignalR access_token query support), Identity, query log queue, job queue + worker, SignalR + relay, Swagger
 │   └── Properties/
 │       └── launchSettings.json         # dev profiles (http://localhost:5080, https://localhost:7080)
 └── WebScraper.Mcp/                     # M2: MCP server (stdio) — exposes the M1 API as tools for Claude
@@ -284,7 +290,7 @@ Static helper that maps the `DataProvider` config string to the correct set of D
 | `EspnMappings` | — | — | Bidirectional ESPN ID ↔ NFL abbreviation map for all 32 teams + division lookup |
 
 ## Database Schema
-Eleven tables with the following relationships:
+Twelve tables with the following relationships:
 - **Teams** — 32 NFL teams (id, name, abbreviation, city, conference, division)
 - **Players** — FK to Teams via `TeamId` (nullable for free agents); `EspnId` for ESPN athlete matching
 - **Games** — Two FKs to Teams: `HomeTeamId`, `AwayTeamId` (both use `DeleteBehavior.Restrict`); optional FK to `Venues`; includes quarter scores (HomeQ1-Q4, HomeOT, AwayQ1-Q4, AwayOT), `EspnEventId`, `GameStatus`, `HomeWinner`, `Attendance`, `NeutralSite`
@@ -296,6 +302,7 @@ Eleven tables with the following relationships:
 - **ApiQueryLogs** (M0) — Observability log of every public API consumer request: `Id` (long PK), `Timestamp`, `ApiKeyId`, `ApiKeyName`, `Method`, `Path`, `QueryString`, `StatusCode`, `DurationMs`, `ResponseBytes`, `UserAgent`, `CorrelationId`. Indexes on `Timestamp` and on `(ApiKeyId, Timestamp)` for dashboard queries. Populated asynchronously by `ApiQueryLoggingMiddleware` via a background `Channel<T>` writer in the M1 Web API — the hot path never blocks on the DB.
 - **ApiKeys** (M3a) — DB-backed API keys: `KeyId` (unique opaque ID), `HashedKey` (SHA-256 hex), `Name`, `Scopes` (comma-separated), `CreatedBy`, `LastUsedAt`, `ExpiresAt` + IAuditableEntity + ISoftDeletable. Auth handler checks this table first, falls back to config.
 - **ScrapeJobs** (M3b) — Persisted scrape job queue: `Id` (int PK), `Type` (enum), `Source`, `Season`, `Week`, `Status` (Queued/Running/Succeeded/Failed), `RecordsProcessed`, `RecordsFailed`, `Error`, `CreatedAt`, `StartedAt`, `CompletedAt`, `RequestedBy`. Index on `(Status, CreatedAt)` for orphan recovery.
+- **ScrapeEvents** (M3c) — Outbox of scrape job lifecycle events: `Id` (long PK, monotonic), `JobId` (FK index), `EventType` (JobQueued/JobStarted/JobCompleted/JobFailed), `Timestamp`, `Payload` (JSON string). Written transactionally with `ScrapeJob` state changes; relayed to SignalR by `ScrapeEventRelay`.
 
 ### Cross-cutting columns (M0)
 Every non-log entity (Teams through ApiLinks) now implements `IAuditableEntity` + `ISoftDeletable` and gains 9 columns:
@@ -855,6 +862,73 @@ dotnet ef migrations add ScrapeJobsTable \
     --startup-project src/WebScraper.Cli
 ```
 
+## WebScraper.Api real-time events (M3 chunk c)
+
+M3 chunk (c) layers a SignalR hub + transactional event outbox on top of the
+chunk-(b) job queue so the M4 admin dashboard can show live scrape progress
+without polling. The outbox pattern guarantees that no event is lost on a
+crash: events are written in the same `SaveChangesAsync` call as the job state
+change they describe.
+
+### Event flow
+```
+ScrapeJobWorker          AppDbContext              ScrapeEventRelay        ScraperHub        Dashboard
+─────────────────        ─────────────             ────────────────        ──────────        ─────────
+job.Status = Running ──► SaveChangesAsync ──► ScrapeEvent row (Id=42)
+                                                       │
+                                                       │ poll every 1s
+                                                       ▼
+                                                  read events where Id > cursor
+                                                       │
+                                                       └──► hub.Clients.All.SendAsync(
+                                                                "ScrapeEvent", dto)
+                                                                                  │
+                                                                                  ▼
+                                                                              OnReceive(dto)
+```
+
+If a client disconnects, it tracks the last-seen `Id` and calls
+`GET /api/v1/events?since=<lastId>` on reconnect to catch up.
+
+### Event types
+| Type | Written by | Payload (JSON) |
+|------|-----------|----------------|
+| `JobQueued` | `ScrapeController.EnqueueJob` | `{type, source, season, week, requestedBy}` |
+| `JobStarted` | `ScrapeJobWorker.RunJobAsync` | `{startedAt}` |
+| `JobCompleted` | `ScrapeJobWorker.RunJobAsync` (success) | `{status, recordsProcessed, recordsFailed, error, completedAt}` |
+| `JobFailed` | `ScrapeJobWorker.RunJobAsync` (failure or exception) | `{status, recordsProcessed, recordsFailed, error, completedAt}` |
+
+### Hub: `/hubs/scraper`
+- Authorization: `RequireViewer` (any authenticated dashboard user).
+- Client-side method name: `ScrapeEvent` (server invokes `hub.Clients.All.SendAsync("ScrapeEvent", dto)`).
+- WebSocket auth: browsers can't set `Authorization` headers on WS handshakes,
+  so the JWT bearer handler accepts `?access_token=…` for any path under
+  `/hubs/*` (configured via `JwtBearerEvents.OnMessageReceived`).
+- Rate-limiter and query-log middleware both skip `/hubs/*` — long-lived
+  connections would otherwise either trip the limiter or pollute the request log.
+
+### Replay endpoint
+| Method | Route | Policy | Purpose |
+|--------|-------|--------|---------|
+| GET | `/api/v1/events?since=<id>&take=<n>` | `RequireViewer` | Events with `Id > since`, ordered ascending. `take` defaults to 100, max 500. |
+
+### Cursor + single-instance constraint
+`ScrapeEventRelay` keeps its last-broadcast cursor in memory and seeds it from
+`MAX(ScrapeEvents.Id)` on startup — that way restarting the API doesn't re-broadcast
+historical events to every connected client. The trade-off: if you scale the API
+to multiple replicas, only one should host the relay. Multi-instance fan-out
+requires either (a) a shared cursor store (Redis, DB row) plus leader election,
+or (b) running the relay on every replica and accepting duplicate broadcasts
+(deduped client-side by event Id).
+
+### Pending migration
+Chunk (c) adds the `ScrapeEvents` table:
+```bash
+dotnet ef migrations add ScrapeEventsTable \
+    --project src/WebScraper.Core \
+    --startup-project src/WebScraper.Cli
+```
+
 ## CLI Commands
 All `dotnet run` commands below must target the CLI project explicitly: `dotnet run --project src/WebScraper.Cli -- <args>`.
 
@@ -1051,7 +1125,15 @@ Main Menu
 - [x] **M3 chunk (b) Phase 7:** DTOs — `CreateScrapeJobRequest`, `ScrapeJobDto` + `ScrapeJobMappings.ToDto()` extension
 - [x] **M3 chunk (b) Phase 8:** DI wiring — `JobQueue`/`IJobQueue` singleton, `ScrapeJobWorker` hosted service in `ApiServiceCollectionExtensions`, `RateLimitingMiddleware` in Program.cs pipeline after auth
 - [ ] **M3 chunk (b) Phase 9 (pending):** Generate EF Core migration — `dotnet ef migrations add ScrapeJobsTable --project src/WebScraper.Core --startup-project src/WebScraper.Cli`
-- [ ] **M3 chunk (c):** SignalR hub (`/hubs/scraper`) + `ScrapeEvent` outbox + `ScrapeEventRelay : BackgroundService` + replay via `GET /api/v1/events?since=`
+- [x] **M3 chunk (c) Phase 1:** `ScrapeEvent` entity in Core — `ScrapeEventType` enum (JobQueued/JobStarted/JobCompleted/JobFailed), `DbSet<ScrapeEvent>` in `AppDbContext` with index on `JobId` (relay polls by Id PK)
+- [x] **M3 chunk (c) Phase 2:** Outbox writes — `ScrapeController` writes `JobQueued` when persisting the job; `ScrapeJobWorker` writes `JobStarted` then `JobCompleted`/`JobFailed` transactionally with each `SaveChangesAsync`
+- [x] **M3 chunk (c) Phase 3:** `ScraperHub : Hub` at `/hubs/scraper` — `[Authorize(RequireViewer)]`, broadcasts via server method name `"ScrapeEvent"`
+- [x] **M3 chunk (c) Phase 4:** `ScrapeEventRelay : BackgroundService` — seeds in-memory cursor from `MAX(Id)` on startup, polls every 1s in 200-row batches, broadcasts new events via `IHubContext<ScraperHub>`
+- [x] **M3 chunk (c) Phase 5:** `EventsController` — `GET /api/v1/events?since=&take=` (RequireViewer) for replay on reconnect; take defaults to 100, capped at 500
+- [x] **M3 chunk (c) Phase 6:** JWT bearer SignalR auth — `JwtBearerEvents.OnMessageReceived` reads `?access_token=…` for any path under `/hubs/*` so browser WebSocket handshakes can carry the token
+- [x] **M3 chunk (c) Phase 7:** Middleware skips — `RateLimitingMiddleware` and `ApiQueryLoggingMiddleware` both bypass `/hubs/*` so long-lived connections aren't throttled or logged per-frame
+- [x] **M3 chunk (c) Phase 8:** DI wiring — `AddSignalR()`, `AddHostedService<ScrapeEventRelay>()` in `ApiServiceCollectionExtensions`; `app.MapHub<ScraperHub>("/hubs/scraper")` in `Program.cs`
+- [ ] **M3 chunk (c) Phase 9 (pending):** Generate EF Core migration — `dotnet ef migrations add ScrapeEventsTable --project src/WebScraper.Core --startup-project src/WebScraper.Cli`
 - [ ] **M4:** Blazor Server admin dashboard — JWT auth, health, soft-delete review, ApiQueryLog viewer
 - [ ] **M5:** Contract tests — recorded fixtures per provider; Docker + DigitalOcean App Platform deployment (PostgreSQL); future Azure App Service + MSSQL migration path
 - [ ] **M6:** Production polish — scheduled scrapes, cross-provider reconciliation, OpenTelemetry, webhooks, full-text search, backups

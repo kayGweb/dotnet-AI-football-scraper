@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using WebScraper.Data;
 using WebScraper.Models;
@@ -93,6 +94,7 @@ public class ScrapeJobWorker : BackgroundService
 
         job.Status = ScrapeJobStatus.Running;
         job.StartedAt = DateTime.UtcNow;
+        db.ScrapeEvents.Add(NewEvent(job, ScrapeEventType.JobStarted, new { startedAt = job.StartedAt }));
         await db.SaveChangesAsync(ct);
 
         _logger.LogInformation("Starting ScrapeJob {JobId}: {Type} (source={Source}, season={Season}, week={Week})",
@@ -119,11 +121,30 @@ public class ScrapeJobWorker : BackgroundService
         }
 
         job.CompletedAt = DateTime.UtcNow;
+        db.ScrapeEvents.Add(NewEvent(
+            job,
+            job.Status == ScrapeJobStatus.Succeeded ? ScrapeEventType.JobCompleted : ScrapeEventType.JobFailed,
+            new
+            {
+                status = job.Status.ToString(),
+                recordsProcessed = job.RecordsProcessed,
+                recordsFailed = job.RecordsFailed,
+                error = job.Error,
+                completedAt = job.CompletedAt,
+            }));
         await db.SaveChangesAsync(ct);
 
         _logger.LogInformation("ScrapeJob {JobId} finished: {Status} ({Processed} processed, {Failed} failed)",
             jobId, job.Status, job.RecordsProcessed, job.RecordsFailed);
     }
+
+    private static ScrapeEvent NewEvent(ScrapeJob job, ScrapeEventType type, object payload) => new()
+    {
+        JobId = job.Id,
+        EventType = type,
+        Timestamp = DateTime.UtcNow,
+        Payload = JsonSerializer.Serialize(payload),
+    };
 
     private static async Task<ScrapeResult> ExecuteScrapeAsync(
         IServiceProvider services, ScrapeJob job, CancellationToken ct)

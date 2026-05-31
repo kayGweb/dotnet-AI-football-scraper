@@ -23,6 +23,15 @@ public class RateLimitingMiddleware
 
     public async Task InvokeAsync(HttpContext context)
     {
+        // SignalR connections are long-lived and frame-multiplexed — rate-limiting
+        // them as if each negotiate/frame were a discrete request would trip almost
+        // immediately. Skip /hubs/* entirely.
+        if (context.Request.Path.StartsWithSegments("/hubs"))
+        {
+            await _next(context);
+            return;
+        }
+
         var key = ResolveKey(context);
         var window = _windows.GetOrAdd(key, _ => new SlidingWindow(_maxRequests, _window));
 
