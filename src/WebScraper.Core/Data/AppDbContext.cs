@@ -30,6 +30,12 @@ public class AppDbContext : DbContext
     /// </summary>
     public DbSet<ApiKey> ApiKeys => Set<ApiKey>();
 
+    /// <summary>
+    /// Persisted scrape jobs (M3 chunk b). Each POST /api/v1/scrape/* creates a row,
+    /// enqueues the ID, and the ScrapeJobWorker picks it up. Survives restarts.
+    /// </summary>
+    public DbSet<ScrapeJob> ScrapeJobs => Set<ScrapeJob>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         // Game has two FKs to Team — must use Restrict to avoid cascade cycles
@@ -143,6 +149,10 @@ public class AppDbContext : DbContext
         // Lookup-by-hash on the hot auth path
         modelBuilder.Entity<ApiKey>()
             .HasIndex(k => k.HashedKey);
+
+        // ScrapeJob — index on Status + CreatedAt for the worker's startup recovery query
+        modelBuilder.Entity<ScrapeJob>()
+            .HasIndex(j => new { j.Status, j.CreatedAt });
 
         // Global soft-delete query filters: any entity implementing ISoftDeletable is
         // automatically hidden from normal queries. Admin code uses IgnoreQueryFilters()

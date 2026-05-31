@@ -90,6 +90,9 @@ app.UseStatusCodePages();
 app.UseAuthentication();
 app.UseAuthorization();
 
+// Rate limiter sits AFTER auth so we can partition by API key / user identity.
+app.UseMiddleware<RateLimitingMiddleware>();
+
 // Query logging sits AFTER auth so we can stamp the ApiKeyId claim on log rows.
 app.UseMiddleware<ApiQueryLoggingMiddleware>();
 

@@ -35,12 +35,13 @@ src/
 │   │   ├── TeamGameStats.cs                # Team-level per-game aggregates — implements IAuditableEntity + ISoftDeletable
 │   │   ├── Injury.cs                       # Player injury reports per game — implements IAuditableEntity + ISoftDeletable
 │   │   ├── ApiLink.cs                      # Catalog of ESPN API endpoints — implements IAuditableEntity + ISoftDeletable
+│   │   ├── ScrapeJob.cs                   # M3b: Persisted scrape job (Id, Type, Source, Season, Week, Status, Progress, Error, timestamps, RequestedBy) + ScrapeJobType/ScrapeJobStatus enums
 │   │   ├── ScrapeResult.cs                # Scraper operation result (Success, RecordsProcessed, Errors)
 │   │   ├── ScraperSettings.cs             # Config POCO: scraper options + DataProvider + Providers dict
 │   │   ├── DataProvider.cs                # Enum: ProFootballReference, Espn, SportsDataIo, MySportsFeeds, NflCom
 │   │   └── ApiProviderSettings.cs         # Config POCO: BaseUrl, ApiKey, AuthType, headers per provider
 │   ├── Data/
-│   │   ├── AppDbContext.cs                # EF Core DbContext — 9 DbSets, global soft-delete query filters, registers interceptor
+│   │   ├── AppDbContext.cs                # EF Core DbContext — 10 DbSets (+ ScrapeJobs), global soft-delete query filters, registers interceptor
 │   │   ├── AuditingSaveChangesInterceptor.cs # M0: stamps CreatedAt/UpdatedAt, converts hard deletes to soft deletes
 │   │   └── Repositories/
 │   │       ├── IRepository.cs             # Generic repository interface
@@ -140,7 +141,9 @@ src/
 │   │   ├── AuthController.cs           # M3: POST /api/v1/auth/login, GET /me (any role), POST /users + GET /users (Admin)
 │   │   ├── ApiKeysController.cs        # M3: GET/POST/DELETE /api/v1/api-keys (Admin); plaintext returned ONCE on create
 │   │   ├── DeletedItemsController.cs   # M3: GET /api/v1/deleted-items?entityType=, POST /{entityType}/{id}/restore (Admin)
-│   │   └── PushController.cs           # M3: POST /api/v1/push (Admin) — wraps existing DatabasePushService
+│   │   ├── PushController.cs           # M3: POST /api/v1/push (Admin) — wraps existing DatabasePushService
+│   │   ├── ScrapeController.cs         # M3b: POST /api/v1/scrape/{teams|players|games|stats|all} → 202 + jobId (Operator)
+│   │   └── JobsController.cs           # M3b: GET /api/v1/jobs (paged + ?status=), GET /api/v1/jobs/{id} (Operator)
 │   ├── Dtos/
 │   │   ├── MetaDto.cs                  # Data lineage envelope (Source, FetchedAt, SourceRecordId, CreatedAt, UpdatedAt)
 │   │   ├── TeamDto.cs                  # Team + nested TeamSummaryDto
@@ -155,20 +158,25 @@ src/
 │   │   │   └── AuthDtos.cs             # M3: LoginRequest/Response, RegisterUserRequest, UserDto
 │   │   └── Admin/
 │   │       ├── ApiKeyDtos.cs           # M3: CreateApiKeyRequest, RevokeApiKeyRequest, ApiKeyCreatedDto, ApiKeyDto
-│   │       └── DeletedItemDto.cs       # M3: EntityType/Id/Label/DeletedAt/DeletedBy/DeleteReason
+│   │       ├── DeletedItemDto.cs       # M3: EntityType/Id/Label/DeletedAt/DeletedBy/DeleteReason
+│   │       └── ScrapeJobDtos.cs        # M3b: CreateScrapeJobRequest, ScrapeJobDto + mapping extension
 │   ├── Mapping/
 │   │   └── EntityMappings.cs           # Hand-rolled entity → DTO extension methods (no AutoMapper)
 │   ├── Middleware/
-│   │   └── ApiQueryLoggingMiddleware.cs # Stamps X-Correlation-Id, builds ApiQueryLog, enqueues for async persistence
+│   │   ├── ApiQueryLoggingMiddleware.cs # Stamps X-Correlation-Id, builds ApiQueryLog, enqueues for async persistence
+│   │   └── RateLimitingMiddleware.cs    # M3b: Sliding-window rate limiter partitioned by API key / user / IP (60 req/min default, 429 + Retry-After)
 │   ├── Pagination/
 │   │   └── PagedResult.cs              # Generic PagedResult<T> envelope + PaginationQuery (clamped Page/PageSize)
 │   ├── Services/
 │   │   ├── IApiQueryLogQueue.cs        # Write-only facade over Channel<ApiQueryLog>
 │   │   ├── ApiQueryLogQueue.cs         # Bounded channel (capacity 10k, DropOldest) — hot path never blocks
 │   │   ├── ApiQueryLogWriter.cs        # BackgroundService — batch (100) + interval (2s) flush to ApiQueryLogs
-│   │   └── ApiKeyManagementService.cs  # M3: create (returns plaintext once) / list / get / revoke (soft delete)
+│   │   ├── ApiKeyManagementService.cs  # M3: create (returns plaintext once) / list / get / revoke (soft delete)
+│   │   ├── IJobQueue.cs                # M3b: write-only facade over Channel<int> (job IDs)
+│   │   ├── JobQueue.cs                 # M3b: bounded channel (capacity 200, Wait) for scrape job IDs
+│   │   └── ScrapeJobWorker.cs          # M3b: BackgroundService — dequeues job IDs, runs matching scraper, updates ScrapeJob row
 │   ├── Extensions/
-│   │   └── ApiServiceCollectionExtensions.cs # DI: API key + JWT dual scheme, Identity, query log queue, Swagger (ApiKey + Bearer)
+│   │   └── ApiServiceCollectionExtensions.cs # DI: API key + JWT dual scheme, Identity, query log queue, job queue + worker, Swagger (ApiKey + Bearer)
 │   └── Properties/
 │       └── launchSettings.json         # dev profiles (http://localhost:5080, https://localhost:7080)
 └── WebScraper.Mcp/                     # M2: MCP server (stdio) — exposes the M1 API as tools for Claude
@@ -276,7 +284,7 @@ Static helper that maps the `DataProvider` config string to the correct set of D
 | `EspnMappings` | — | — | Bidirectional ESPN ID ↔ NFL abbreviation map for all 32 teams + division lookup |
 
 ## Database Schema
-Nine tables with the following relationships:
+Eleven tables with the following relationships:
 - **Teams** — 32 NFL teams (id, name, abbreviation, city, conference, division)
 - **Players** — FK to Teams via `TeamId` (nullable for free agents); `EspnId` for ESPN athlete matching
 - **Games** — Two FKs to Teams: `HomeTeamId`, `AwayTeamId` (both use `DeleteBehavior.Restrict`); optional FK to `Venues`; includes quarter scores (HomeQ1-Q4, HomeOT, AwayQ1-Q4, AwayOT), `EspnEventId`, `GameStatus`, `HomeWinner`, `Attendance`, `NeutralSite`
@@ -286,6 +294,8 @@ Nine tables with the following relationships:
 - **Injuries** — Player injury reports per game (FKs to Games+Players, UK on GameId+EspnAthleteId); status, injury type, body location, return date
 - **ApiLinks** — Discovered ESPN API endpoints (UK on Url); endpoint type, relation, season/week, ESPN event ID, timestamps
 - **ApiQueryLogs** (M0) — Observability log of every public API consumer request: `Id` (long PK), `Timestamp`, `ApiKeyId`, `ApiKeyName`, `Method`, `Path`, `QueryString`, `StatusCode`, `DurationMs`, `ResponseBytes`, `UserAgent`, `CorrelationId`. Indexes on `Timestamp` and on `(ApiKeyId, Timestamp)` for dashboard queries. Populated asynchronously by `ApiQueryLoggingMiddleware` via a background `Channel<T>` writer in the M1 Web API — the hot path never blocks on the DB.
+- **ApiKeys** (M3a) — DB-backed API keys: `KeyId` (unique opaque ID), `HashedKey` (SHA-256 hex), `Name`, `Scopes` (comma-separated), `CreatedBy`, `LastUsedAt`, `ExpiresAt` + IAuditableEntity + ISoftDeletable. Auth handler checks this table first, falls back to config.
+- **ScrapeJobs** (M3b) — Persisted scrape job queue: `Id` (int PK), `Type` (enum), `Source`, `Season`, `Week`, `Status` (Queued/Running/Succeeded/Failed), `RecordsProcessed`, `RecordsFailed`, `Error`, `CreatedAt`, `StartedAt`, `CompletedAt`, `RequestedBy`. Index on `(Status, CreatedAt)` for orphan recovery.
 
 ### Cross-cutting columns (M0)
 Every non-log entity (Teams through ApiLinks) now implements `IAuditableEntity` + `ISoftDeletable` and gains 9 columns:
@@ -775,6 +785,76 @@ dotnet ef migrations add InitialIdentity \
 Both are applied automatically on API startup via `db.Database.MigrateAsync()` /
 `authDb.Database.MigrateAsync()`.
 
+## WebScraper.Api job queue (M3 chunk b)
+
+M3 chunk (b) adds a persistent scrape job queue so admins and operators can trigger
+scrapes via the API and monitor their progress. Each POST creates a `ScrapeJob` row
+in the database (surviving restarts), enqueues its ID into a `Channel<int>`, and
+immediately returns 202 Accepted with the job location. A `ScrapeJobWorker`
+BackgroundService drains the channel, runs the matching scraper, and updates the row.
+
+### Scrape job lifecycle
+```
+POST /api/v1/scrape/teams  →  ScrapeJob (Queued)  →  Channel<int>  →  ScrapeJobWorker
+                                                                          ↓
+                                                             ScrapeJob (Running → Succeeded/Failed)
+```
+
+On startup, `ScrapeJobWorker` recovers orphaned jobs (any rows with `Status = Queued` or
+`Running` from a previous crash) and re-enqueues them. Scrapers are idempotent via
+upsert, so re-running is always safe.
+
+### ScrapeJob entity
+`ScrapeJob` in Core's `Models/` — plain entity (no `IAuditableEntity`/`ISoftDeletable`
+since jobs are ephemeral logs, not domain data). Fields:
+- `Id` (int PK), `Type` (enum: Teams/Players/Games/Stats/All), `Source` (data provider name)
+- `Season` (nullable int), `Week` (nullable int)
+- `Status` (enum: Queued/Running/Succeeded/Failed)
+- `RecordsProcessed`, `RecordsFailed`
+- `Error` (nullable string — error message on failure)
+- `CreatedAt`, `StartedAt`, `CompletedAt`
+- `RequestedBy` (email of the JWT user who triggered the job)
+
+Index on `(Status, CreatedAt)` for the startup recovery query.
+
+### Scrape endpoints
+| Method | Route | Policy | Body | Purpose |
+|--------|-------|--------|------|---------|
+| POST | `/api/v1/scrape/teams` | `RequireOperator` | — | Scrape all teams |
+| POST | `/api/v1/scrape/players` | `RequireOperator` | — | Scrape all rosters |
+| POST | `/api/v1/scrape/games` | `RequireOperator` | `{season, week?}` | Scrape games |
+| POST | `/api/v1/scrape/stats` | `RequireOperator` | `{season, week}` | Scrape player stats |
+| POST | `/api/v1/scrape/all` | `RequireOperator` | `{season, week?}` | Full pipeline |
+| GET | `/api/v1/jobs` | `RequireOperator` | — | Paged job list (newest first), optional `?status=` filter |
+| GET | `/api/v1/jobs/{id}` | `RequireOperator` | — | Single job status |
+
+All POST endpoints return `202 Accepted` with a `Location` header pointing at
+`/api/v1/jobs/{id}` and the `ScrapeJobDto` in the body.
+
+### Rate limiting
+`RateLimitingMiddleware` sits after auth in the pipeline. Uses a sliding window
+(60 requests per 60 seconds, default) partitioned by:
+1. API key ID (from the `api_key_id` claim) — if authenticated via API key
+2. User ID (from `ClaimTypes.NameIdentifier`) — if authenticated via JWT
+3. Remote IP — fallback for unauthenticated requests
+
+Returns `429 Too Many Requests` with `Retry-After: 10` header and an RFC 7807
+Problem Details body when the limit is exceeded.
+
+### Single-instance constraint
+The `ScrapeJobWorker` is designed for single-instance operation. If you scale the
+API to multiple replicas, only one should run the worker — the others should not
+register `ScrapeJobWorker` as a hosted service. A distributed lock (e.g. Redis or
+PostgreSQL advisory lock) would be needed for multi-instance operation.
+
+### Pending migration
+Chunk (b) adds the `ScrapeJobs` table:
+```bash
+dotnet ef migrations add ScrapeJobsTable \
+    --project src/WebScraper.Core \
+    --startup-project src/WebScraper.Cli
+```
+
 ## CLI Commands
 All `dotnet run` commands below must target the CLI project explicitly: `dotnet run --project src/WebScraper.Cli -- <args>`.
 
@@ -962,7 +1042,15 @@ Main Menu
 - [x] **M3 chunk (a) Phase 7:** DI wiring + startup — `ApiServiceCollectionExtensions` adds `AddIdentityInfrastructure` + `AddApiAuthentication`, Swagger gains a `Bearer` security definition alongside `ApiKey`, `Program.cs` migrates `AuthDbContext` and runs `IdentitySeeder` after `AppDbContext` migrate
 - [x] **M3 chunk (a) Phase 8:** Config — `Jwt` section (placeholder signing key, must be overridden in `appsettings.Local.json`), `InitialAdmin` section (empty by default), `ApiKeys` comment updated to clarify it's a bootstrap fallback
 - [ ] **M3 chunk (a) Phase 9 (pending):** Generate EF Core migrations — `dotnet ef migrations add ApiKeysTable --project src/WebScraper.Core --startup-project src/WebScraper.Cli` AND `dotnet ef migrations add InitialIdentity --project src/WebScraper.Api --context AuthDbContext`
-- [ ] **M3 chunk (b):** Job queue (`IJobQueue`, `ScrapeJob` entity, `ScrapeJobWorker : BackgroundService`) + write endpoints (`POST /api/v1/scrape/{type}` → 202 + jobId, `GET /api/v1/jobs`, `GET /api/v1/jobs/{id}`) + rate limiter partitioned by API key
+- [x] **M3 chunk (b) Phase 1:** `ScrapeJob` entity in Core — `ScrapeJobType` enum (Teams/Players/Games/Stats/All), `ScrapeJobStatus` enum (Queued/Running/Succeeded/Failed), `DbSet<ScrapeJob>` in `AppDbContext` with index on `(Status, CreatedAt)`
+- [x] **M3 chunk (b) Phase 2:** Job queue — `IJobQueue` interface + `JobQueue` implementation backed by `Channel<int>` (bounded 200, Wait mode), singleton in DI
+- [x] **M3 chunk (b) Phase 3:** `ScrapeJobWorker : BackgroundService` — dequeues job IDs, resolves scraper via DI, runs matching scrape method, updates ScrapeJob row. Recovers orphaned Queued/Running jobs on startup.
+- [x] **M3 chunk (b) Phase 4:** `ScrapeController` — `POST /api/v1/scrape/{teams|players|games|stats|all}` (RequireOperator) → persists ScrapeJob, enqueues ID, returns 202 Accepted with Location header + ScrapeJobDto
+- [x] **M3 chunk (b) Phase 5:** `JobsController` — `GET /api/v1/jobs` (paged, optional `?status=` filter), `GET /api/v1/jobs/{id}` (RequireOperator)
+- [x] **M3 chunk (b) Phase 6:** `RateLimitingMiddleware` — sliding window (60 req/min default), partitioned by API key ID / user ID / IP, returns 429 + Retry-After
+- [x] **M3 chunk (b) Phase 7:** DTOs — `CreateScrapeJobRequest`, `ScrapeJobDto` + `ScrapeJobMappings.ToDto()` extension
+- [x] **M3 chunk (b) Phase 8:** DI wiring — `JobQueue`/`IJobQueue` singleton, `ScrapeJobWorker` hosted service in `ApiServiceCollectionExtensions`, `RateLimitingMiddleware` in Program.cs pipeline after auth
+- [ ] **M3 chunk (b) Phase 9 (pending):** Generate EF Core migration — `dotnet ef migrations add ScrapeJobsTable --project src/WebScraper.Core --startup-project src/WebScraper.Cli`
 - [ ] **M3 chunk (c):** SignalR hub (`/hubs/scraper`) + `ScrapeEvent` outbox + `ScrapeEventRelay : BackgroundService` + replay via `GET /api/v1/events?since=`
 - [ ] **M4:** Blazor Server admin dashboard — JWT auth, health, soft-delete review, ApiQueryLog viewer
 - [ ] **M5:** Contract tests — recorded fixtures per provider; Docker + DigitalOcean App Platform deployment (PostgreSQL); future Azure App Service + MSSQL migration path
