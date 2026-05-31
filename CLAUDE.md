@@ -7,7 +7,8 @@ Originally a .NET 8 Console application that scrapes NFL football data from mult
 - `CHATBOT_MICROSERVICE_PLAN.md` — **current** microservice transformation plan (milestones M0–M6)
 
 ## Tech Stack
-- **Framework:** .NET 8 (class library + console app today; Web API + Blazor Server + MCP server coming in M1–M4)
+- **Framework:** .NET 8 (class library, console app, Web API, Blazor Server admin dashboard, MCP server)
+- **UI:** MudBlazor 6.12.0 (admin dashboard components, charts, dark theme)
 - **HTML Parsing:** HtmlAgilityPack, AngleSharp
 - **JSON Parsing:** System.Text.Json (built into .NET 8)
 - **ORM:** Entity Framework Core 8
@@ -127,7 +128,7 @@ src/
 │   │   ├── ApiKeyHasher.cs             # M3: SHA-256 hex + constant-time equals + GenerateRandomKey() helpers
 │   │   ├── AppUser.cs                  # M3: IdentityUser subclass (adds LastLoginAt)
 │   │   ├── AuthDbContext.cs            # M3: IdentityDbContext<AppUser> — separate context, __AuthMigrationsHistory table, Auth_* table prefix
-│   │   ├── AuthorizationPolicies.cs    # Policies: RequireReadScope (API key), RequireAdmin / RequireOperator / RequireViewer (JWT)
+│   │   ├── AuthorizationPolicies.cs    # Policies: RequireReadScope (API key), RequireAdmin / RequireOperator / RequireViewer (JWT), DashboardAccess (cookie) + CookieSchemeName constant
 │   │   ├── IdentitySeeder.cs           # M3: ensures Admin/Operator/Viewer roles exist + creates initial admin from config if user table is empty
 │   │   ├── InitialAdminSettings.cs     # M3: Email/Password POCO bound to "InitialAdmin" config section
 │   │   ├── JwtSettings.cs              # M3: Issuer/Audience/SigningKey/AccessTokenMinutes POCO
@@ -181,8 +182,29 @@ src/
 │   │   └── ScrapeEventRelay.cs         # M3c: BackgroundService — polls ScrapeEvents (1s) and broadcasts to ScraperHub
 │   ├── Hubs/
 │   │   └── ScraperHub.cs               # M3c: SignalR hub at /hubs/scraper — broadcasts "ScrapeEvent" to subscribers (Viewer)
+│   ├── Components/                     # M4: Blazor Server admin dashboard
+│   │   ├── _Imports.razor              # Global usings: MudBlazor, auth, routing, layout
+│   │   ├── App.razor                   # Root HTML document: MudBlazor CSS/JS, HeadOutlet, Routes, blazor.web.js
+│   │   ├── Routes.razor                # Router: CascadingAuthenticationState, AuthorizeRouteView, RedirectToLogin for unauthorized
+│   │   ├── RedirectToLogin.razor       # Redirects unauthenticated users to /admin/login with forceLoad
+│   │   ├── Layout/
+│   │   │   ├── AdminLayout.razor       # MudBlazor dark theme: AppBar, NavDrawer (Dashboard, Jobs, New Scrape, Admin group, API Usage), role-based nav
+│   │   │   └── EmptyLayout.razor       # Minimal layout for login page (no chrome)
+│   │   └── Pages/Admin/
+│   │       ├── Login.razor             # SSR login form — posts to minimal API /admin/login endpoint
+│   │       ├── Dashboard.razor         # 8 status cards (entity counts + active jobs) + recent jobs + system info (query stats)
+│   │       ├── Jobs.razor              # Auto-refreshing job table (5s timer) with status filter, duration formatting
+│   │       ├── NewScrape.razor         # Scrape trigger form — job type, season/week, writes ScrapeJob + ScrapeEvent, enqueues
+│   │       ├── ApiKeysPage.razor       # API key management — create dialog, revoke, include-revoked toggle
+│   │       ├── CreateApiKeyDialog.razor # MudDialog: key name, scopes, optional expiry
+│   │       ├── Users.razor             # User management — list with roles/lockout, create dialog
+│   │       ├── CreateUserDialog.razor  # MudDialog: email, password, role select
+│   │       ├── DeletedItems.razor      # Soft-delete review — entity type selector, restore via ExecuteUpdateAsync
+│   │       └── ApiUsage.razor          # Analytics: daily bar chart, response code donut, top endpoints table, top consumers table
 │   ├── Extensions/
-│   │   └── ApiServiceCollectionExtensions.cs # DI: API key + JWT dual scheme (with SignalR access_token query support), Identity, query log queue, job queue + worker, SignalR + relay, Swagger
+│   │   └── ApiServiceCollectionExtensions.cs # DI: API key + JWT + cookie triple scheme, Identity, query log queue, job queue + worker, SignalR + relay, Blazor + MudBlazor, Swagger
+│   ├── wwwroot/
+│   │   └── css/admin.css               # Minimal styles for body, status cards
 │   └── Properties/
 │       └── launchSettings.json         # dev profiles (http://localhost:5080, https://localhost:7080)
 └── WebScraper.Mcp/                     # M2: MCP server (stdio) — exposes the M1 API as tools for Claude
@@ -929,6 +951,97 @@ dotnet ef migrations add ScrapeEventsTable \
     --startup-project src/WebScraper.Cli
 ```
 
+## WebScraper.Api admin dashboard (M4)
+
+M4 layers a Blazor Server admin dashboard onto the same `WebScraper.Api` host so the
+REST API and the dashboard share one DB connection, one auth pipeline, and one process.
+The dashboard lives at `/admin/*` and uses MudBlazor 6.12.0 for components, charts, and
+a dark theme out of the box.
+
+### Three auth schemes coexist
+| Scheme | Header / Cookie | Default policies | Typical caller |
+|--------|-----------------|------------------|----------------|
+| `ApiKey` (default) | `X-Api-Key` header | `RequireReadScope` | MCP server, CI jobs, Claude skills |
+| `Bearer` (JWT) | `Authorization: Bearer` | `RequireAdmin` / `RequireOperator` / `RequireViewer` | REST API clients, write endpoints |
+| `AdminCookie` | `WebScraper.Admin` cookie | `DashboardAccess` | Blazor admin pages |
+
+The cookie is HttpOnly, Strict SameSite, 8-hour sliding expiry. Cookie auth needs an HTTP
+request/response cycle to set the `Set-Cookie` header, which interactive Blazor server
+circuits can't provide — so login uses an SSR form that POSTs to a minimal API endpoint
+(`POST /admin/login`). The endpoint validates via `SignInManager.CheckPasswordSignInAsync`
+(lockout-on-failure enabled), builds a `ClaimsPrincipal` with role claims, signs in with
+the AdminCookie scheme, and redirects to `/admin`. Logout (`GET /admin/logout`) just
+calls `SignOutAsync` and redirects back to the login page.
+
+### Pages (under `/admin/*`)
+| Route | Authorization | Purpose |
+|-------|--------------|---------|
+| `/admin/login` | anonymous | SSR login form (uses `EmptyLayout`, no rendermode) |
+| `/admin` | any role | Dashboard — 8 status cards (Teams, Players, Games, Stats, Venues, Injuries, API Keys, Active Jobs), recent 5 jobs, system info (latest update + 24h query count + total log rows) |
+| `/admin/jobs` | any role | Scrape job table with status filter; 5-second auto-refresh via `Timer` (page implements `IDisposable`) |
+| `/admin/scrapes/new` | Admin or Operator | Trigger scrape — job type select, conditional season/week fields, writes `ScrapeJob` + `JobQueued` `ScrapeEvent`, enqueues into `IJobQueue` |
+| `/admin/api-keys` | Admin | List + create + revoke API keys; plaintext shown via `Snackbar` once on create |
+| `/admin/users` | Admin | List users (email/roles/last login/lockout); create with role assignment |
+| `/admin/deleted-items` | Admin | Entity-type selector → soft-deleted rows; restore clears `IsDeleted` + nullables via `ExecuteUpdateAsync` with `IgnoreQueryFilters()` |
+| `/admin/api-usage` | any role | Analytics — daily request bar chart (7d), response code donut, top endpoints + top consumers tables |
+
+All data-driven pages declare `@rendermode InteractiveServer` so they get a live
+SignalR-backed circuit. The Login page is plain SSR — no rendermode — because it has to
+POST to an HTTP endpoint to set the auth cookie.
+
+### Blazor circuit-safe DB access
+A scoped `AppDbContext` in Blazor Server lives as long as the SignalR circuit (often
+hours), so the standard `[Inject] AppDbContext Db` pattern leaks change tracking and
+causes concurrent-DbContext exceptions. The dashboard avoids this by injecting
+`IServiceScopeFactory` and creating a fresh scope per operation:
+
+```csharp
+using var scope = ScopeFactory.CreateScope();
+var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+var teams = await db.Teams.CountAsync();
+// scope disposes here — db disposed with it
+```
+
+This pattern (instead of `IDbContextFactory<T>`) avoids needing a second DbContext
+registration that would conflict with Core's `AddDbContext<AppDbContext>` in
+`ServiceCollectionExtensions`.
+
+### Layout + navigation
+`AdminLayout.razor` provides the chrome: top AppBar (title, current user, logout
+button), left NavDrawer with three groups:
+1. **Always visible:** Dashboard, Jobs, New Scrape
+2. **Admin-only** (`<AuthorizeView Roles="Admin">`): API Keys, Users, Deleted Items
+3. **Always visible:** API Usage
+
+`Routes.razor` wraps everything in `<CascadingAuthenticationState>` so child pages can
+use `<AuthorizeView>` and the `[Authorize]` attribute. The `<NotAuthorized>` fragment
+renders `<RedirectToLogin />` (NavigationManager forceLoad to `/admin/login`) for
+anonymous users or a MudAlert "Access denied" for authenticated-but-unauthorized.
+
+### Middleware pipeline interaction
+- `UseStaticFiles()` is required for the MudBlazor CSS/JS under `_content/MudBlazor/*`.
+- `UseAntiforgery()` is required by `MapRazorComponents` and must sit after
+  `UseAuthentication`/`UseAuthorization`.
+- `ApiQueryLoggingMiddleware` only logs requests under `/api/*`, so Blazor traffic and
+  the internal `/_blazor` SignalR hub are excluded.
+- `RateLimitingMiddleware` skips `/hubs/*` (the M3c `ScraperHub`) and `/_blazor`
+  (the Blazor circuit hub).
+
+### Config + bootstrap
+No new config sections — the dashboard reuses everything M3 added:
+- `Jwt:*` (only needed for REST clients; the dashboard uses the cookie scheme)
+- `InitialAdmin:Email` / `InitialAdmin:Password` — `IdentitySeeder` creates the first
+  Admin user from these only when the user table is empty. After first boot, manage
+  users via `/admin/users`.
+
+### What's NOT in M4
+- **Real-time job updates on the dashboard via the SignalR hub** — the Jobs page polls
+  every 5s instead. Wiring `@microsoft/signalr` into Blazor Server would mean either
+  adding a JS interop layer or letting Blazor re-render on `IHubContext` callbacks; the
+  trade-off didn't seem worth it for a single page with a 5s refresh.
+- **Push button** — the dashboard doesn't expose `POST /api/v1/push` yet. Add a button
+  on the Dashboard page when needed.
+
 ## CLI Commands
 All `dotnet run` commands below must target the CLI project explicitly: `dotnet run --project src/WebScraper.Cli -- <args>`.
 
@@ -1134,7 +1247,14 @@ Main Menu
 - [x] **M3 chunk (c) Phase 7:** Middleware skips — `RateLimitingMiddleware` and `ApiQueryLoggingMiddleware` both bypass `/hubs/*` so long-lived connections aren't throttled or logged per-frame
 - [x] **M3 chunk (c) Phase 8:** DI wiring — `AddSignalR()`, `AddHostedService<ScrapeEventRelay>()` in `ApiServiceCollectionExtensions`; `app.MapHub<ScraperHub>("/hubs/scraper")` in `Program.cs`
 - [ ] **M3 chunk (c) Phase 9 (pending):** Generate EF Core migration — `dotnet ef migrations add ScrapeEventsTable --project src/WebScraper.Core --startup-project src/WebScraper.Cli`
-- [ ] **M4:** Blazor Server admin dashboard — JWT auth, health, soft-delete review, ApiQueryLog viewer
+- [x] **M4 Phase 1:** MudBlazor package + Blazor Server scaffolding — `WebScraper.Api.csproj` adds `MudBlazor 6.12.0`; `Components/App.razor` (root HTML), `Components/Routes.razor` (router with `CascadingAuthenticationState` + `AuthorizeRouteView` + `RedirectToLogin`), `Components/_Imports.razor` (global usings)
+- [x] **M4 Phase 2:** Cookie auth scheme — `AuthorizationPolicies.CookieSchemeName = "AdminCookie"` constant, `DashboardAccess` policy (cookie + any role), `AddCookie` registration in `AddApiAuthentication` (LoginPath `/admin/login`, HttpOnly, Strict SameSite, 8h sliding expiry)
+- [x] **M4 Phase 3:** Login/logout minimal API endpoints in `Program.cs` — `POST /admin/login` validates via `SignInManager.CheckPasswordSignInAsync`, builds `ClaimsPrincipal` with role claims, signs in with AdminCookie scheme, stamps `LastLoginAt`; `GET /admin/logout` clears the cookie
+- [x] **M4 Phase 4:** Layouts — `AdminLayout.razor` (MudBlazor dark theme, AppBar with user name + logout, NavDrawer with role-gated nav groups), `EmptyLayout.razor` (chrome-free for login)
+- [x] **M4 Phase 5:** Pages — `Login.razor` (SSR form posting to `/admin/login`), `Dashboard.razor` (8 status cards + recent jobs + system info), `Jobs.razor` (5s auto-refresh table with status filter), `NewScrape.razor` (scrape trigger with JobQueue enqueue + ScrapeEvent outbox write), `ApiKeysPage.razor` + `CreateApiKeyDialog.razor` (key CRUD with one-time plaintext display), `Users.razor` + `CreateUserDialog.razor` (user CRUD with role assignment), `DeletedItems.razor` (soft-delete restore via `ExecuteUpdateAsync`), `ApiUsage.razor` (MudChart bar/donut + top endpoints/consumers tables)
+- [x] **M4 Phase 6:** Blazor circuit-safe DB access — all 5 data-driven pages inject `IServiceScopeFactory` and create per-operation scopes (`using var scope = ScopeFactory.CreateScope(); var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();`) so each query gets a fresh short-lived DbContext instead of one pinned to the circuit
+- [x] **M4 Phase 7:** Program.cs pipeline — `UseStaticFiles()`, `UseAntiforgery()`, `MapRazorComponents<App>().AddInteractiveServerRenderMode()` after `MapControllers()`; `wwwroot/css/admin.css` for body + status card styles
+- [x] **M4 Phase 8:** DI wiring — `AddRazorComponents().AddInteractiveServerComponents()`, `AddMudServices()`, `AddCascadingAuthenticationState()` in `ApiServiceCollectionExtensions`
 - [ ] **M5:** Contract tests — recorded fixtures per provider; Docker + DigitalOcean App Platform deployment (PostgreSQL); future Azure App Service + MSSQL migration path
 - [ ] **M6:** Production polish — scheduled scrapes, cross-provider reconciliation, OpenTelemetry, webhooks, full-text search, backups
 
