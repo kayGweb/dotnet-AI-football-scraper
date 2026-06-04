@@ -41,11 +41,6 @@
     <PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
   </ItemGroup>
 
-  <!-- appsettings.json + appsettings.Development.json are included automatically by Sdk.Web -->
-  <ItemGroup>
-    <Content Include="appsettings.Local.json" Condition="Exists('appsettings.Local.json')">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-  </ItemGroup>
+
 
 </Project>

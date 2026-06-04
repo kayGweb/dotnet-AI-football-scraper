@@ -11,8 +11,8 @@
 <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="OpenCreateDialog" Class="mb-4"
            StartIcon="@Icons.Material.Filled.Add">Create Key</MudButton>
 
-<MudSwitch T="bool" @bind-Value="_includeRevoked" Label="Include Revoked" Color="Color.Secondary"
-           Class="mb-4" ValueChanged="@(async (bool _) => await RefreshAsync())" />
+<MudSwitch T="bool" @bind-Value="_includeRevoked" @bind-Value:after="RefreshAsync"
+           Label="Include Revoked" Color="Color.Secondary" Class="mb-4" />
 
 <MudTable Items="_keys" Dense="true" Hover="true" Loading="_loading" Striped="true">
     <HeaderContent>

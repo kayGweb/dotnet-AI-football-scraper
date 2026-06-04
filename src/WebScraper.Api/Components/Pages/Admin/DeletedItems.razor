@@ -9,8 +9,8 @@
 
 <MudText Typo="Typo.h4" Class="mb-4">Deleted Items</MudText>
 
-<MudSelect T="string" @bind-Value="_entityType" Label="Entity Type" Variant="Variant.Outlined"
-           Class="mb-4" Style="max-width: 300px;" ValueChanged="@(async (string _) => await RefreshAsync())">
+<MudSelect T="string" @bind-Value="_entityType" @bind-Value:after="RefreshAsync"
+           Label="Entity Type" Variant="Variant.Outlined" Class="mb-4" Style="max-width: 300px;">
     <MudSelectItem Value="@("Team")">Teams</MudSelectItem>
     <MudSelectItem Value="@("Player")">Players</MudSelectItem>
     <MudSelectItem Value="@("Game")">Games</MudSelectItem>

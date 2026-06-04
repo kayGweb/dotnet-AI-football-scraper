@@ -69,6 +69,7 @@ project.nuget.cache
 
 # Secrets
 appsettings.*.json
+appsettings.Local.json
 !appsettings.json
 !appsettings.Development.json
 .env
