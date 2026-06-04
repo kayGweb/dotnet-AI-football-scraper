@@ -1,8 +1,5 @@
-using System.Security.Claims;
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Serilog;
@@ -111,57 +108,8 @@ app.MapControllers();
 // browsers must pass it via ?access_token=… on the WebSocket URL.
 app.MapHub<ScraperHub>("/hubs/scraper");
 
-// Dashboard login/logout — minimal API endpoints that set/clear the admin cookie.
-// Registered BEFORE MapRazorComponents so explicit endpoint matches take precedence.
-// DisableAntiforgery: the login form is the first request in the session, so there's
-// no prior session to bind a CSRF token to. SignInManager.CheckPasswordSignInAsync
-// + lockoutOnFailure provides the brute-force protection here.
-app.MapPost("/admin/login-action", async (
-    HttpContext httpContext,
-    SignInManager<AppUser> signInManager,
-    UserManager<AppUser> userManager) =>
-{
-    var form = await httpContext.Request.ReadFormAsync();
-    var email = form["email"].ToString();
-    var password = form["password"].ToString();
-
-    var user = await userManager.FindByEmailAsync(email);
-    if (user is null)
-        return Results.Redirect("/admin/login?error=invalid");
-
-    var result = await signInManager.CheckPasswordSignInAsync(user, password, lockoutOnFailure: true);
-    if (result.IsLockedOut)
-        return Results.Redirect("/admin/login?error=locked");
-    if (!result.Succeeded)
-        return Results.Redirect("/admin/login?error=invalid");
-
-    var roles = await userManager.GetRolesAsync(user);
-    var claims = new List<Claim>
-    {
-        new(ClaimTypes.NameIdentifier, user.Id),
-        new(ClaimTypes.Name, user.Email ?? user.Id),
-        new(ClaimTypes.Email, user.Email ?? string.Empty),
-    };
-    claims.AddRange(roles.Select(r => new Claim(ClaimTypes.Role, r)));
-
-    var identity = new ClaimsIdentity(claims, AuthorizationPolicies.CookieSchemeName);
-    await httpContext.SignInAsync(
-        AuthorizationPolicies.CookieSchemeName,
-        new ClaimsPrincipal(identity));
-
-    user.LastLoginAt = DateTime.UtcNow;
-    await userManager.UpdateAsync(user);
-
-    return Results.Redirect("/admin");
-}).AllowAnonymous().DisableAntiforgery();
-
-app.MapGet("/admin/logout", async (HttpContext httpContext) =>
-{
-    await httpContext.SignOutAsync(AuthorizationPolicies.CookieSchemeName);
-    return Results.Redirect("/admin/login");
-}).AllowAnonymous();
-
 // M4: Blazor admin dashboard at /admin/*
+// Login/logout handled by AdminLoginController ([AllowAnonymous] + [IgnoreAntiforgeryToken]).
 app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
 
 // Liveness: process is up.
