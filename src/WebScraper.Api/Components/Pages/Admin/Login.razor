@@ -18,7 +18,7 @@
                 <MudAlert Severity="Severity.Error" Class="mb-4" Dense="true">@_error</MudAlert>
             }
 
-            <form method="post" action="/admin/login">
+            <form method="post" action="/admin/login-action">
                 <input type="hidden" name="returnUrl" value="/admin" />
                 <MudTextField T="string" Name="email" Label="Email" Variant="Variant.Outlined"
                               InputType="InputType.Email" Required="true" Class="mb-3" />
