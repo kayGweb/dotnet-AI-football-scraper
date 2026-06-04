@@ -111,10 +111,11 @@ app.MapControllers();
 // browsers must pass it via ?access_token=… on the WebSocket URL.
 app.MapHub<ScraperHub>("/hubs/scraper");
 
-// M4: Blazor admin dashboard at /admin/*
-app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
-
 // Dashboard login/logout — minimal API endpoints that set/clear the admin cookie.
+// Registered BEFORE MapRazorComponents so explicit endpoint matches take precedence.
+// DisableAntiforgery: the login form is the first request in the session, so there's
+// no prior session to bind a CSRF token to. SignInManager.CheckPasswordSignInAsync
+// + lockoutOnFailure provides the brute-force protection here.
 app.MapPost("/admin/login-action", async (
     HttpContext httpContext,
     SignInManager<AppUser> signInManager,
@@ -152,13 +153,16 @@ app.MapPost("/admin/login-action", async (
     await userManager.UpdateAsync(user);
 
     return Results.Redirect("/admin");
-}).AllowAnonymous();
+}).AllowAnonymous().DisableAntiforgery();
 
 app.MapGet("/admin/logout", async (HttpContext httpContext) =>
 {
     await httpContext.SignOutAsync(AuthorizationPolicies.CookieSchemeName);
     return Results.Redirect("/admin/login");
 }).AllowAnonymous();
+
+// M4: Blazor admin dashboard at /admin/*
+app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
 
 // Liveness: process is up.
 app.MapHealthChecks("/health/live", new HealthCheckOptions
