@@ -1,8 +1,18 @@
 # NFL Web Scraper
 
-A .NET 8 console application that scrapes NFL football data from multiple sources and stores it in a structured relational database. Supports five pluggable data providers — switch between HTML scraping and REST API sources via configuration or a CLI flag. Includes both a CLI mode and an interactive menu-driven REPL.
+A .NET 8 microservice that scrapes NFL football data from multiple sources and exposes it through a REST API, a Blazor Server admin dashboard, and an MCP server for Claude integration. Supports five pluggable data providers — switch between HTML scraping and REST API sources via configuration. Includes a standalone CLI mode and an interactive menu-driven REPL.
 
-Collects teams, player rosters, game schedules/scores, and per-game player statistics (passing, rushing, receiving).
+Collects teams, player rosters, game schedules/scores (including quarter scores, venues, attendance), per-game player statistics (10 categories: passing, rushing, receiving, fumbles, defensive, interceptions, kick returns, punt returns, kicking, punting), team-level aggregates, and injury reports.
+
+### Components
+
+| Component | Project | Description |
+|-----------|---------|-------------|
+| **REST API** | `WebScraper.Api` | Read-only endpoints + admin write endpoints (JWT/API key auth) |
+| **Admin Dashboard** | `WebScraper.Api` | Blazor Server UI at `/admin/*` (MudBlazor dark theme) |
+| **MCP Server** | `WebScraper.Mcp` | Claude-callable tools over the API (stdio transport) |
+| **CLI** | `WebScraper.Cli` | Command-line scraper + interactive REPL |
+| **Core Library** | `WebScraper.Core` | Shared models, DbContext, repositories, scrapers |
 
 ### Data Providers
 
@@ -21,194 +31,213 @@ Collects teams, player rosters, game schedules/scores, and per-game player stati
 
 No external database server is required — the application defaults to SQLite, which requires no installation.
 
-## Getting Started
+## Quick Start
 
-### 1. Clone the repository
+### 1. Clone and build
 
 ```bash
 git clone https://github.com/kayGweb/dotnet-AI-football-scraper.git
 cd dotnet-AI-football-scraper
-```
-
-### 2. Restore dependencies
-
-```bash
 dotnet restore
-```
-
-### 3. Build the application
-
-```bash
 dotnet build
 ```
 
-### 4. Run the application
+### 2. Create a local secrets file (one-time setup)
+
+Create `src/WebScraper.Api/appsettings.Local.json` (git-ignored) with your admin credentials and JWT signing key:
+
+```json
+{
+  "Jwt": {
+    "SigningKey": "GENERATE_WITH_openssl_rand_-base64_48_AT_LEAST_32_CHARS"
+  },
+  "InitialAdmin": {
+    "Email": "admin@example.com",
+    "Password": "YourSecurePassword123!"
+  }
+}
+```
+
+Generate a signing key: `openssl rand -base64 48`
+
+The initial admin account is only created when the user table is empty — after first boot, manage users via the dashboard at `/admin/users`.
+
+### 3. Start the API + Dashboard
 
 ```bash
-# Launch interactive mode (default)
-dotnet run --project WebScraper
-
-# Or use CLI mode
-
+dotnet run --project src/WebScraper.Api
 ```
 
-The database is created automatically on first run. EF Core migrations are applied at startup, so there is no manual database setup required.
+The API starts at **http://localhost:5080**. On startup it automatically:
+- Applies all pending EF Core migrations (creates the database if needed)
+- Seeds Admin/Operator/Viewer roles
+- Creates the initial admin user (if configured and user table is empty)
 
-## Interactive Mode
+### 4. Access the application
 
-When launched with no arguments (or `interactive`), the app enters a menu-driven REPL:
+| URL | What |
+|-----|------|
+| http://localhost:5080/admin | Admin dashboard login |
+| http://localhost:5080/swagger | Swagger UI (Development mode only) |
+| http://localhost:5080/api/v1/status | API status endpoint (requires API key) |
+| http://localhost:5080/health | Health check |
 
+Log in to the dashboard with the email/password from your `appsettings.Local.json`.
+
+### 5. (Optional) Run the CLI
+
+The CLI shares the same database and can be used alongside the API:
+
+```bash
+dotnet run --project src/WebScraper.Cli                              # Interactive mode
+dotnet run --project src/WebScraper.Cli -- teams --source Espn       # Scrape teams via ESPN
+dotnet run --project src/WebScraper.Cli -- status                    # Show database counts
 ```
-NFL Web Scraper v1.0
-Source: ESPN API  |  Database: SQLite (data/nfl_data.db)
-----------------------------------------------------
 
-Main Menu
-----------------------------------------
-1. Scrape data
-2. View data
-3. Database status
-4. Change source (current: ESPN API)
-5. Exit
+### 6. (Optional) Set up the MCP Server for Claude
+
+Build the MCP server and wire it to Claude Code or Claude Desktop:
+
+```bash
+dotnet build src/WebScraper.Mcp
 ```
 
-### Main Menu
+Add to your Claude Code MCP config (`.mcp.json` or `settings.json`):
 
-| Option | Description |
-|--------|-------------|
-| **1. Scrape data** | Opens a submenu with all scrape operations (teams, single team, players, games by season, games by week, stats, full pipeline) |
-| **2. View data** | Opens a submenu to query and display database contents in formatted tables |
-| **3. Database status** | Shows record counts for all tables (teams, players, games, stat lines) |
-| **4. Change source** | Switch between all 5 data providers at runtime — rebuilds the DI container |
-| **5. Exit** | Exit the application |
+```json
+{
+  "mcpServers": {
+    "nfl": {
+      "command": "dotnet",
+      "args": ["run", "--project", "src/WebScraper.Mcp", "--no-build"],
+      "env": {
+        "NFL_API_URL": "http://localhost:5080",
+        "NFL_API_KEY": "your-api-key-here"
+      }
+    }
+  }
+}
+```
 
-### Scrape Submenu
+The API must be running for the MCP server to work. Create an API key via the admin dashboard at `/admin/api-keys`.
 
-| Option | Description |
-|--------|-------------|
-| 1 | Scrape all 32 NFL teams |
-| 2 | Scrape a single team by abbreviation |
-| 3 | Scrape all player rosters |
-| 4 | Scrape games for a full season |
-| 5 | Scrape games for a specific week |
-| 6 | Scrape player stats for a specific week |
-| 7 | Run the full pipeline (teams + players + games) |
-| 8 | Back to main menu |
+## Admin Dashboard
 
-### View Submenu
+The dashboard at `/admin/*` provides a visual interface for managing the entire system:
 
-| Option | Description |
-|--------|-------------|
-| 1 | View all teams |
-| 2 | View players (all, or filtered by team) |
-| 3 | View games (by season, optionally filtered by week) |
-| 4 | View player stats (by player name + season, or by season + week) |
-| 5 | Back to main menu |
+| Page | Path | Access | Description |
+|------|------|--------|-------------|
+| Login | `/admin/login` | Public | Email/password login form |
+| Dashboard | `/admin` | All roles | Entity counts, recent jobs, system health |
+| Jobs | `/admin/jobs` | All roles | Live job table (auto-refreshes every 5s) with status filter |
+| New Scrape | `/admin/scrapes/new` | Admin, Operator | Trigger scrapes — select type, season, week |
+| API Keys | `/admin/api-keys` | Admin | Create/revoke API keys (plaintext shown once on create) |
+| Users | `/admin/users` | Admin | Create users, assign roles (Admin/Operator/Viewer) |
+| Deleted Items | `/admin/deleted-items` | Admin | Review and restore soft-deleted records |
+| API Usage | `/admin/api-usage` | All roles | Request charts, response codes, top endpoints/consumers |
 
-### Source Switching
+### Authentication
 
-Selecting option 4 from the main menu displays all available providers with the current selection marked. Choosing a different provider rebuilds the application's dependency injection container with the new provider's services — no restart required.
+Three auth schemes coexist on the same host:
+
+| Scheme | Used by | How |
+|--------|---------|-----|
+| Cookie (`AdminCookie`) | Dashboard pages | Login form at `/admin/login` sets an 8-hour HttpOnly cookie |
+| JWT Bearer | REST API write endpoints | `POST /api/v1/auth/login` returns a token; pass as `Authorization: Bearer <token>` |
+| API Key | REST API read endpoints | Pass as `X-Api-Key: <plaintext>` header |
+
+### Roles
+
+| Role | Can do |
+|------|--------|
+| Admin | Everything — user/key management, soft-delete restore, push, scraping |
+| Operator | Trigger scrapes, view jobs |
+| Viewer | Read-only dashboard access |
+
+## REST API
+
+All read endpoints are under `/api/v1/` and require an `X-Api-Key` header with `read` scope. Write endpoints require a JWT with the appropriate role.
+
+### Read Endpoints (API Key)
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| GET | `/api/v1/teams` | Paged team list, optional `?conference=AFC\|NFC` |
+| GET | `/api/v1/teams/{id}` | Single team by PK |
+| GET | `/api/v1/teams/by-abbreviation/{abbr}` | Single team by NFL abbreviation |
+| GET | `/api/v1/players` | Paged player list, optional `?teamId=`, `?position=` |
+| GET | `/api/v1/players/{id}` | Single player |
+| GET | `/api/v1/players/{id}/stats` | Player game stats, optional `?season=`, `?week=` |
+| GET | `/api/v1/games` | Paged game list, optional `?season=`, `?week=`, `?teamId=` |
+| GET | `/api/v1/games/{id}` | Single game with teams, venue, quarter scores |
+| GET | `/api/v1/games/{id}/team-stats` | Team-level aggregates for a game |
+| GET | `/api/v1/games/{id}/player-stats` | All player stat lines for a game |
+| GET | `/api/v1/games/{id}/injuries` | Injury reports for a game |
+| GET | `/api/v1/venues` | Paged venue list, optional `?state=`, `?isIndoor=` |
+| GET | `/api/v1/venues/{id}` | Single venue |
+| GET | `/api/v1/status` | Entity counts + freshest update timestamp |
+
+### Admin Endpoints (JWT)
+
+| Method | Route | Role | Description |
+|--------|-------|------|-------------|
+| POST | `/api/v1/auth/login` | — | Exchange email/password for JWT |
+| GET | `/api/v1/auth/me` | Viewer | Current user profile + roles |
+| POST | `/api/v1/auth/users` | Admin | Create user |
+| GET | `/api/v1/auth/users` | Admin | List all users |
+| GET/POST/DELETE | `/api/v1/api-keys` | Admin | API key management |
+| GET | `/api/v1/deleted-items` | Admin | List soft-deleted items |
+| POST | `/api/v1/deleted-items/{type}/{id}/restore` | Admin | Restore soft-deleted item |
+| POST | `/api/v1/push` | Admin | Push SQLite data to PostgreSQL |
+| POST | `/api/v1/scrape/{type}` | Operator | Trigger scrape (returns 202 + job ID) |
+| GET | `/api/v1/jobs` | Operator | List scrape jobs |
+| GET | `/api/v1/jobs/{id}` | Operator | Single job status |
+| GET | `/api/v1/events` | Viewer | Replay scrape events (for SignalR catch-up) |
+
+### Pagination
+
+List endpoints accept `?page=` (default 1) and `?pageSize=` (default 25, max 200). Responses include `X-Total-Count` header.
+
+### Rate Limiting
+
+60 requests per minute per API key/user/IP. Returns `429 Too Many Requests` with `Retry-After` header when exceeded.
+
+### Health Checks
+
+| Endpoint | Purpose |
+|----------|---------|
+| `/health/live` | Process is up (no dependency checks) |
+| `/health/ready` | DB is reachable |
+| `/health` | All checks |
 
 ## CLI Mode
 
-```
-dotnet run --project WebScraper -- <command> [options]
-```
-
-### Scrape Commands
-
-| Command | Required Options | Description |
-|---------|-----------------|-------------|
-| `teams` | — | Scrape all 32 NFL teams |
-| `teams` | `--team <abbr>` | Scrape a single team by NFL abbreviation |
-| `players` | — | Scrape rosters for all teams (teams must be scraped first) |
-| `games` | `--season <year>` | Scrape full season schedule and scores |
-| `games` | `--season <year> --week <n>` | Scrape games for a specific week |
-| `stats` | `--season <year> --week <n>` | Scrape per-game player statistics for a week |
-| `all` | `--season <year>` | Run the full pipeline: teams, players, then games |
-
-### View Commands
-
-| Command | Required Options | Description |
-|---------|-----------------|-------------|
-| `list teams` | — | Show all teams in the database |
-| `list teams` | `--conference <AFC\|NFC>` | Show teams filtered by conference |
-| `list players` | — | Show all players |
-| `list players` | `--team <abbr>` | Show roster for a specific team |
-| `list games` | `--season <year>` | Show all games for a season |
-| `list games` | `--season <year> --week <n>` | Show games for a specific week |
-| `list stats` | `--season <year> --week <n>` | Show player stats for a week |
-| `list stats` | `--player <name> --season <year>` | Show a player's season stats |
-| `status` | — | Show database record counts |
-
-### Options
-
-| Flag | Value | Description |
-|------|-------|-------------|
-| `--team` | NFL abbreviation | Team abbreviation (e.g., `KC`, `NE`, `DAL`) — used with `teams` and `list players` |
-| `--season` | `1920` – current year | NFL season year |
-| `--week` | `1` – `22` | Week number (regular season + playoffs) |
-| `--conference` | `AFC` or `NFC` | Conference filter for `list teams` |
-| `--player` | Player name | Player name for `list stats` (e.g., `"Patrick Mahomes"`) |
-| `--source` | Provider name | Override the data provider at runtime (e.g., `Espn`, `SportsDataIo`, `MySportsFeeds`, `NflCom`) |
-| `--help`, `-h` | — | Show help message |
-
-### Examples
+The CLI is a standalone scraper that shares the same database as the API.
 
 ```bash
-# Launch interactive mode (default)
-dotnet run --project WebScraper
+# Interactive mode (menu-driven REPL)
+dotnet run --project src/WebScraper.Cli
 
-# Scrape all 32 NFL teams
-dotnet run --project WebScraper -- teams
+# Scrape commands
+dotnet run --project src/WebScraper.Cli -- teams
+dotnet run --project src/WebScraper.Cli -- teams --team KC
+dotnet run --project src/WebScraper.Cli -- players
+dotnet run --project src/WebScraper.Cli -- games --season 2025
+dotnet run --project src/WebScraper.Cli -- games --season 2025 --week 1
+dotnet run --project src/WebScraper.Cli -- stats --season 2025 --week 1
+dotnet run --project src/WebScraper.Cli -- all --season 2025
 
-# Scrape a single team by abbreviation
-dotnet run --project WebScraper -- teams --team KC
+# Override data source
+dotnet run --project src/WebScraper.Cli -- teams --source Espn
 
-# Scrape player rosters (requires teams to exist in DB)
-dotnet run --project WebScraper -- players
+# View data
+dotnet run --project src/WebScraper.Cli -- list teams
+dotnet run --project src/WebScraper.Cli -- list players --team KC
+dotnet run --project src/WebScraper.Cli -- list games --season 2025 --week 1
+dotnet run --project src/WebScraper.Cli -- status
 
-# Scrape all games for the 2025 season
-dotnet run --project WebScraper -- games --season 2025
-
-# Scrape games for week 1 of 2025
-dotnet run --project WebScraper -- games --season 2025 --week 1
-
-# Scrape player stats for week 1 of 2025 (requires games to exist in DB)
-dotnet run --project WebScraper -- stats --season 2025 --week 1
-
-# Run the full pipeline (teams + players + games)
-dotnet run --project WebScraper -- all --season 2025
-
-# Use the ESPN API instead of the default provider
-dotnet run --project WebScraper -- teams --source Espn
-
-# Use SportsData.io for games (requires API key in appsettings.json)
-dotnet run --project WebScraper -- games --season 2025 --source SportsDataIo
-
-# View all teams in the database
-dotnet run --project WebScraper -- list teams
-
-# View AFC teams only
-dotnet run --project WebScraper -- list teams --conference AFC
-
-# View Kansas City Chiefs roster
-dotnet run --project WebScraper -- list players --team KC
-
-# View all games for the 2025 season
-dotnet run --project WebScraper -- list games --season 2025
-
-# View games for a specific week
-dotnet run --project WebScraper -- list games --season 2025 --week 1
-
-# View player stats for a week
-dotnet run --project WebScraper -- list stats --season 2025 --week 1
-
-# View an individual player's season stats
-dotnet run --project WebScraper -- list stats --player "Patrick Mahomes" --season 2025
-
-# Show database record counts
-dotnet run --project WebScraper -- status
+# Push local SQLite to remote PostgreSQL
+dotnet run --project src/WebScraper.Cli -- push
 ```
 
 ### Recommended Scrape Order
@@ -222,47 +251,22 @@ If running commands individually, follow this order to satisfy foreign key depen
 
 The `all` command handles steps 1-3 automatically.
 
-## Console Output
-
-The application uses `ConsoleDisplayService` for all user-facing output, separate from Serilog's structured logging:
-
-- **Startup banner** — shows the active data provider, database type, and connection info
-- **Formatted tables** — teams, players, games, and stats are displayed in aligned, bordered tables
-- **Scrape results** — each operation reports success/failure with record counts (e.g., `[SUCCESS] Teams: 32 records processed`)
-- **Colored status messages** — errors (red), warnings (yellow), success (green), and info (cyan)
-- **Interactive menus** — numbered menu options with the current provider highlighted
-
 ## Configuration
 
-All settings are in `WebScraper/appsettings.json`.
+Settings live in `src/WebScraper.Api/appsettings.json` (API) and `src/WebScraper.Cli/appsettings.json` (CLI). Secrets go in the git-ignored `appsettings.Local.json`.
 
 ### Database Provider
 
 ```json
 {
-  "DatabaseProvider": "Sqlite"
-}
-```
-
-Supported values: `Sqlite`, `PostgreSQL`, `SqlServer`
-
-### Connection String
-
-```json
-{
+  "DatabaseProvider": "Sqlite",
   "ConnectionStrings": {
     "DefaultConnection": "Data Source=data/nfl_data.db"
   }
 }
 ```
 
-Update the connection string to match your chosen provider:
-
-| Provider | Example Connection String |
-|----------|--------------------------|
-| SQLite | `Data Source=data/nfl_data.db` |
-| PostgreSQL | `Host=localhost;Database=nfl_data;Username=postgres;Password=yourpassword` |
-| SQL Server | `Server=localhost;Database=nfl_data;Trusted_Connection=True;TrustServerCertificate=True` |
+Supported: `Sqlite` (default), `PostgreSQL`, `SqlServer`.
 
 ### Data Provider
 
@@ -274,244 +278,100 @@ Update the connection string to match your chosen provider:
 }
 ```
 
-Set `DataProvider` to change the default data source. Supported values: `ProFootballReference`, `Espn`, `SportsDataIo`, `MySportsFeeds`, `NflCom`. This can also be overridden at runtime with the `--source` flag (CLI mode) or through the source-switching menu (interactive mode) without changing the config file.
+Supported: `ProFootballReference`, `Espn`, `SportsDataIo`, `MySportsFeeds`, `NflCom`.
 
-### Provider-Specific Settings
-
-Each API provider has its own configuration block under `Providers`:
+### API Authentication (appsettings.Local.json)
 
 ```json
 {
-  "ScraperSettings": {
-    "Providers": {
-      "Espn": {
-        "BaseUrl": "https://site.api.espn.com/apis/site/v2/sports/football/nfl",
-        "AuthType": "None",
-        "RequestDelayMs": 1000
-      },
-      "SportsDataIo": {
-        "BaseUrl": "https://api.sportsdata.io/v3/nfl",
-        "ApiKey": "YOUR_API_KEY_HERE",
-        "AuthType": "Header",
-        "AuthHeaderName": "Ocp-Apim-Subscription-Key",
-        "RequestDelayMs": 1000
-      },
-      "MySportsFeeds": {
-        "BaseUrl": "https://api.mysportsfeeds.com/v2.1/pull/nfl",
-        "ApiKey": "YOUR_API_KEY_HERE",
-        "AuthType": "Basic",
-        "RequestDelayMs": 1500
-      },
-      "NflCom": {
-        "BaseUrl": "https://site.api.nfl.com/v1",
-        "AuthType": "None",
-        "RequestDelayMs": 1500
-      }
-    }
-  }
-}
-```
-
-| Setting | Description |
-|---------|-------------|
-| `BaseUrl` | Base URL for the provider's API |
-| `ApiKey` | API key (required for SportsData.io and MySportsFeeds) |
-| `AuthType` | Authentication method: `None`, `Header` (API key header), or `Basic` (HTTP Basic) |
-| `AuthHeaderName` | Custom header name for API key (used when `AuthType` is `Header`) |
-| `RequestDelayMs` | Per-provider rate limit override (milliseconds between requests) |
-| `CustomHeaders` | Optional dictionary of additional HTTP headers |
-
-To use **SportsData.io** or **MySportsFeeds**, add your API key to the respective `ApiKey` field in `appsettings.json`. ESPN and NFL.com require no API key.
-
-### Scraper Settings
-
-```json
-{
-  "ScraperSettings": {
-    "RequestDelayMs": 1500,
-    "MaxRetries": 3,
-    "UserAgent": "NFLScraper/1.0 (educational project)",
-    "TimeoutSeconds": 30
-  }
-}
-```
-
-| Setting | Default | Description |
-|---------|---------|-------------|
-| `RequestDelayMs` | `1500` | Global minimum delay between HTTP requests (milliseconds). Individual providers can override this. |
-| `MaxRetries` | `3` | Number of retry attempts on transient failures (408, 429, 5xx). Uses exponential backoff (2s, 4s, 8s). |
-| `UserAgent` | `NFLScraper/1.0 (educational project)` | HTTP User-Agent header sent with every request. |
-| `TimeoutSeconds` | `30` | Per-request timeout in seconds. |
-
-### Logging
-
-Logging is configured via Serilog with two output sinks:
-
-```json
-{
-  "Serilog": {
-    "MinimumLevel": {
-      "Default": "Information",
-      "Override": {
-        "Microsoft": "Warning",
-        "Microsoft.EntityFrameworkCore": "Warning",
-        "System": "Warning"
-      }
-    },
-    "WriteTo": [
-      { "Name": "Console" },
+  "Jwt": {
+    "SigningKey": "your-secret-key-at-least-32-chars-long"
+  },
+  "InitialAdmin": {
+    "Email": "admin@example.com",
+    "Password": "SecurePassword123!"
+  },
+  "ApiKeys": {
+    "Keys": [
       {
-        "Name": "File",
-        "Args": {
-          "path": "logs/scraper-.log",
-          "rollingInterval": "Day"
-        }
+        "Id": "local-dev",
+        "Name": "Local Development",
+        "HashedKey": "sha256-hex-of-your-plaintext-key",
+        "Scopes": ["read"]
       }
     ]
   }
 }
 ```
 
-- **Console** — real-time output during scraping
-- **File** — daily rolling log files written to `logs/`
+Generate an API key hash: `echo -n 'your-plaintext-key' | sha256sum`
 
-To increase verbosity (e.g., for debugging), change `"Default"` to `"Debug"`.
+Once you can log in to the dashboard, create DB-backed API keys at `/admin/api-keys` and remove the bootstrap key from config.
 
-## Resilience
+### Push to PostgreSQL
 
-Each scraper's HTTP client is configured with a Polly v8 resilience pipeline:
+To push local SQLite data to a remote PostgreSQL instance, add the connection string to `appsettings.Local.json`:
 
-- **Retry** — exponential backoff (2s, 4s, 8s) on 408/429/5xx responses and network errors
-- **Circuit Breaker** — opens after 70% failure rate over 30 seconds (minimum 3 requests), pauses for 15 seconds
-- **Timeout** — per-attempt timeout based on `TimeoutSeconds` setting
+```json
+{
+  "ConnectionStrings": {
+    "PostgreSQL": "Host=your-host;Database=nfl;Username=user;Password=pass;SSL Mode=Require"
+  }
+}
+```
+
+Then use the CLI (`dotnet run --project src/WebScraper.Cli -- push`) or the API (`POST /api/v1/push` with Admin JWT).
 
 ## Database
 
-The application uses Entity Framework Core with code-first migrations. The database is created and migrated automatically at startup.
+EF Core with code-first migrations. The database is created and migrated automatically at startup for both the API and CLI.
 
-### Schema
+### Schema (12 tables)
 
 | Table | Description |
 |-------|-------------|
-| `Teams` | 32 NFL teams with name, abbreviation, city, conference, division |
-| `Players` | Player rosters with position, jersey number, physical attributes, college |
-| `Games` | Season schedules with home/away teams, dates, and scores |
-| `PlayerGameStats` | Per-game player statistics: passing, rushing, and receiving |
+| Teams | 32 NFL teams (name, abbreviation, city, conference, division) |
+| Players | Rosters with position, jersey, physical attributes, college, EspnId |
+| Games | Schedules with quarter scores, venues, attendance, ESPN metadata |
+| PlayerGameStats | Per-game stats across 10 categories (~40 stat columns) |
+| Venues | Stadiums (name, city, state, grass/indoor) |
+| TeamGameStats | Team-level per-game aggregates |
+| Injuries | Player injury reports per game |
+| ApiLinks | Discovered ESPN API endpoints |
+| ApiKeys | DB-backed API keys (SHA-256 hashed) |
+| ApiQueryLogs | Observability log of every API request |
+| ScrapeJobs | Persistent scrape job queue with status tracking |
+| ScrapeEvents | Transactional outbox for real-time scrape notifications |
 
-### Manual Migration Commands
-
-```bash
-# Apply pending migrations
-dotnet ef database update --project WebScraper
-
-# Add a new migration after model changes
-dotnet ef migrations add <MigrationName> --project WebScraper
-```
+All domain entities (Teams through ApiKeys) support soft delete and data lineage tracking.
 
 ## Testing
 
-The test suite uses xUnit with in-memory SQLite databases and Moq for mocking.
-
 ```bash
-# Run all tests
-dotnet test
-
-# Run with verbose output
-dotnet test --verbosity normal
+dotnet test                                    # Run all 220 tests
+dotnet test --verbosity normal                 # Verbose output
+dotnet test tests/WebScraper.Core.Tests        # Core tests only
 ```
-
-### Test Coverage
-
-| Area | Tests | Scope |
-|------|-------|-------|
-| Repository (Team) | 10 | CRUD, lookup by abbreviation/conference, upsert, delete, exists |
-| Repository (Player) | 6 | CRUD, lookup by team/name, upsert, nullable team FK |
-| Repository (Game) | 5 | CRUD, lookup by season/week, upsert with score updates |
-| Repository (Stats) | 4 | Upsert, lookup by player name + season, lookup by game |
-| PFR Scraper (Team) | 8 | HTML parsing, header row handling, city extraction, single-team scrape |
-| PFR Scraper (Game) | 2 | PFR-to-NFL abbreviation mapping (14 mapped + 4 unmapped) |
-| API Infrastructure | 10 | FetchJsonAsync deserialization, auth config (Header/Basic/None), custom headers |
-| DataProviderFactory | 9 | All 5 providers register correctly, invalid provider throws, case-insensitive |
-| Provider Config | 10 | Config binding, API keys, `--source` override, multi-provider dictionary |
-| ESPN Mappings | 8 | All 32 ESPN ID mappings, reverse lookup, division lookup, case insensitivity |
-| ESPN Services | 15 | Team JSON parsing, ID mapping, scoreboard parsing, home/away, scores |
-| SportsData.io | 12 | Flat JSON parsing, DTO deserialization, passing/rushing/receiving stats |
-| MySportsFeeds | 17 | Nested JSON parsing, name concatenation, gamelogs, nullable fields |
-| NFL.com | 8 | JSON parsing, case-insensitive matching, graceful error handling |
-| Console Display | 21 | Banner, tables, menus, scrape results, status, colored output, provider validation |
-| Models | 5 | Default property values for all entities and ScraperSettings |
-| ScrapeResult | 5 | Default values, Succeeded/Failed factory methods |
-| **Total** | **220** | |
-
-## Architecture
-
-The application uses a provider abstraction layer — all data providers implement the same four interfaces, so the CLI, repositories, and database layer are completely provider-agnostic:
-
-```
-Program.cs (CLI dispatch + Interactive REPL)
-    ↓
-ConsoleDisplayService (banner, tables, menus, colored output)
-    ↓
-ITeamScraperService / IPlayerScraperService / IGameScraperService / IStatsScraperService
-    ↓                           ↓
-BaseScraperService          BaseApiService
-(HTML — PFR)               (JSON — ESPN, SportsData.io, etc.)
-    ↓                           ↓
-ScrapeResult (structured success/failure with record counts)
-    ↓
-Repository Layer (unchanged) ← UpsertAsync()
-    ↓
-AppDbContext → SQLite / PostgreSQL / SQL Server
-```
-
-Adding a new provider requires no changes to interfaces, repositories, models, or the CLI. See `CLAUDE.md` for detailed instructions.
 
 ## Project Structure
 
 ```
 WebScraper.sln
-WebScraper/
-├── Program.cs                          # Entry point: CLI dispatch, interactive REPL, data display
-├── appsettings.json                    # Configuration (DB, providers, Serilog)
-├── Models/
-│   ├── Team.cs                        # NFL team entity
-│   ├── Player.cs                      # Player entity (FK → Team)
-│   ├── Game.cs                        # Game entity (FKs → HomeTeam, AwayTeam)
-│   ├── PlayerGameStats.cs             # Per-game player stats (FKs → Player, Game)
-│   ├── ScrapeResult.cs                # Structured scraper result (Success, RecordsProcessed, Errors)
-│   ├── ScraperSettings.cs             # Config POCO for scraper options
-│   ├── DataProvider.cs                # Enum for supported data providers
-│   └── ApiProviderSettings.cs         # Per-provider config POCO (BaseUrl, ApiKey, AuthType)
-├── Data/
-│   ├── AppDbContext.cs                # EF Core DbContext
-│   └── Repositories/                  # Repository pattern implementations
-│       ├── IRepository.cs             # Generic repository interface
-│       ├── ITeamRepository.cs         # Team-specific queries
-│       ├── IPlayerRepository.cs       # Player-specific queries
-│       ├── IGameRepository.cs         # Game-specific queries
-│       ├── IStatsRepository.cs        # Stats-specific queries
-│       └── (implementations)          # TeamRepository, PlayerRepository, GameRepository, StatsRepository
-├── Services/
-│   ├── RateLimiterService.cs          # Global request rate limiter (SemaphoreSlim)
-│   ├── ConsoleDisplayService.cs       # User-facing console output (tables, menus, banners, colored status)
-│   ├── DataProviderFactory.cs         # Maps provider config → DI registrations
-│   └── Scrapers/
-│       ├── IScraperService.cs         # Scraper interfaces (ITeam/IPlayer/IGame/IStats)
-│       ├── BaseScraperService.cs      # Abstract base for HTML scraping (PFR)
-│       ├── BaseApiService.cs          # Abstract base for JSON APIs (auth, rate limiting)
-│       ├── TeamScraperService.cs      # Pro Football Reference: teams
-│       ├── PlayerScraperService.cs    # Pro Football Reference: rosters
-│       ├── GameScraperService.cs      # Pro Football Reference: schedules/scores
-│       ├── StatsScraperService.cs     # Pro Football Reference: player stats
-│       ├── Espn/                      # ESPN API provider (4 services + DTOs + mappings)
-│       ├── SportsDataIo/             # SportsData.io API provider (4 services + DTOs)
-│       ├── MySportsFeeds/            # MySportsFeeds API provider (4 services + DTOs)
-│       └── NflCom/                   # NFL.com API provider (4 services + DTOs)
-├── Migrations/                        # EF Core migration files
-└── Extensions/
-    └── ServiceCollectionExtensions.cs # DI wiring
-data/                                  # SQLite database directory
-tests/WebScraper.Tests/                # xUnit test project (220 tests)
+src/
+├── WebScraper.Core/          # Shared library: models, DbContext, repos, scrapers
+├── WebScraper.Cli/           # Console app: CLI + interactive REPL
+├── WebScraper.Api/           # Web API + Blazor admin dashboard
+│   ├── Auth/                 # Identity, JWT, API key, cookie auth
+│   ├── Controllers/          # REST endpoints (13 controllers)
+│   ├── Components/           # Blazor Server pages (MudBlazor)
+│   │   ├── Layout/           # AdminLayout (dark theme), EmptyLayout (login)
+│   │   └── Pages/Admin/      # 8 dashboard pages + 2 dialog components
+│   ├── Hubs/                 # SignalR hub for real-time scrape events
+│   ├── Middleware/            # Query logging, rate limiting
+│   └── Services/             # Job queue, event relay, API key management
+└── WebScraper.Mcp/           # MCP server: 14 Claude-callable tools
+tests/
+└── WebScraper.Core.Tests/    # 220 xUnit tests
 ```
 
 ## License

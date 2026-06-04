@@ -115,7 +115,7 @@ app.MapHub<ScraperHub>("/hubs/scraper");
 app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
 
 // Dashboard login/logout — minimal API endpoints that set/clear the admin cookie.
-app.MapPost("/admin/login", async (
+app.MapPost("/admin/login-action", async (
     HttpContext httpContext,
     SignInManager<AppUser> signInManager,
     UserManager<AppUser> userManager) =>
