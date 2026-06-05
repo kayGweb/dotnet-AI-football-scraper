@@ -18,6 +18,12 @@ namespace WebScraper.Api.Extensions;
 /// </summary>
 public static class ApiServiceCollectionExtensions
 {
+    /// <summary>
+    /// Name of the default "smart" policy scheme that forwards each request to the
+    /// concrete scheme (cookie / JWT / API key) appropriate for its path.
+    /// </summary>
+    private const string SmartSchemeName = "Smart";
+
     public static IServiceCollection AddWebScraperApiServices(
         this IServiceCollection services,
         IConfiguration configuration)
@@ -178,9 +184,34 @@ public static class ApiServiceCollectionExtensions
 
         services.AddAuthentication(options =>
             {
-                // API key is the default — JWT layers on top via [Authorize] policies
-                options.DefaultAuthenticateScheme = ApiKeyAuthenticationOptions.SchemeName;
-                options.DefaultChallengeScheme = ApiKeyAuthenticationOptions.SchemeName;
+                // A "smart" policy scheme is the default: per request it forwards to the
+                // correct concrete scheme based on the path (see ForwardDefaultSelector below).
+                // This keeps HttpContext.User populated correctly for Blazor SSR + the
+                // cascading auth state, and makes a bare [Authorize] on a dashboard page
+                // challenge via the cookie scheme (302 to /admin/login) instead of the API
+                // key scheme (401 application/problem+json). The concrete schemes
+                // (ApiKey, JWT, AdminCookie) are still pinned explicitly by each policy.
+                options.DefaultScheme = SmartSchemeName;
+                options.DefaultChallengeScheme = SmartSchemeName;
+            })
+            .AddPolicyScheme(SmartSchemeName, SmartSchemeName, options =>
+            {
+                options.ForwardDefaultSelector = context =>
+                {
+                    var path = context.Request.Path;
+
+                    // Admin dashboard SSR pages + the Blazor interactive circuit ride the
+                    // cookie issued at /admin/login.
+                    if (path.StartsWithSegments("/admin") || path.StartsWithSegments("/_blazor"))
+                        return AuthorizationPolicies.CookieSchemeName;
+
+                    // The real-time scrape hub authenticates with a JWT (?access_token=…).
+                    if (path.StartsWithSegments("/hubs"))
+                        return JwtBearerDefaults.AuthenticationScheme;
+
+                    // Everything else (the REST API) uses the X-Api-Key scheme.
+                    return ApiKeyAuthenticationOptions.SchemeName;
+                };
             })
             .AddCookie(AuthorizationPolicies.CookieSchemeName, options =>
             {
