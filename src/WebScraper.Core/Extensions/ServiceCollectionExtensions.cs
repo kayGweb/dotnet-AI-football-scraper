@@ -124,7 +124,13 @@ public static class ServiceCollectionExtensions
         return $"Host={host};Port={port};Database={database};Username={username};Password={password};SSL Mode={sslMode}";
     }
 
-    private static string? ResolveSqlitePath(string? connectionString)
+    /// <summary>
+    /// Resolves a SQLite connection string's relative <c>Data Source=</c> path to an
+    /// absolute path under <see cref="AppContext.BaseDirectory"/> (creating the directory
+    /// if needed), so every consumer — DbContext, health checks — opens the same file
+    /// regardless of the process working directory. Non-SQLite/rooted strings pass through.
+    /// </summary>
+    public static string? ResolveSqlitePath(string? connectionString)
     {
         if (string.IsNullOrEmpty(connectionString)) return connectionString;
 

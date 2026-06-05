@@ -51,7 +51,12 @@ if (!string.IsNullOrWhiteSpace(connectionString))
     }
     else if (dbProvider.Equals("Sqlite", StringComparison.OrdinalIgnoreCase))
     {
-        healthChecksBuilder.AddSqlite(connectionString, name: "sqlite", tags: new[] { "db", "ready" });
+        // Resolve the relative Data Source path to the same absolute file the DbContext
+        // opens (under AppContext.BaseDirectory). Passing the raw relative string makes the
+        // health check open it relative to the process working directory, which fails with
+        // "unable to open database file" → 503.
+        var resolvedSqlite = WebScraper.Extensions.ServiceCollectionExtensions.ResolveSqlitePath(connectionString);
+        healthChecksBuilder.AddSqlite(resolvedSqlite!, name: "sqlite", tags: new[] { "db", "ready" });
     }
 }
 
