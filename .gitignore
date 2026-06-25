@@ -77,3 +77,6 @@ appsettings.Local.json
 
 # Data directory (database files)
 data/*.db
+
+# logs
+src/WebScraper.Api/logs/*
