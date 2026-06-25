@@ -3,10 +3,6 @@ body {
     font-family: 'Roboto', 'Segoe UI', sans-serif;
 }
 
-.mud-main-content {
-    padding: 24px;
-}
-
 .status-card {
     min-height: 120px;
 }
