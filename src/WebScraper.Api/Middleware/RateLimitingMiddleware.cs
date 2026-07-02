@@ -25,8 +25,16 @@ public class RateLimitingMiddleware
     {
         // SignalR connections are long-lived and frame-multiplexed — rate-limiting
         // them as if each negotiate/frame were a discrete request would trip almost
-        // immediately. Skip /hubs/* entirely.
-        if (context.Request.Path.StartsWithSegments("/hubs"))
+        // immediately. Skip the scrape hub (/hubs/*) AND the Blazor Server circuit
+        // (/_blazor/*): under a long-polling fallback the circuit fires many requests
+        // per second, which would blow the limit and silently kill dashboard
+        // interactivity (button clicks, dialogs) while page navigation still works
+        // via prerender. /_framework/* (blazor.web.js, etc.) is static and must
+        // never be throttled either.
+        var path = context.Request.Path;
+        if (path.StartsWithSegments("/hubs")
+            || path.StartsWithSegments("/_blazor")
+            || path.StartsWithSegments("/_framework"))
         {
             await _next(context);
             return;
