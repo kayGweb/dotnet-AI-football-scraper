@@ -158,6 +158,152 @@ Three auth schemes coexist on the same host:
 
 All read endpoints are under `/api/v1/` and require an `X-Api-Key` header with `read` scope. Write endpoints require a JWT with the appropriate role.
 
+### Making API Calls
+
+**Base URL (local dev):** `http://localhost:5080`
+
+The API key is **never** passed as a query parameter (`?apikey=...` will not work). Use an HTTP header instead.
+
+| Call type | Auth header | Used for |
+|-----------|-------------|----------|
+| GET read endpoints | `X-Api-Key: <plaintext-key>` | Teams, players, games, venues, status |
+| GET/POST admin endpoints | `Authorization: Bearer <jwt-token>` | Login, scrapes, jobs, user/key management |
+
+Create an API key at `/admin/api-keys` (plaintext shown once) or use Swagger at `/swagger` → **Authorize** → enter your key.
+
+#### GET requests (API key)
+
+Every read call is a plain `GET`. Put filters and pagination in the query string; put the key in the header.
+
+```bash
+# List teams (page 1, 25 per page)
+curl -s -H "X-Api-Key: YOUR_KEY_HERE" \
+  "http://localhost:5080/api/v1/teams"
+
+# Filter + pagination
+curl -s -H "X-Api-Key: YOUR_KEY_HERE" \
+  "http://localhost:5080/api/v1/teams?conference=AFC&page=1&pageSize=50"
+
+# Single resource by path parameter
+curl -s -H "X-Api-Key: YOUR_KEY_HERE" \
+  "http://localhost:5080/api/v1/teams/by-abbreviation/KC"
+
+# Games for a season/week
+curl -s -H "X-Api-Key: YOUR_KEY_HERE" \
+  "http://localhost:5080/api/v1/games?season=2025&week=1"
+
+# Quick data-health check (no auth on /health, but status needs a key)
+curl -s -H "X-Api-Key: YOUR_KEY_HERE" \
+  "http://localhost:5080/api/v1/status"
+```
+
+**List response shape** — paged endpoints return JSON like:
+
+```json
+{
+  "items": [ { "id": 1, "name": "Kansas City Chiefs", "abbreviation": "KC", "...": "..." } ],
+  "page": 1,
+  "pageSize": 25,
+  "totalCount": 32,
+  "totalPages": 2,
+  "hasPrevious": false,
+  "hasNext": true
+}
+```
+
+Useful response headers on list calls: `X-Total-Count` (total rows), `X-Correlation-Id` (request trace id).
+
+#### POST requests (JWT)
+
+Admin/write endpoints require a JWT. Log in once, then pass the token on every subsequent call.
+
+**Step 1 — Login (no auth required):**
+
+```bash
+curl -s -X POST "http://localhost:5080/api/v1/auth/login" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@example.com","password":"your-password"}'
+```
+
+**Response:**
+
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIs...",
+  "expiresAt": "2026-07-02T20:00:00Z",
+  "userId": "...",
+  "email": "admin@example.com",
+  "roles": ["Admin"]
+}
+```
+
+**Step 2 — Use the token** (replace `TOKEN` with the value from `token`):
+
+```bash
+# Who am I? (any role)
+curl -s -H "Authorization: Bearer TOKEN" \
+  "http://localhost:5080/api/v1/auth/me"
+
+# Trigger a scrape — no body needed for teams/players
+curl -s -X POST "http://localhost:5080/api/v1/scrape/teams" \
+  -H "Authorization: Bearer TOKEN"
+
+# Trigger games scrape — JSON body required
+curl -s -X POST "http://localhost:5080/api/v1/scrape/games" \
+  -H "Authorization: Bearer TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"season":2025,"week":1}'
+
+# Trigger stats scrape — season AND week required
+curl -s -X POST "http://localhost:5080/api/v1/scrape/stats" \
+  -H "Authorization: Bearer TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"season":2025,"week":1}'
+
+# Poll job status (Operator+)
+curl -s -H "Authorization: Bearer TOKEN" \
+  "http://localhost:5080/api/v1/jobs/42"
+
+# Create a new user (Admin only)
+curl -s -X POST "http://localhost:5080/api/v1/auth/users" \
+  -H "Authorization: Bearer TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"operator@example.com","password":"ChangeMe123!","role":"Operator"}'
+
+# Create an API key (Admin only) — save plaintextKey immediately
+curl -s -X POST "http://localhost:5080/api/v1/api-keys" \
+  -H "Authorization: Bearer TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"CI pipeline","scopes":["read"]}'
+```
+
+Scrape POSTs return **202 Accepted** with a `ScrapeJobDto` body and a `Location` header pointing at `/api/v1/jobs/{id}`.
+
+**POST body reference:**
+
+| Endpoint | Body | Notes |
+|----------|------|-------|
+| `POST /api/v1/auth/login` | `{"email","password"}` | Returns JWT |
+| `POST /api/v1/auth/users` | `{"email","password","role"}` | Role: `Admin`, `Operator`, or `Viewer` |
+| `POST /api/v1/scrape/teams` | _(none)_ | Operator+ |
+| `POST /api/v1/scrape/players` | _(none)_ | Operator+ |
+| `POST /api/v1/scrape/games` | `{"season":2025,"week":1}` | `season` required; `week` optional |
+| `POST /api/v1/scrape/stats` | `{"season":2025,"week":1}` | Both required |
+| `POST /api/v1/scrape/all` | `{"season":2025,"week":1}` | `season` required; `week` optional |
+| `POST /api/v1/api-keys` | `{"name","scopes":["read"],"expiresAt":null}` | Admin only |
+| `POST /api/v1/push` | _(none)_ | Admin only — SQLite → PostgreSQL |
+
+#### Common errors
+
+| Status | Meaning |
+|--------|---------|
+| `401 Unauthorized` | Missing/invalid API key or JWT |
+| `403 Forbidden` | Valid JWT but wrong role for the endpoint |
+| `404 Not Found` | Resource id doesn't exist |
+| `429 Too Many Requests` | Rate limit (60/min); check `Retry-After` header |
+
+Errors use [RFC 7807 Problem Details](https://datatracker.ietf.org/doc/html/rfc7807) JSON (`title`, `status`, `detail`).
+
 ### Read Endpoints (API Key)
 
 | Method | Route | Description |

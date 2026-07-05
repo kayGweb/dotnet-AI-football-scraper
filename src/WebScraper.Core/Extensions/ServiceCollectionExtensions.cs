@@ -124,7 +124,16 @@ public static class ServiceCollectionExtensions
         return $"Host={host};Port={port};Database={database};Username={username};Password={password};SSL Mode={sslMode}";
     }
 
-    private static string? ResolveSqlitePath(string? connectionString)
+    /// <summary>
+    /// Expands a relative SQLite "Data Source" path against the repository root (nearest
+    /// ancestor of the working directory containing a .sln or .git), so every host
+    /// (CLI, API, MCP) opens the same database file no matter which project directory
+    /// "dotnet run" starts it in. Outside a repo (e.g. a published deployment) it falls
+    /// back to the working directory. Anchoring to AppContext.BaseDirectory would give
+    /// each host a private DB buried in its own bin/ output — never shared, and wiped
+    /// by "dotnet clean".
+    /// </summary>
+    public static string? ResolveSqlitePath(string? connectionString)
     {
         if (string.IsNullOrEmpty(connectionString)) return connectionString;
 
@@ -135,11 +144,24 @@ public static class ServiceCollectionExtensions
         var path = connectionString[prefix.Length..].Trim();
         if (Path.IsPathRooted(path)) return connectionString;
 
-        var absolutePath = Path.Combine(AppContext.BaseDirectory, path);
+        var anchor = FindRepositoryRoot() ?? Directory.GetCurrentDirectory();
+        var absolutePath = Path.Combine(anchor, path);
         var dir = Path.GetDirectoryName(absolutePath);
         if (dir != null && !Directory.Exists(dir))
             Directory.CreateDirectory(dir);
 
         return $"{prefix}{absolutePath}";
+    }
+
+    private static string? FindRepositoryRoot()
+    {
+        var dir = new DirectoryInfo(Directory.GetCurrentDirectory());
+        while (dir != null)
+        {
+            if (dir.EnumerateFiles("*.sln").Any() || Directory.Exists(Path.Combine(dir.FullName, ".git")))
+                return dir.FullName;
+            dir = dir.Parent;
+        }
+        return null;
     }
 }

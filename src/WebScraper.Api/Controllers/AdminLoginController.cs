@@ -23,8 +23,12 @@ public class AdminLoginController : Controller
     }
 
     [HttpPost("/admin/login-action")]
-    public async Task<IActionResult> Login([FromForm] string email, [FromForm] string password)
+    public async Task<IActionResult> Login([FromForm] string? email, [FromForm] string? password)
     {
+        // MVC binds empty form fields to null — FindByEmailAsync(null) throws, so guard first
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
+            return Redirect("/admin/login?error=invalid");
+
         var user = await _userManager.FindByEmailAsync(email);
         if (user is null)
             return Redirect("/admin/login?error=invalid");

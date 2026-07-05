@@ -51,7 +51,9 @@ if (!string.IsNullOrWhiteSpace(connectionString))
     }
     else if (dbProvider.Equals("Sqlite", StringComparison.OrdinalIgnoreCase))
     {
-        healthChecksBuilder.AddSqlite(connectionString, name: "sqlite", tags: new[] { "db", "ready" });
+        // Resolve the same way the DbContexts do, or the health check probes a different file
+        var resolved = WebScraper.Extensions.ServiceCollectionExtensions.ResolveSqlitePath(connectionString)!;
+        healthChecksBuilder.AddSqlite(resolved, name: "sqlite", tags: new[] { "db", "ready" });
     }
 }
 

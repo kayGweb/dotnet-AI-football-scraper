@@ -264,23 +264,8 @@ public static class ApiServiceCollectionExtensions
         return services;
     }
 
-    // Copy of the helper in Core's ServiceCollectionExtensions — kept private here so the
-    // Identity DbContext gets the same resolved-path treatment without spelunking through Core.
+    // The Identity DbContext must open the exact same SQLite file as the domain context,
+    // so both go through Core's resolver.
     private static string? ResolveSqlitePath(string? connectionString)
-    {
-        if (string.IsNullOrEmpty(connectionString)) return connectionString;
-        const string prefix = "Data Source=";
-        if (!connectionString.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            return connectionString;
-
-        var path = connectionString[prefix.Length..].Trim();
-        if (Path.IsPathRooted(path)) return connectionString;
-
-        var absolutePath = Path.Combine(AppContext.BaseDirectory, path);
-        var dir = Path.GetDirectoryName(absolutePath);
-        if (dir != null && !Directory.Exists(dir))
-            Directory.CreateDirectory(dir);
-
-        return $"{prefix}{absolutePath}";
-    }
+        => WebScraper.Extensions.ServiceCollectionExtensions.ResolveSqlitePath(connectionString);
 }

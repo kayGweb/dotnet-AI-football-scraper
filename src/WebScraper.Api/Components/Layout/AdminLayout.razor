@@ -1,7 +1,8 @@
 @inherits LayoutComponentBase
 
+@* MudBlazor 6.x: MudThemeProvider already renders a MudPopoverProvider internally —
+   adding an explicit one throws "Duplicate MudPopoverProvider" and kills the circuit. *@
 <MudThemeProvider IsDarkMode="true" />
-<MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
 

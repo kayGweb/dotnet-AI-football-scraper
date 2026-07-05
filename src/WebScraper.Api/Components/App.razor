@@ -1,3 +1,4 @@
+@using Microsoft.AspNetCore.Http
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -7,11 +8,24 @@
     <base href="/" />
     <link href="_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />
     <link href="css/admin.css" rel="stylesheet" />
-    <HeadOutlet @rendermode="InteractiveServer" />
+    <HeadOutlet @rendermode="PageRenderMode" />
 </head>
 <body>
-    <Routes @rendermode="InteractiveServer" />
+    <Routes @rendermode="PageRenderMode" />
     <script src="_framework/blazor.web.js"></script>
     <script src="_content/MudBlazor/MudBlazor.min.js"></script>
 </body>
 </html>
+
+@code {
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
+    // The login page must be plain SSR: its <form> POSTs to /admin/login-action to set the
+    // auth cookie, and an interactive circuit would wipe values typed before hydration.
+    // Everything else stays InteractiveServer so MudBlazor dialogs/popovers work.
+    private IComponentRenderMode? PageRenderMode =>
+        HttpContext?.Request.Path.StartsWithSegments("/admin/login") == true
+            ? null
+            : InteractiveServer;
+}
