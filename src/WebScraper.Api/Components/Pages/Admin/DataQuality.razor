@@ -1,0 +1,120 @@
+@page "/admin/quality"
+@attribute [Authorize]
+@using Microsoft.EntityFrameworkCore
+@using WebScraper.Data
+@using WebScraper.Models
+@using WebScraper.Services.Coverage
+@inject IServiceScopeFactory ScopeFactory
+
+<MudText Typo="Typo.h4" Class="mb-4">Data Quality</MudText>
+
+<MudGrid Class="mb-4">
+    <MudItem xs="12" sm="4" Class="d-flex align-end gap-2">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="RefreshAsync"
+                   StartIcon="@Icons.Material.Filled.Refresh">Refresh</MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="ScanAsync"
+                   StartIcon="@Icons.Material.Filled.Rule">Scan</MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Warning" OnClick="EnqueueRepairsAsync"
+                   StartIcon="@Icons.Material.Filled.Build">Enqueue Repairs</MudButton>
+    </MudItem>
+</MudGrid>
+
+@if (!string.IsNullOrEmpty(_message))
+{
+    <MudAlert Severity="Severity.Info" Class="mb-4">@_message</MudAlert>
+}
+
+<MudTable Items="_findings" Dense="true" Hover="true" Loading="_loading" Striped="true">
+    <HeaderContent>
+        <MudTh>Severity</MudTh>
+        <MudTh>Rule</MudTh>
+        <MudTh>Entity</MudTh>
+        <MudTh>Season</MudTh>
+        <MudTh>Week</MudTh>
+        <MudTh>Message</MudTh>
+        <MudTh>Status</MudTh>
+        <MudTh></MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd>
+            <MudChip T="string" Size="Size.Small" Color="@SeverityColor(context.Severity)">
+                @context.Severity
+            </MudChip>
+        </MudTd>
+        <MudTd>@context.RuleType</MudTd>
+        <MudTd>@context.EntityType #@context.EntityId</MudTd>
+        <MudTd>@(context.Season?.ToString() ?? "—")</MudTd>
+        <MudTd>@(context.Week?.ToString() ?? "—")</MudTd>
+        <MudTd>@context.Message</MudTd>
+        <MudTd>@context.Status</MudTd>
+        <MudTd>
+            @if (context.Status == DataQualityStatus.Open)
+            {
+                <MudIconButton Icon="@Icons.Material.Filled.Build" Size="Size.Small"
+                               Title="Enqueue repair" OnClick="@(() => RepairAsync(context.Id))" />
+            }
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText>No open findings.</MudText>
+    </NoRecordsContent>
+</MudTable>
+
+@code {
+    private List<DataQualityFinding> _findings = new();
+    private bool _loading = true;
+    private string? _message;
+
+    protected override async Task OnInitializedAsync() => await RefreshAsync();
+
+    private async Task RefreshAsync()
+    {
+        _loading = true;
+        using var scope = ScopeFactory.CreateScope();
+        var quality = scope.ServiceProvider.GetRequiredService<QualityRulesEngine>();
+        _findings = (await quality.GetOpenFindingsAsync(100)).ToList();
+        _loading = false;
+    }
+
+    private async Task ScanAsync()
+    {
+        using var scope = ScopeFactory.CreateScope();
+        var quality = scope.ServiceProvider.GetRequiredService<QualityRulesEngine>();
+        var count = (await quality.RunAsync()).Count;
+        _message = $"Scan recorded {count} findings.";
+        await RefreshAsync();
+    }
+
+    private async Task EnqueueRepairsAsync()
+    {
+        using var scope = ScopeFactory.CreateScope();
+        var repair = scope.ServiceProvider.GetRequiredService<RepairJobEnqueuer>();
+        var queue = scope.ServiceProvider.GetRequiredService<WebScraper.Api.Services.IJobQueue>();
+        var ids = await repair.EnqueueRepairsForOpenFindingsAsync(25);
+        foreach (var id in ids)
+            queue.TryEnqueue(id);
+        _message = $"Enqueued {ids.Count} repair jobs.";
+        await RefreshAsync();
+    }
+
+    private async Task RepairAsync(long findingId)
+    {
+        using var scope = ScopeFactory.CreateScope();
+        var repair = scope.ServiceProvider.GetRequiredService<RepairJobEnqueuer>();
+        var queue = scope.ServiceProvider.GetRequiredService<WebScraper.Api.Services.IJobQueue>();
+        var jobId = await repair.EnqueueRepairForFindingAsync(findingId);
+        if (jobId is not null)
+        {
+            queue.TryEnqueue(jobId.Value);
+            _message = $"Repair job {jobId} enqueued.";
+        }
+        await RefreshAsync();
+    }
+
+    private static Color SeverityColor(DataQualitySeverity severity) => severity switch
+    {
+        DataQualitySeverity.Error => Color.Error,
+        DataQualitySeverity.Warning => Color.Warning,
+        _ => Color.Info,
+    };
+}

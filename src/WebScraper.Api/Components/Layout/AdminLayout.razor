@@ -33,6 +33,10 @@
                         Icon="@Icons.Material.Filled.Work">Jobs</MudNavLink>
             <MudNavLink Href="/admin/scrapes/new" Match="NavLinkMatch.All"
                         Icon="@Icons.Material.Filled.PlayArrow">New Scrape</MudNavLink>
+            <MudNavLink Href="/admin/coverage" Match="NavLinkMatch.Prefix"
+                        Icon="@Icons.Material.Filled.GridOn">Coverage</MudNavLink>
+            <MudNavLink Href="/admin/quality" Match="NavLinkMatch.Prefix"
+                        Icon="@Icons.Material.Filled.FactCheck">Data Quality</MudNavLink>
 
             <AuthorizeView Roles="Admin">
                 <MudDivider Class="my-2" />

@@ -19,7 +19,7 @@ public class BackfillOrchestrator
         _logger = logger;
     }
 
-    public async Task<IReadOnlyList<int>> FanOutAsync(
+    public async Task<BackfillFanOutResult> FanOutAsync(
         ScrapeJob parentJob,
         int startSeason,
         int endSeason,
@@ -27,6 +27,8 @@ public class BackfillOrchestrator
     {
         var workItems = BackfillPlanner.Plan(startSeason, endSeason);
         var childIds = new List<int>(workItems.Count);
+        var initialEnqueueIds = new List<int>();
+        int? pendingGamesJobId = null;
 
         _logger.LogInformation(
             "Fanning out backfill job {ParentId}: {Count} child jobs for seasons {Start}-{End}",
@@ -42,6 +44,7 @@ public class BackfillOrchestrator
                 SeasonType = item.SeasonType,
                 Week = item.Week,
                 ParentJobId = parentJob.Id,
+                DependsOnJobId = item.JobType == ScrapeJobType.Stats ? pendingGamesJobId : null,
                 Status = ScrapeJobStatus.Queued,
                 CreatedAt = DateTime.UtcNow,
                 RequestedBy = parentJob.RequestedBy,
@@ -50,9 +53,19 @@ public class BackfillOrchestrator
             _db.ScrapeJobs.Add(child);
             await _db.SaveChangesAsync(cancellationToken);
             childIds.Add(child.Id);
+
+            if (item.JobType == ScrapeJobType.Games)
+            {
+                pendingGamesJobId = child.Id;
+                initialEnqueueIds.Add(child.Id);
+            }
+            else
+            {
+                pendingGamesJobId = null;
+            }
         }
 
-        return childIds;
+        return new BackfillFanOutResult(childIds, initialEnqueueIds);
     }
 
     public static async Task TryCompleteParentAsync(AppDbContext db, ScrapeJob completedChild, CancellationToken ct = default)
@@ -87,3 +100,8 @@ public class BackfillOrchestrator
         await db.SaveChangesAsync(ct);
     }
 }
+
+/// <summary>Result of fanning out a backfill parent into child scrape jobs.</summary>
+public sealed record BackfillFanOutResult(
+    IReadOnlyList<int> AllChildIds,
+    IReadOnlyList<int> InitialEnqueueIds);
