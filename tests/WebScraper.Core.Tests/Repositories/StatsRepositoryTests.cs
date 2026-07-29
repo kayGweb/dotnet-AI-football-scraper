@@ -29,24 +29,15 @@ public class StatsRepositoryTests : IDisposable
 
     private async Task<(Player player, Game game)> SeedDataAsync()
     {
-        var homeTeam = await _teamRepo.AddAsync(new Team
-        {
-            Name = "Kansas City Chiefs", Abbreviation = "KC",
-            City = "Kansas City", Conference = "AFC", Division = "West"
-        });
-        var awayTeam = await _teamRepo.AddAsync(new Team
-        {
-            Name = "Buffalo Bills", Abbreviation = "BUF",
-            City = "Buffalo", Conference = "AFC", Division = "East"
-        });
+        var (homeSeason, awaySeason, homeTeam, _) = await RepositoryTestHelpers.SeedTeamSeasonsAsync(_context);
         var player = await _playerRepo.AddAsync(new Player
         {
-            Name = "Patrick Mahomes", TeamId = homeTeam.Id, Position = "QB"
+            Name = "Patrick Mahomes", TeamId = homeTeam.Id, Position = "QB", EspnId = "3139477"
         });
         var game = await _gameRepo.AddAsync(new Game
         {
             Season = 2025, Week = 1, GameDate = new DateTime(2025, 9, 7),
-            HomeTeamId = homeTeam.Id, AwayTeamId = awayTeam.Id,
+            HomeTeamSeasonId = homeSeason.Id, AwayTeamSeasonId = awaySeason.Id,
             HomeScore = 27, AwayScore = 24
         });
         return (player, game);

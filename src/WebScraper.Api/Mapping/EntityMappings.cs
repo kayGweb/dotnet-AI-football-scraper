@@ -52,16 +52,24 @@ public static class EntityMappings
         Meta = player.ToMeta(),
     };
 
+    public static TeamSummaryDto ToSummary(this TeamSeason teamSeason) => new()
+    {
+        Id = teamSeason.Id,
+        Name = teamSeason.Name,
+        Abbreviation = teamSeason.Abbreviation,
+    };
+
     public static GameDto ToDto(this Game game) => new()
     {
         Id = game.Id,
         Season = game.Season,
+        SeasonType = game.SeasonType.ToString(),
         Week = game.Week,
         GameDate = game.GameDate,
         GameStatus = game.GameStatus,
         EspnEventId = game.EspnEventId,
-        HomeTeam = game.HomeTeam?.ToSummary() ?? new TeamSummaryDto { Id = game.HomeTeamId },
-        AwayTeam = game.AwayTeam?.ToSummary() ?? new TeamSummaryDto { Id = game.AwayTeamId },
+        HomeTeam = game.HomeTeamSeason?.ToSummary() ?? new TeamSummaryDto { Id = game.HomeTeamSeasonId },
+        AwayTeam = game.AwayTeamSeason?.ToSummary() ?? new TeamSummaryDto { Id = game.AwayTeamSeasonId },
         HomeScore = game.HomeScore,
         AwayScore = game.AwayScore,
         HomeWinner = game.HomeWinner,
@@ -203,8 +211,8 @@ public static class EntityMappings
     {
         Id = stats.Id,
         GameId = stats.GameId,
-        TeamId = stats.TeamId,
-        TeamAbbreviation = stats.Team?.Abbreviation ?? string.Empty,
+        TeamSeasonId = stats.TeamSeasonId,
+        TeamAbbreviation = stats.TeamSeason?.Abbreviation ?? string.Empty,
         FirstDowns = stats.FirstDowns,
         FirstDownsPassing = stats.FirstDownsPassing,
         FirstDownsRushing = stats.FirstDownsRushing,

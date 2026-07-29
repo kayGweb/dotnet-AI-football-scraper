@@ -9,6 +9,9 @@ public class AppDbContext : DbContext
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
     public DbSet<Team> Teams => Set<Team>();
+    public DbSet<Franchise> Franchises => Set<Franchise>();
+    public DbSet<TeamSeason> TeamSeasons => Set<TeamSeason>();
+    public DbSet<PlayerTeamSeason> PlayerTeamSeasons => Set<PlayerTeamSeason>();
     public DbSet<Player> Players => Set<Player>();
     public DbSet<Game> Games => Set<Game>();
     public DbSet<PlayerGameStats> PlayerGameStats => Set<PlayerGameStats>();
@@ -45,18 +48,22 @@ public class AppDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
-        // Game has two FKs to Team — must use Restrict to avoid cascade cycles
+        // Game has two FKs to TeamSeason — must use Restrict to avoid cascade cycles
         modelBuilder.Entity<Game>()
-            .HasOne(g => g.HomeTeam)
-            .WithMany(t => t.HomeGames)
-            .HasForeignKey(g => g.HomeTeamId)
+            .HasOne(g => g.HomeTeamSeason)
+            .WithMany(ts => ts.HomeGames)
+            .HasForeignKey(g => g.HomeTeamSeasonId)
             .OnDelete(DeleteBehavior.Restrict);
 
         modelBuilder.Entity<Game>()
-            .HasOne(g => g.AwayTeam)
-            .WithMany(t => t.AwayGames)
-            .HasForeignKey(g => g.AwayTeamId)
+            .HasOne(g => g.AwayTeamSeason)
+            .WithMany(ts => ts.AwayGames)
+            .HasForeignKey(g => g.AwayTeamSeasonId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<Game>()
+            .HasIndex(g => new { g.Season, g.SeasonType, g.Week, g.HomeTeamSeasonId, g.AwayTeamSeasonId })
+            .IsUnique();
 
         // Game -> Venue (optional)
         modelBuilder.Entity<Game>()
@@ -90,15 +97,15 @@ public class AppDbContext : DbContext
             .WithMany(g => g.TeamStats)
             .HasForeignKey(tgs => tgs.GameId);
 
-        // TeamGameStats -> Team
+        // TeamGameStats -> TeamSeason
         modelBuilder.Entity<TeamGameStats>()
-            .HasOne(tgs => tgs.Team)
-            .WithMany(t => t.TeamStats)
-            .HasForeignKey(tgs => tgs.TeamId);
+            .HasOne(tgs => tgs.TeamSeason)
+            .WithMany(ts => ts.TeamStats)
+            .HasForeignKey(tgs => tgs.TeamSeasonId);
 
-        // TeamGameStats unique index: one row per team per game
+        // TeamGameStats unique index: one row per team-season per game
         modelBuilder.Entity<TeamGameStats>()
-            .HasIndex(tgs => new { tgs.GameId, tgs.TeamId })
+            .HasIndex(tgs => new { tgs.GameId, tgs.TeamSeasonId })
             .IsUnique();
 
         // Injury -> Game
@@ -138,6 +145,46 @@ public class AppDbContext : DbContext
             .HasIndex(al => al.Url)
             .IsUnique();
 
+        // Franchise unique canonical abbreviation
+        modelBuilder.Entity<Franchise>()
+            .HasIndex(f => f.CanonicalAbbreviation)
+            .IsUnique();
+
+        // TeamSeason unique per franchise per season
+        modelBuilder.Entity<TeamSeason>()
+            .HasIndex(ts => new { ts.FranchiseId, ts.Season })
+            .IsUnique();
+
+        modelBuilder.Entity<TeamSeason>()
+            .HasOne(ts => ts.Franchise)
+            .WithMany(f => f.TeamSeasons)
+            .HasForeignKey(ts => ts.FranchiseId);
+
+        // PlayerTeamSeason
+        modelBuilder.Entity<PlayerTeamSeason>()
+            .HasIndex(pts => new { pts.PlayerId, pts.TeamSeasonId })
+            .IsUnique();
+
+        modelBuilder.Entity<PlayerTeamSeason>()
+            .HasOne(pts => pts.Player)
+            .WithMany()
+            .HasForeignKey(pts => pts.PlayerId);
+
+        modelBuilder.Entity<PlayerTeamSeason>()
+            .HasOne(pts => pts.TeamSeason)
+            .WithMany(ts => ts.PlayerRosterEntries)
+            .HasForeignKey(pts => pts.TeamSeasonId);
+
+        // Player unique EspnId when present
+        modelBuilder.Entity<Player>()
+            .HasIndex(p => p.EspnId)
+            .IsUnique()
+            .HasFilter("\"EspnId\" IS NOT NULL");
+
+        // ScrapeJob parent/child for backfill fan-out
+        modelBuilder.Entity<ScrapeJob>()
+            .HasIndex(j => j.ParentJobId);
+
         // Venue unique index on EspnId
         modelBuilder.Entity<Venue>()
             .HasIndex(v => v.EspnId)
@@ -169,6 +216,9 @@ public class AppDbContext : DbContext
         // automatically hidden from normal queries. Admin code uses IgnoreQueryFilters()
         // to see deleted rows in the review UI.
         modelBuilder.Entity<Team>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<Franchise>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<TeamSeason>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<PlayerTeamSeason>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<Player>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<Game>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<PlayerGameStats>().HasQueryFilter(e => !e.IsDeleted);

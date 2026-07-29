@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using WebScraper.Data;
 using WebScraper.Models;
+using WebScraper.Services.Coverage;
 using WebScraper.Services.Scrapers;
 
 namespace WebScraper.Api.Services;
@@ -134,6 +135,8 @@ public class ScrapeJobWorker : BackgroundService
             }));
         await db.SaveChangesAsync(ct);
 
+        await BackfillOrchestrator.TryCompleteParentAsync(db, job, ct);
+
         _logger.LogInformation("ScrapeJob {JobId} finished: {Status} ({Processed} processed, {Failed} failed)",
             jobId, job.Status, job.RecordsProcessed, job.RecordsFailed);
     }
@@ -156,8 +159,26 @@ public class ScrapeJobWorker : BackgroundService
             ScrapeJobType.Games => await RunGamesAsync(services, job),
             ScrapeJobType.Stats => await RunStatsAsync(services, job),
             ScrapeJobType.All => await RunAllAsync(services, job),
+            ScrapeJobType.Backfill => await RunBackfillAsync(services, job, ct),
             _ => ScrapeResult.Failed($"Unknown job type: {job.Type}"),
         };
+    }
+
+    private static async Task<ScrapeResult> RunBackfillAsync(
+        IServiceProvider services, ScrapeJob job, CancellationToken ct)
+    {
+        if (job.Season is null)
+            return ScrapeResult.Failed("Start season is required for backfill (use Season field)");
+
+        var endSeason = job.Week ?? job.Season.Value;
+        var orchestrator = services.GetRequiredService<BackfillOrchestrator>();
+        var queue = services.GetRequiredService<IJobQueue>();
+
+        var childIds = await orchestrator.FanOutAsync(job, job.Season.Value, endSeason, ct);
+        foreach (var childId in childIds)
+            queue.TryEnqueue(childId);
+
+        return ScrapeResult.Succeeded(childIds.Count, $"Enqueued {childIds.Count} child scrape jobs");
     }
 
     private static async Task<ScrapeResult> RunTeamsAsync(IServiceProvider services)
@@ -178,9 +199,11 @@ public class ScrapeJobWorker : BackgroundService
         if (job.Season is null)
             return ScrapeResult.Failed("Season is required for games scrape");
 
+        var seasonType = job.SeasonType ?? NflSeasonType.Regular;
+
         return job.Week is not null
-            ? await scraper.ScrapeGamesAsync(job.Season.Value, job.Week.Value)
-            : await scraper.ScrapeGamesAsync(job.Season.Value);
+            ? await scraper.ScrapeGamesAsync(job.Season.Value, job.Week.Value, seasonType)
+            : await scraper.ScrapeGamesAsync(job.Season.Value, seasonType);
     }
 
     private static async Task<ScrapeResult> RunStatsAsync(IServiceProvider services, ScrapeJob job)
@@ -189,7 +212,8 @@ public class ScrapeJobWorker : BackgroundService
         if (job.Season is null || job.Week is null)
             return ScrapeResult.Failed("Season and week are required for stats scrape");
 
-        return await scraper.ScrapePlayerStatsAsync(job.Season.Value, job.Week.Value);
+        var seasonType = job.SeasonType ?? NflSeasonType.Regular;
+        return await scraper.ScrapePlayerStatsAsync(job.Season.Value, job.Week.Value, seasonType);
     }
 
     private static async Task<ScrapeResult> RunAllAsync(IServiceProvider services, ScrapeJob job)

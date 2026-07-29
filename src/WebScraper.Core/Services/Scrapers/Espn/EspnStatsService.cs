@@ -10,6 +10,8 @@ public class EspnStatsService : BaseApiService, IStatsScraperService
     private readonly IPlayerRepository _playerRepository;
     private readonly IGameRepository _gameRepository;
     private readonly ITeamRepository _teamRepository;
+    private readonly ITeamSeasonRepository _teamSeasonRepository;
+    private readonly IPlayerTeamSeasonRepository _playerTeamSeasonRepository;
     private readonly IVenueRepository _venueRepository;
     private readonly ITeamGameStatsRepository _teamGameStatsRepository;
     private readonly IInjuryRepository _injuryRepository;
@@ -24,6 +26,8 @@ public class EspnStatsService : BaseApiService, IStatsScraperService
         IPlayerRepository playerRepository,
         IGameRepository gameRepository,
         ITeamRepository teamRepository,
+        ITeamSeasonRepository teamSeasonRepository,
+        IPlayerTeamSeasonRepository playerTeamSeasonRepository,
         IVenueRepository venueRepository,
         ITeamGameStatsRepository teamGameStatsRepository,
         IInjuryRepository injuryRepository,
@@ -34,59 +38,69 @@ public class EspnStatsService : BaseApiService, IStatsScraperService
         _playerRepository = playerRepository;
         _gameRepository = gameRepository;
         _teamRepository = teamRepository;
+        _teamSeasonRepository = teamSeasonRepository;
+        _playerTeamSeasonRepository = playerTeamSeasonRepository;
         _venueRepository = venueRepository;
         _teamGameStatsRepository = teamGameStatsRepository;
         _injuryRepository = injuryRepository;
         _apiLinkRepository = apiLinkRepository;
     }
 
-    public async Task<ScrapeResult> ScrapePlayerStatsAsync(int season, int week)
+    public async Task<ScrapeResult> ScrapePlayerStatsAsync(int season, int week, NflSeasonType seasonType = NflSeasonType.Regular)
     {
-        _logger.LogInformation("Starting player stats scrape for season {Season} week {Week} from ESPN API", season, week);
+        _logger.LogInformation(
+            "Starting player stats scrape for season {Season} week {Week} type {SeasonType} from ESPN API",
+            season, week, seasonType);
 
-        var games = await _gameRepository.GetByWeekAsync(season, week);
+        var games = await _gameRepository.GetByWeekAsync(season, week, seasonType);
         var gamesList = games.ToList();
 
         if (!gamesList.Any())
         {
-            _logger.LogWarning("No games found for season {Season} week {Week}. Scrape games first.", season, week);
-            return ScrapeResult.Failed($"No games found for season {season} week {week}. Scrape games first.");
+            _logger.LogWarning(
+                "No games found for season {Season} week {Week} type {SeasonType}. Scrape games first.",
+                season, week, seasonType);
+            return ScrapeResult.Failed($"No games found for season {season} week {week} ({seasonType}). Scrape games first.");
         }
 
-        if (!EspnGameService.HasEventIdsForWeek(season, week))
+        if (!EspnGameService.HasEventIdsForWeek(season, week, seasonType))
         {
-            _logger.LogInformation("Event ID cache is empty for season {Season} week {Week}. Fetching from ESPN API...", season, week);
-            await EspnGameService.PopulateEventIdsAsync(_httpClient, _logger, _rateLimiter, season, week);
+            _logger.LogInformation(
+                "Event ID cache is empty for season {Season} week {Week} type {SeasonType}. Fetching from ESPN API...",
+                season, week, seasonType);
+            await EspnGameService.PopulateEventIdsAsync(_httpClient, _logger, _rateLimiter, season, week, seasonType);
         }
 
         int totalStats = 0;
         foreach (var game in gamesList)
         {
-            var count = await ScrapeGameStatsAsync(game, season, week);
+            var count = await ScrapeGameStatsAsync(game, season, week, seasonType);
             totalStats += count;
         }
 
-        _logger.LogInformation("Player stats scrape complete for season {Season} week {Week}. {Count} stat lines processed",
-            season, week, totalStats);
-        return ScrapeResult.Succeeded(totalStats, $"{totalStats} stat lines processed for season {season} week {week} from ESPN API");
+        _logger.LogInformation(
+            "Player stats scrape complete for season {Season} week {Week} type {SeasonType}. {Count} stat lines processed",
+            season, week, seasonType, totalStats);
+        return ScrapeResult.Succeeded(totalStats,
+            $"{totalStats} stat lines processed for season {season} week {week} ({seasonType}) from ESPN API");
     }
 
-    private async Task<int> ScrapeGameStatsAsync(Game game, int season, int week)
+    private async Task<int> ScrapeGameStatsAsync(Game game, int season, int week, NflSeasonType seasonType)
     {
-        var homeTeam = game.HomeTeam ?? await _teamRepository.GetByIdAsync(game.HomeTeamId);
-        if (homeTeam == null)
+        var homeTeamSeason = game.HomeTeamSeason ?? await _teamSeasonRepository.GetByIdAsync(game.HomeTeamSeasonId);
+        if (homeTeamSeason == null)
         {
-            _logger.LogWarning("Home team not found for game {GameId}", game.Id);
+            _logger.LogWarning("Home team season not found for game {GameId}", game.Id);
             return 0;
         }
 
-        var eventId = EspnGameService.GetEventId(season, week, homeTeam.Abbreviation);
+        var eventId = EspnGameService.GetEventId(season, week, homeTeamSeason.Abbreviation, seasonType);
         if (eventId == null)
         {
             _logger.LogWarning(
                 "No ESPN event ID found for game {GameId} (season {Season}, week {Week}, home {HomeAbbr}). " +
                 "Scrape games first to populate event IDs.",
-                game.Id, season, week, homeTeam.Abbreviation);
+                game.Id, season, week, homeTeamSeason.Abbreviation);
             return 0;
         }
 
@@ -122,7 +136,10 @@ public class EspnStatsService : BaseApiService, IStatsScraperService
         int count = 0;
         foreach (var teamStats in response.Boxscore!.Players)
         {
-            var playerStats = new Dictionary<string, PlayerGameStats>();
+            var teamAbbr = EspnMappings.ToNflAbbreviation(teamStats.Team.Id, teamStats.Team.Abbreviation);
+            var teamSeason = await _teamSeasonRepository.GetByAbbreviationAndSeasonAsync(teamAbbr, game.Season);
+
+            var playerStats = new Dictionary<string, ParsedAthleteStats>();
 
             foreach (var category in teamStats.Statistics)
             {
@@ -146,21 +163,35 @@ public class EspnStatsService : BaseApiService, IStatsScraperService
                     ParseCategory(category, game.Id, playerStats, parser);
             }
 
-            foreach (var (playerName, stats) in playerStats)
+            foreach (var (_, parsed) in playerStats)
             {
-                var player = await _playerRepository.GetByNameAsync(playerName);
-                if (player == null)
-                {
-                    _logger.LogDebug("Player not found in database: {PlayerName}. Skipping.", playerName);
+                if (string.IsNullOrEmpty(parsed.Athlete.Id))
                     continue;
-                }
 
-                stats.PlayerId = player.Id;
-                await _statsRepository.UpsertAsync(stats);
+                var player = await _playerRepository.UpsertByEspnIdAsync(new Player
+                {
+                    EspnId = parsed.Athlete.Id,
+                    Name = parsed.Athlete.DisplayName,
+                    TeamId = teamSeason != null
+                        ? (await _teamRepository.GetByAbbreviationAsync(teamSeason.Abbreviation))?.Id
+                        : null,
+                });
+
+                if (teamSeason != null)
+                    await _playerTeamSeasonRepository.UpsertAsync(player.Id, teamSeason.Id, game.Season);
+
+                parsed.Stats.PlayerId = player.Id;
+                await _statsRepository.UpsertAsync(parsed.Stats);
                 count++;
             }
         }
         return count;
+    }
+
+    private sealed class ParsedAthleteStats
+    {
+        public EspnStatAthleteInfo Athlete { get; set; } = new();
+        public PlayerGameStats Stats { get; set; } = new();
     }
 
     private async Task ParseTeamStatsAsync(EspnSummaryResponse response, Game game)
@@ -170,17 +201,17 @@ public class EspnStatsService : BaseApiService, IStatsScraperService
         foreach (var espnTeamStats in response.Boxscore.Teams)
         {
             var teamAbbr = EspnMappings.ToNflAbbreviation(espnTeamStats.Team.Id, espnTeamStats.Team.Abbreviation);
-            var team = await _teamRepository.GetByAbbreviationAsync(teamAbbr);
-            if (team == null)
+            var teamSeason = await _teamSeasonRepository.GetByAbbreviationAndSeasonAsync(teamAbbr, game.Season);
+            if (teamSeason == null)
             {
-                _logger.LogDebug("Team not found for team stats: {TeamAbbr}", teamAbbr);
+                _logger.LogDebug("Team season not found for team stats: {TeamAbbr} season {Season}", teamAbbr, game.Season);
                 continue;
             }
 
             var tgs = new TeamGameStats
             {
                 GameId = game.Id,
-                TeamId = team.Id
+                TeamSeasonId = teamSeason.Id
             };
 
             foreach (var stat in espnTeamStats.Statistics)
@@ -194,7 +225,7 @@ public class EspnStatsService : BaseApiService, IStatsScraperService
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Failed to upsert team game stats for game {GameId} team {TeamId}", game.Id, team.Id);
+                _logger.LogWarning(ex, "Failed to upsert team game stats for game {GameId} teamSeason {TeamSeasonId}", game.Id, teamSeason.Id);
             }
         }
     }
@@ -422,21 +453,27 @@ public class EspnStatsService : BaseApiService, IStatsScraperService
     private static void ParseCategory(
         EspnStatCategory category,
         int gameId,
-        Dictionary<string, PlayerGameStats> playerStats,
+        Dictionary<string, ParsedAthleteStats> playerStats,
         Action<PlayerGameStats, List<string>, List<string>> parser)
     {
         foreach (var athlete in category.Athletes)
         {
+            var espnId = athlete.Athlete.Id;
             var name = athlete.Athlete.DisplayName;
-            if (string.IsNullOrEmpty(name)) continue;
+            if (string.IsNullOrEmpty(espnId) || string.IsNullOrEmpty(name))
+                continue;
 
-            if (!playerStats.TryGetValue(name, out var stats))
+            if (!playerStats.TryGetValue(espnId, out var parsed))
             {
-                stats = new PlayerGameStats { GameId = gameId };
-                playerStats[name] = stats;
+                parsed = new ParsedAthleteStats
+                {
+                    Athlete = athlete.Athlete,
+                    Stats = new PlayerGameStats { GameId = gameId },
+                };
+                playerStats[espnId] = parsed;
             }
 
-            parser(stats, category.Keys, athlete.Stats);
+            parser(parsed.Stats, category.Keys, athlete.Stats);
         }
     }
 

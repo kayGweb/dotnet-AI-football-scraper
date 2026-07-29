@@ -170,8 +170,8 @@ public class ConsoleDisplayService
         foreach (var game in gamesList.OrderBy(g => g.Week).ThenBy(g => g.GameDate))
         {
             var date = game.GameDate != DateTime.MinValue ? game.GameDate.ToString("MM/dd/yyyy") : "-";
-            var awayAbbr = game.AwayTeam?.Abbreviation ?? "???";
-            var homeAbbr = game.HomeTeam?.Abbreviation ?? "???";
+            var awayAbbr = game.AwayTeamSeason?.Abbreviation ?? "???";
+            var homeAbbr = game.HomeTeamSeason?.Abbreviation ?? "???";
             var score = game.AwayScore != null && game.HomeScore != null
                 ? $"{game.AwayScore,3} - {game.HomeScore,-3}"
                 : "   -   ";
@@ -360,7 +360,7 @@ public class ConsoleDisplayService
 
         foreach (var s in statsList)
         {
-            var teamAbbr = s.Team?.Abbreviation ?? $"T#{s.TeamId}";
+            var teamAbbr = s.TeamSeason?.Abbreviation ?? $"TS#{s.TeamSeasonId}";
             var third = s.ThirdDownAttempts > 0
                 ? $"{s.ThirdDownMade}/{s.ThirdDownAttempts}"
                 : "-";

@@ -5,6 +5,7 @@ using WebScraper.Data;
 using WebScraper.Data.Repositories;
 using WebScraper.Models;
 using WebScraper.Services;
+using WebScraper.Services.Coverage;
 
 namespace WebScraper.Extensions;
 
@@ -53,6 +54,9 @@ public static class ServiceCollectionExtensions
         });
 
         // Register repositories
+        services.AddScoped<IFranchiseRepository, FranchiseRepository>();
+        services.AddScoped<ITeamSeasonRepository, TeamSeasonRepository>();
+        services.AddScoped<IPlayerTeamSeasonRepository, PlayerTeamSeasonRepository>();
         services.AddScoped<ITeamRepository, TeamRepository>();
         services.AddScoped<IPlayerRepository, PlayerRepository>();
         services.AddScoped<IGameRepository, GameRepository>();
@@ -65,7 +69,7 @@ public static class ServiceCollectionExtensions
         // Register rate limiter, display service, and push service
         services.AddSingleton<RateLimiterService>();
         services.AddSingleton<ConsoleDisplayService>();
-        services.AddScoped<DatabasePushService>();
+        services.AddScoped<BackfillOrchestrator>();
 
         // Register scraper services via provider factory (driven by DataProvider config)
         DataProviderFactory.RegisterScrapers(services, scraperSettings);

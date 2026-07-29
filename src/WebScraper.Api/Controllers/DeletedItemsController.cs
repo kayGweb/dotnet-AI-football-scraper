@@ -75,7 +75,7 @@ public class DeletedItemsController : ControllerBase
                 {
                     EntityType = "Game",
                     Id = g.Id,
-                    Label = $"Season {g.Season} W{g.Week} ({g.AwayTeamId} @ {g.HomeTeamId})",
+                    Label = $"Season {g.Season} W{g.Week} ({g.AwayTeamSeasonId} @ {g.HomeTeamSeasonId})",
                     DeletedAt = g.DeletedAt!.Value,
                     DeletedBy = g.DeletedBy,
                     DeleteReason = g.DeleteReason,
@@ -117,7 +117,7 @@ public class DeletedItemsController : ControllerBase
                 {
                     EntityType = "TeamGameStats",
                     Id = t.Id,
-                    Label = $"Game {t.GameId} / Team {t.TeamId}",
+                    Label = $"Game {t.GameId} / TeamSeason {t.TeamSeasonId}",
                     DeletedAt = t.DeletedAt!.Value,
                     DeletedBy = t.DeletedBy,
                     DeleteReason = t.DeleteReason,

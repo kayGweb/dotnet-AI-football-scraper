@@ -25,7 +25,7 @@ public class MySportsFeedsStatsService : BaseApiService, IStatsScraperService
         _gameRepository = gameRepository;
     }
 
-    public async Task<ScrapeResult> ScrapePlayerStatsAsync(int season, int week)
+    public async Task<ScrapeResult> ScrapePlayerStatsAsync(int season, int week, NflSeasonType seasonType = NflSeasonType.Regular)
     {
         _logger.LogInformation("Starting player stats scrape for season {Season} week {Week} from MySportsFeeds API",
             season, week);
@@ -97,8 +97,8 @@ public class MySportsFeedsStatsService : BaseApiService, IStatsScraperService
         if (!string.IsNullOrEmpty(homeAbbr) && !string.IsNullOrEmpty(awayAbbr))
         {
             return games.FirstOrDefault(g =>
-                (g.HomeTeam?.Abbreviation?.Equals(homeAbbr, StringComparison.OrdinalIgnoreCase) ?? false)
-                && (g.AwayTeam?.Abbreviation?.Equals(awayAbbr, StringComparison.OrdinalIgnoreCase) ?? false));
+                (g.HomeTeamSeason?.Abbreviation?.Equals(homeAbbr, StringComparison.OrdinalIgnoreCase) ?? false)
+                && (g.AwayTeamSeason?.Abbreviation?.Equals(awayAbbr, StringComparison.OrdinalIgnoreCase) ?? false));
         }
 
         return null;

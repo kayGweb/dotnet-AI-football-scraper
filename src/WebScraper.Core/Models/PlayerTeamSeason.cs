@@ -1,13 +1,14 @@
 namespace WebScraper.Models;
 
-public class Team : IAuditableEntity, ISoftDeletable
+/// <summary>
+/// Player membership on a team for a given season (many-to-many with season context).
+/// </summary>
+public class PlayerTeamSeason : IAuditableEntity, ISoftDeletable
 {
     public int Id { get; set; }
-    public string Name { get; set; } = string.Empty;
-    public string Abbreviation { get; set; } = string.Empty;
-    public string City { get; set; } = string.Empty;
-    public string Conference { get; set; } = string.Empty;
-    public string Division { get; set; } = string.Empty;
+    public int PlayerId { get; set; }
+    public int TeamSeasonId { get; set; }
+    public int Season { get; set; }
 
     // Data lineage
     public string? DataSource { get; set; }
@@ -22,7 +23,6 @@ public class Team : IAuditableEntity, ISoftDeletable
     public string? DeletedBy { get; set; }
     public string? DeleteReason { get; set; }
 
-    // Navigation properties
-    public ICollection<Player> Players { get; set; } = new List<Player>();
-    public ICollection<ApiLink> ApiLinks { get; set; } = new List<ApiLink>();
+    public Player Player { get; set; } = null!;
+    public TeamSeason TeamSeason { get; set; } = null!;
 }

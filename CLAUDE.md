@@ -1280,12 +1280,40 @@ Codified in Core:
 | 2021–2025 | 272 | 13 | 285 | 5 |
 | **Total** | | | **5,432** | **20** |
 
-### Block 1 — Five blockers (pending)
-1. Player identity keyed on `Name+TeamId` instead of `EspnId`
-2. Only regular season scraped (`seasontype=2` hardcoded)
-3. Rosters only return current-season players
-4. Teams are single mutable rows keyed on abbreviation
-5. No backfill orchestration
+### Block 1 — Five blockers (complete)
+All five correctness blockers from `AGENT_PLATFORM_PLAN.md` §1 are implemented. Migration: `Block1IdentitySchema`.
+
+**1.1 Player identity on `EspnId`**
+- `PlayerRepository.UpsertAsync` prefers `EspnId` when present; `UpsertByEspnIdAsync` / `GetByEspnIdAsync` added
+- Unique filtered index on `Players.EspnId`
+- New `PlayerTeamSeason` join table (player ↔ team-season roster membership)
+- `EspnPlayerService` sets `EspnId` on roster upsert; `EspnStatsService` discovers players from box scores by ESPN athlete ID
+
+**1.2 Season type parameterization**
+- `Game.SeasonType` (`NflSeasonType`: Preseason=1, Regular=2, Postseason=3)
+- `ScrapeJob.SeasonType`, `ScrapeJob.ParentJobId`
+- `IGameScraperService` / `IStatsScraperService` accept `NflSeasonType` (default Regular)
+- ESPN scoreboard uses `seasontype` query param; event-ID cache keys include season type
+- API: `CreateScrapeJobRequest.SeasonType`, `ScrapeJobDto.SeasonType`, `GameDto.SeasonType`
+
+**1.3 Player discovery from box scores**
+- Stats pipeline creates players + `PlayerTeamSeason` rows when athletes appear in box scores before roster scrape
+
+**1.4 Franchise + TeamSeason (historical team identity)**
+- New models: `Franchise` (canonical abbreviation), `TeamSeason` (franchise × season)
+- `Game` FKs: `HomeTeamSeasonId` / `AwayTeamSeasonId` (replaces `HomeTeamId`/`AwayTeamId`)
+- `TeamGameStats.TeamSeasonId` (replaces `TeamId`)
+- `FranchiseMappings` — relocation abbreviations (STL→LAR, SD→LAC, OAK→LV, etc.)
+- Repos: `FranchiseRepository`, `TeamSeasonRepository`, `PlayerTeamSeasonRepository`
+- All game scrapers resolve `TeamSeason`; `DatabasePushService` pushes Franchises + TeamSeasons before Games
+
+**1.5 Backfill orchestration**
+- `ScrapeJobType.Backfill` + `BackfillPlanner` (season × seasonType × week work items)
+- `BackfillOrchestrator` fans out child jobs with `ParentJobId`; `TryCompleteParentAsync` on child completion
+- `POST /api/v1/scrape/backfill` — body: `{ season, endSeason?, week? }` (Operator)
+- `ScrapeJobWorker.RunBackfillAsync` enqueues child Games/Stats jobs
+
+**Breaking schema note:** existing `Games` rows are not migrated in-place — the `Block1IdentitySchema` migration renames legacy team FK columns. Fresh scrape/backfill is required for historical data.
 
 ## Adding a New Data Provider
 1. Create a folder: `Services/Scrapers/NewProvider/`
