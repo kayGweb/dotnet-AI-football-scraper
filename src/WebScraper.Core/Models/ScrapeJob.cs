@@ -45,6 +45,7 @@ public enum ScrapeJobType
     Stats,
     All,
     Backfill,
+    OddsPoll,
 }
 
 public enum ScrapeJobStatus

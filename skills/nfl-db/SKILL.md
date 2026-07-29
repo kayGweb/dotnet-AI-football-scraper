@@ -28,6 +28,12 @@ Version: 1.0.0
 
 ## Runbooks
 
+### Capture live odds (2026 season onward)
+1. Ensure `OddsPoll:Enabled` is true in API config (default: daily scheduler).
+2. Manual run: `nfl_trigger_scrape(type=odds-poll)` or `POST /api/v1/scrape/odds-poll`.
+3. Opening lines are captured on first poll; closing lines when the game goes final.
+4. Check `nfl_get_game_odds(id)` and coverage `GamesWithOdds` separately from stats coverage.
+
 ### Backfill a season
 1. `nfl_trigger_scrape(type=backfill, season=2006, endSeason=2006)` — or use games/stats per week.
 2. Poll `nfl_get_job` / `nfl_list_jobs` until complete.

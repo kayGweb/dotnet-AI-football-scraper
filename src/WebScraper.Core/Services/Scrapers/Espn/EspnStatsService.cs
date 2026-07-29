@@ -655,37 +655,18 @@ public class EspnStatsService : BaseApiService, IStatsScraperService
         if (response.Pickcenter == null || response.Pickcenter.Count == 0)
             return;
 
-        var capturedAt = DateTime.UtcNow;
-        foreach (var pick in response.Pickcenter)
+        try
         {
-            var sportsbook = pick.Provider?.Name;
-            if (string.IsNullOrWhiteSpace(sportsbook))
-                sportsbook = "ESPN";
-
-            var odds = new GameOdds
-            {
-                GameId = game.Id,
-                Sportsbook = sportsbook,
-                Spread = pick.Spread,
-                OverUnder = pick.OverUnder,
-                HomeMoneyline = pick.HomeTeamOdds?.MoneyLine,
-                AwayMoneyline = pick.AwayTeamOdds?.MoneyLine,
-                SnapshotType = OddsSnapshotType.Current,
-                CapturedAt = capturedAt,
-                Details = pick.Details,
-                DataSource = "Espn",
-                DataSourceFetchedAt = capturedAt,
-            };
-
-            try
-            {
-                await _gameOddsRepository.AddSnapshotAsync(odds);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogDebug(ex, "Failed to store odds for game {GameId} sportsbook {Sportsbook}",
-                    game.Id, sportsbook);
-            }
+            var isFinal = EspnOddsCapture.IsGameFinal(game);
+            await EspnOddsCapture.SavePickcenterAsync(
+                _gameOddsRepository,
+                game.Id,
+                response.Pickcenter,
+                isFinal);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to store odds for game {GameId}", game.Id);
         }
     }
 

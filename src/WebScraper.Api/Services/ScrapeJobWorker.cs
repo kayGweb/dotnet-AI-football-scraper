@@ -199,6 +199,7 @@ public class ScrapeJobWorker : BackgroundService
             ScrapeJobType.Stats => await RunStatsAsync(services, job),
             ScrapeJobType.All => await RunAllAsync(services, job),
             ScrapeJobType.Backfill => await RunBackfillAsync(services, job, ct),
+            ScrapeJobType.OddsPoll => await RunOddsPollAsync(services, job, ct),
             _ => ScrapeResult.Failed($"Unknown job type: {job.Type}"),
         };
     }
@@ -220,10 +221,17 @@ public class ScrapeJobWorker : BackgroundService
         return ScrapeResult.Succeeded(childIds.AllChildIds.Count, $"Enqueued {childIds.InitialEnqueueIds.Count} games jobs ({childIds.AllChildIds.Count} total child jobs)");
     }
 
+    private static async Task<ScrapeResult> RunOddsPollAsync(
+        IServiceProvider services, ScrapeJob job, CancellationToken ct)
+    {
+        var poll = services.GetRequiredService<IOddsPollService>();
+        return await poll.PollAsync(job.Season, ct);
+    }
+
     private static async Task RunPostScrapeQualityAsync(
         IServiceProvider services, ScrapeJob job, CancellationToken ct)
     {
-        if (job.Type is not (ScrapeJobType.Games or ScrapeJobType.Stats or ScrapeJobType.All))
+        if (job.Type is not (ScrapeJobType.Games or ScrapeJobType.Stats or ScrapeJobType.All or ScrapeJobType.OddsPoll))
             return;
 
         var coverage = services.GetRequiredService<SeasonCoverageService>();

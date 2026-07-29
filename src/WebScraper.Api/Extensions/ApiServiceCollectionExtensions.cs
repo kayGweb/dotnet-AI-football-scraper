@@ -49,6 +49,9 @@ public static class ApiServiceCollectionExtensions
         services.AddSingleton<IJobQueue>(sp => sp.GetRequiredService<JobQueue>());
         services.AddHostedService<ScrapeJobWorker>();
 
+        // --- Scheduled odds polling (§5.1) ---
+        services.AddHostedService<OddsPollScheduler>();
+
         // --- SignalR hub + outbox relay (M3 chunk c) ---
         services.AddSignalR();
         services.AddHostedService<ScrapeEventRelay>();

@@ -8,11 +8,11 @@ namespace WebScraper.Mcp.Tools;
 public static class OperateTools
 {
     [McpServerTool(Name = "nfl_trigger_scrape"), Description(
-        "Trigger a scrape job. Types: teams, players, games, stats, all, backfill. " +
+        "Trigger a scrape job. Types: teams, players, games, stats, all, backfill, odds-poll. " +
         "Returns job id (202 Accepted). Requires operate scope.")]
     public static Task<string> TriggerScrape(
         NflApiClient client,
-        [Description("Job type: teams|players|games|stats|all|backfill")] string type,
+        [Description("Job type: teams|players|games|stats|all|backfill|odds-poll")] string type,
         [Description("NFL season year.")] int? season = null,
         [Description("Week number (or end season for backfill when endSeason omitted).")] int? week = null,
         [Description("preseason|regular|postseason")] string? seasonType = null,

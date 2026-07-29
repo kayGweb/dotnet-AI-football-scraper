@@ -123,6 +123,16 @@ public class ScrapeController : ControllerBase
         return await EnqueueJob(ScrapeJobType.Backfill, request.Season, endSeason);
     }
 
+    /// <summary>
+    /// Poll ESPN pickcenter for upcoming/recent games and store opening/current/closing odds snapshots.
+    /// </summary>
+    [HttpPost("odds-poll")]
+    [ProducesResponseType(typeof(ScrapeJobDto), StatusCodes.Status202Accepted)]
+    public async Task<IActionResult> ScrapeOddsPoll([FromBody] CreateScrapeJobRequest? request)
+    {
+        return await EnqueueJob(ScrapeJobType.OddsPoll, request?.Season);
+    }
+
     private async Task<IActionResult> EnqueueJob(
         ScrapeJobType type,
         int? season = null,
