@@ -18,6 +18,11 @@ as tools callable by Claude Code / Claude Desktop / any MCP client.
 | `nfl_get_game_team_stats` | `GET /api/v1/games/{id}/team-stats` | Team aggregates for a game |
 | `nfl_get_game_player_stats` | `GET /api/v1/games/{id}/player-stats` | All player stat lines for a game |
 | `nfl_get_game_injuries` | `GET /api/v1/games/{id}/injuries` | Injury reports for a game |
+| `nfl_get_game_drives` | `GET /api/v1/games/{id}/drives` | Drive chart |
+| `nfl_get_game_scoring_plays` | `GET /api/v1/games/{id}/scoring-plays` | Scoring plays |
+| `nfl_get_game_weather` | `GET /api/v1/games/{id}/weather` | Game-day weather |
+| `nfl_get_game_officials` | `GET /api/v1/games/{id}/officials` | Referee crew |
+| `nfl_get_game_odds` | `GET /api/v1/games/{id}/odds` | Betting odds snapshots |
 | `nfl_list_venues` | `GET /api/v1/venues` | Venues (paged, filters: state, indoor/outdoor) |
 | `nfl_get_venue` | `GET /api/v1/venues/{id}` | Single venue |
 | `nfl_get_status` | `GET /api/v1/status` | DB row counts + freshness |
@@ -32,6 +37,17 @@ as tools callable by Claude Code / Claude Desktop / any MCP client.
 | `nfl_get_coverage` | `GET /api/v1/coverage` | Expected vs actual per week |
 | `nfl_find_gaps` | `GET /api/v1/gaps` | Ranked missing/suspect data |
 | `nfl_retry_job` | `POST /api/v1/jobs/{id}/retry` | Re-queue a job |
+| `nfl_get_backfill_progress` | `GET /api/v1/backfill/{id}/progress` | Backfill child counts + ETA |
+| `nfl_pause_backfill` | `POST /api/v1/backfill/{id}/pause` | Pause a running backfill |
+| `nfl_resume_backfill` | `POST /api/v1/backfill/{id}/resume` | Resume a paused backfill |
+
+### Publish tools (`admin` scope)
+
+| Tool | Endpoint | Purpose |
+|------|----------|---------|
+| `nfl_get_push_status` | `GET /api/v1/push/status` | Latest push session checkpoint |
+| `nfl_trigger_push` | `POST /api/v1/push?resume=&reset=` | Batched SQLite → PostgreSQL push |
+| `nfl_backup_database` | `POST /api/v1/backup` | Timestamped SQLite backup |
 
 ### Introspect tools (`read` scope)
 

@@ -1,7 +1,7 @@
 # NFL Web Scraper - Project Guide
 
 ## Overview
-Originally a .NET 8 Console application that scrapes NFL football data from multiple sources (Pro Football Reference, ESPN API, and more) and stores it in a structured database. As of the M0 refactor, the project is in the process of becoming a containerized microservice — a reusable `WebScraper.Core` class library backs the existing CLI and will back a new ASP.NET Core Web API (+ SignalR + Blazor Server admin) + MCP server for Claude consumption. The architecture supports pluggable data providers — switch between HTML scraping and REST API sources via configuration. See:
+Originally a .NET 8 Console application that scrapes NFL football data from multiple sources (Pro Football Reference, ESPN API, and more) and stores it in a structured database. The project is now a containerized microservice — a reusable `WebScraper.Core` class library backs the CLI, ASP.NET Core Web API (+ SignalR + Blazor Server admin), and MCP server for Claude consumption. The architecture supports pluggable data providers — switch between HTML scraping and REST API sources via configuration. See:
 - `AGENT_MVP.md` — original design specification
 - `API_INTEGRATION_PLAN.md` — multi-provider extension plan (on review branch)
 - `CHATBOT_MICROSERVICE_PLAN.md` — microservice transformation plan (milestones M0–M6)
@@ -984,10 +984,15 @@ calls `SignOutAsync` and redirects back to the login page.
 | `/admin/login` | anonymous | SSR login form (uses `EmptyLayout`, no rendermode) |
 | `/admin` | any role | Dashboard — 8 status cards (Teams, Players, Games, Stats, Venues, Injuries, API Keys, Active Jobs), recent 5 jobs, system info (latest update + 24h query count + total log rows) |
 | `/admin/jobs` | any role | Scrape job table with status filter; 5-second auto-refresh via `Timer` (page implements `IDisposable`) |
-| `/admin/scrapes/new` | Admin or Operator | Trigger scrape — job type select, conditional season/week fields, writes `ScrapeJob` + `JobQueued` `ScrapeEvent`, enqueues into `IJobQueue` |
+| `/admin/scrapes/new` | Admin or Operator | Trigger scrape — job type select (incl. Backfill, OddsPoll), conditional season/week fields |
+| `/admin/backfill` | Admin or Operator | Multi-season backfill — start 2006–2025, optional backup, progress/ETA, pause/resume |
+| `/admin/coverage` | any role | Coverage detail table + regular-season heat map tab |
+| `/admin/quality` | any role | Data quality findings with scan and repair enqueue |
+| `/admin/corrections` | Admin | Agent correction proposal approval queue |
+| `/admin/push` | Admin | Batched, resumable SQLite → PostgreSQL push with stage progress |
 | `/admin/api-keys` | Admin | List + create + revoke API keys; plaintext shown via `Snackbar` once on create |
 | `/admin/users` | Admin | List users (email/roles/last login/lockout); create with role assignment |
-| `/admin/deleted-items` | Admin | Entity-type selector → soft-deleted rows; restore clears `IsDeleted` + nullables via `ExecuteUpdateAsync` with `IgnoreQueryFilters()` |
+| `/admin/deleted-items` | Admin | Entity-type selector → soft-deleted rows; restore via `ExecuteUpdateAsync` with `IgnoreQueryFilters()` |
 | `/admin/api-usage` | any role | Analytics — daily request bar chart (7d), response code donut, top endpoints + top consumers tables |
 
 All data-driven pages declare `@rendermode InteractiveServer` so they get a live
@@ -1039,13 +1044,10 @@ No new config sections — the dashboard reuses everything M3 added:
   Admin user from these only when the user table is empty. After first boot, manage
   users via `/admin/users`.
 
-### What's NOT in M4
-- **Real-time job updates on the dashboard via the SignalR hub** — the Jobs page polls
-  every 5s instead. Wiring `@microsoft/signalr` into Blazor Server would mean either
-  adding a JS interop layer or letting Blazor re-render on `IHubContext` callbacks; the
-  trade-off didn't seem worth it for a single page with a 5s refresh.
-- **Push button** — the dashboard doesn't expose `POST /api/v1/push` yet. Add a button
-  on the Dashboard page when needed.
+### What's NOT in M4 (updated post-Blocks 6–7)
+- **Real-time job updates via SignalR on Jobs/Backfill pages** — the hub (M3c) exists but those pages still poll every 5s. Wiring `@microsoft/signalr` into Blazor Server remains a nice-to-have for the ~1,300-job backfill view.
+- **Agent activity log** — `ApiQueryLogs` captures raw request data; `/admin/api-usage` shows analytics but not an agent-centric operate audit view.
+- **Push button on Dashboard** — push lives at `/admin/push` (Block 7), not on the main dashboard cards.
 
 ## CLI Commands
 All `dotnet run` commands below must target the CLI project explicitly: `dotnet run --project src/WebScraper.Cli -- <args>`.
@@ -1065,8 +1067,13 @@ dotnet run --project src/WebScraper.Cli -- stats --season 2025 --week 1  # Scrap
 dotnet run --project src/WebScraper.Cli -- all --season 2025           # Run full pipeline (teams, players, games)
 dotnet run --project src/WebScraper.Cli -- teams --source Espn         # Override data source at runtime
 
-# Push local data to remote PostgreSQL
-dotnet run --project src/WebScraper.Cli -- push                        # Push all SQLite data to Neon/PostgreSQL
+# Push local SQLite to remote PostgreSQL (batched, resumable)
+dotnet run --project src/WebScraper.Cli -- push
+dotnet run --project src/WebScraper.Cli -- push --resume
+dotnet run --project src/WebScraper.Cli -- push --reset
+
+# Backup local SQLite database (keeps last 3 in data/backups/)
+dotnet run --project src/WebScraper.Cli -- backup
 
 # Data display commands
 dotnet run --project src/WebScraper.Cli -- list teams                  # Show all teams in database
@@ -1208,8 +1215,8 @@ Main Menu
 - [x] **M0 Phase 4:** `AuditingSaveChangesInterceptor` — stamps CreatedAt/UpdatedAt, converts hard deletes to soft deletes; wired in DI via `AddDbContext((sp, options) => options.AddInterceptors(...))`
 - [x] **M0 Phase 5:** Global query filters on all 8 entities in `AppDbContext.OnModelCreating` — deleted rows auto-hidden from normal queries
 - [x] **M0 Phase 6:** `ApiQueryLog` entity + `DbSet<ApiQueryLog>` + indexes on `Timestamp` and `(ApiKeyId, Timestamp)` for the M1 observability dashboard
-- [ ] **M0 Phase 7 (pending):** Generate EF Core migration `AuditableAndSoftDelete` — requires .NET SDK (`dotnet ef migrations add AuditableAndSoftDelete --project src/WebScraper.Core --startup-project src/WebScraper.Cli`)
-- [ ] **M0 Phase 8 (pending):** Verify build + test suite pass on local machine (blocked in Claude environment — no .NET SDK)
+- [x] **M0 Phase 7:** EF Core migration `AuditableAndSoftDelete` — on disk at `20260531173027_AuditableAndSoftDelete.cs`
+- [x] **M0 Phase 8:** Build + test suite verified (284 tests passing)
 - [x] **M1 Phase 1:** `WebScraper.Api.csproj` — Web SDK project with Swashbuckle, HealthChecks, Serilog.AspNetCore; added to solution
 - [x] **M1 Phase 2:** API key auth — `ApiKeyAuthenticationHandler` (SHA-256 + FixedTimeEquals), `ApiKeyOptions`/`ApiKeyEntry` POCOs, `RequireReadScope` policy
 - [x] **M1 Phase 3:** Query logging — `ApiQueryLoggingMiddleware` (X-Correlation-Id, /api/* only), `ApiQueryLogQueue` (bounded Channel 10k, DropOldest), `ApiQueryLogWriter` (BackgroundService, batch 100 / 2s flush)
@@ -1222,7 +1229,7 @@ Main Menu
 - [x] **M1 Phase 10:** CLAUDE.md updated with full M1 documentation
 - [x] **M2 Phase 1:** `WebScraper.Mcp.csproj` — console app with the official `ModelContextProtocol` SDK + `Microsoft.Extensions.Hosting` + `Microsoft.Extensions.Http`; added to solution
 - [x] **M2 Phase 2:** `NflApiClient` — typed `HttpClient` wrapper that calls every M1 endpoint and returns the raw JSON body; errors (401/404/network) wrapped in a small `{"error":true,...}` envelope so Claude sees actionable feedback
-- [x] **M2 Phase 3:** Tool classes — `TeamTools`, `PlayerTools`, `GameTools`, `VenueTools`, `StatusTools` (14 MCP tools total, all prefixed `nfl_*` to avoid collisions with other MCP servers)
+- [x] **M2 Phase 3:** Tool classes — `TeamTools`, `PlayerTools`, `GameTools`, `VenueTools`, `StatusTools` (14 read tools; expanded to 36 total in Blocks 3–7)
 - [x] **M2 Phase 4:** `Program.cs` — Generic Host, env-var config (`NFL_API_URL`, `NFL_API_KEY`), `AddMcpServer().WithStdioServerTransport().WithToolsFromAssembly()`, logging to stderr only (stdout reserved for MCP protocol frames)
 - [x] **M2 Phase 5:** README documenting tool list, Claude Code / Claude Desktop wiring, and the stdout-is-protocol guardrail
 - [x] **M3 chunk (a) Phase 1:** Identity infrastructure — `AppUser : IdentityUser`, `AuthDbContext : IdentityDbContext<AppUser>` (separate context, `__AuthMigrationsHistory` table, `Auth_*` table prefix), shared DB connection with domain `AppDbContext`. NuGet: `Microsoft.AspNetCore.Identity.EntityFrameworkCore 8.0.11` + `Microsoft.AspNetCore.Authentication.JwtBearer 8.0.11`
@@ -1233,8 +1240,8 @@ Main Menu
 - [x] **M3 chunk (a) Phase 6:** Controllers — `AuthController` (`POST /api/v1/auth/login`, `GET /me`, `POST /users` admin, `GET /users` admin), `ApiKeysController` (`GET/POST/DELETE /api/v1/api-keys`, plaintext returned ONCE on create), `DeletedItemsController` (`GET /api/v1/deleted-items?entityType=`, `POST /{entityType}/{id}/restore` — uses `ExecuteUpdateAsync` to clear `IsDeleted`+`DeletedAt`+`DeletedBy`+`DeleteReason`), `PushController` (`POST /api/v1/push` wraps the existing `DatabasePushService`)
 - [x] **M3 chunk (a) Phase 7:** DI wiring + startup — `ApiServiceCollectionExtensions` adds `AddIdentityInfrastructure` + `AddApiAuthentication`, Swagger gains a `Bearer` security definition alongside `ApiKey`, `Program.cs` migrates `AuthDbContext` and runs `IdentitySeeder` after `AppDbContext` migrate
 - [x] **M3 chunk (a) Phase 8:** Config — `Jwt` section (placeholder signing key, must be overridden in `appsettings.Local.json`), `InitialAdmin` section (empty by default), `ApiKeys` comment updated to clarify it's a bootstrap fallback
-- [ ] **M3 chunk (a) Phase 9 (pending):** Generate EF Core migrations — `dotnet ef migrations add ApiKeysTable --project src/WebScraper.Core --startup-project src/WebScraper.Cli` AND `dotnet ef migrations add InitialIdentity --project src/WebScraper.Api --context AuthDbContext`
-- [x] **M3 chunk (b) Phase 1:** `ScrapeJob` entity in Core — `ScrapeJobType` enum (Teams/Players/Games/Stats/All), `ScrapeJobStatus` enum (Queued/Running/Succeeded/Failed), `DbSet<ScrapeJob>` in `AppDbContext` with index on `(Status, CreatedAt)`
+- [x] **M3 chunk (a) Phase 9:** EF Core migrations on disk — `ApiKeysTable` (Core) + `InitialIdentity` (AuthDbContext in Api)
+- [x] **M3 chunk (b) Phase 1:** `ScrapeJob` entity in Core — `ScrapeJobType` enum (Teams/Players/Games/Stats/All/Backfill/OddsPoll), `ScrapeJobStatus` enum (Queued/Running/Paused/Succeeded/Failed), `DbSet<ScrapeJob>` in `AppDbContext` with index on `(Status, CreatedAt)`
 - [x] **M3 chunk (b) Phase 2:** Job queue — `IJobQueue` interface + `JobQueue` implementation backed by `Channel<int>` (bounded 200, Wait mode), singleton in DI
 - [x] **M3 chunk (b) Phase 3:** `ScrapeJobWorker : BackgroundService` — dequeues job IDs, resolves scraper via DI, runs matching scrape method, updates ScrapeJob row. Recovers orphaned Queued/Running jobs on startup.
 - [x] **M3 chunk (b) Phase 4:** `ScrapeController` — `POST /api/v1/scrape/{teams|players|games|stats|all}` (RequireOperator) → persists ScrapeJob, enqueues ID, returns 202 Accepted with Location header + ScrapeJobDto
@@ -1242,7 +1249,7 @@ Main Menu
 - [x] **M3 chunk (b) Phase 6:** `RateLimitingMiddleware` — sliding window (60 req/min default), partitioned by API key ID / user ID / IP, returns 429 + Retry-After
 - [x] **M3 chunk (b) Phase 7:** DTOs — `CreateScrapeJobRequest`, `ScrapeJobDto` + `ScrapeJobMappings.ToDto()` extension
 - [x] **M3 chunk (b) Phase 8:** DI wiring — `JobQueue`/`IJobQueue` singleton, `ScrapeJobWorker` hosted service in `ApiServiceCollectionExtensions`, `RateLimitingMiddleware` in Program.cs pipeline after auth
-- [ ] **M3 chunk (b) Phase 9 (pending):** Generate EF Core migration — `dotnet ef migrations add ScrapeJobsTable --project src/WebScraper.Core --startup-project src/WebScraper.Cli`
+- [x] **M3 chunk (b) Phase 9:** EF Core migration `ScrapeJobsTable` on disk (superseded by Block migrations)
 - [x] **M3 chunk (c) Phase 1:** `ScrapeEvent` entity in Core — `ScrapeEventType` enum (JobQueued/JobStarted/JobCompleted/JobFailed), `DbSet<ScrapeEvent>` in `AppDbContext` with index on `JobId` (relay polls by Id PK)
 - [x] **M3 chunk (c) Phase 2:** Outbox writes — `ScrapeController` writes `JobQueued` when persisting the job; `ScrapeJobWorker` writes `JobStarted` then `JobCompleted`/`JobFailed` transactionally with each `SaveChangesAsync`
 - [x] **M3 chunk (c) Phase 3:** `ScraperHub : Hub` at `/hubs/scraper` — `[Authorize(RequireViewer)]`, broadcasts via server method name `"ScrapeEvent"`
@@ -1251,12 +1258,12 @@ Main Menu
 - [x] **M3 chunk (c) Phase 6:** JWT bearer SignalR auth — `JwtBearerEvents.OnMessageReceived` reads `?access_token=…` for any path under `/hubs/*` so browser WebSocket handshakes can carry the token
 - [x] **M3 chunk (c) Phase 7:** Middleware skips — `RateLimitingMiddleware` and `ApiQueryLoggingMiddleware` both bypass `/hubs/*` so long-lived connections aren't throttled or logged per-frame
 - [x] **M3 chunk (c) Phase 8:** DI wiring — `AddSignalR()`, `AddHostedService<ScrapeEventRelay>()` in `ApiServiceCollectionExtensions`; `app.MapHub<ScraperHub>("/hubs/scraper")` in `Program.cs`
-- [ ] **M3 chunk (c) Phase 9 (pending):** Generate EF Core migration — `dotnet ef migrations add ScrapeEventsTable --project src/WebScraper.Core --startup-project src/WebScraper.Cli`
+- [x] **M3 chunk (c) Phase 9:** EF Core migration `ScrapeEventsTable` on disk (superseded by Block migrations)
 - [x] **M4 Phase 1:** MudBlazor package + Blazor Server scaffolding — `WebScraper.Api.csproj` adds `MudBlazor 6.12.0`; `Components/App.razor` (root HTML), `Components/Routes.razor` (router with `CascadingAuthenticationState` + `AuthorizeRouteView` + `RedirectToLogin`), `Components/_Imports.razor` (global usings)
 - [x] **M4 Phase 2:** Cookie auth scheme — `AuthorizationPolicies.CookieSchemeName = "AdminCookie"` constant, `DashboardAccess` policy (cookie + any role), `AddCookie` registration in `AddApiAuthentication` (LoginPath `/admin/login`, HttpOnly, Strict SameSite, 8h sliding expiry)
 - [x] **M4 Phase 3:** Login/logout minimal API endpoints in `Program.cs` — `POST /admin/login` validates via `SignInManager.CheckPasswordSignInAsync`, builds `ClaimsPrincipal` with role claims, signs in with AdminCookie scheme, stamps `LastLoginAt`; `GET /admin/logout` clears the cookie
 - [x] **M4 Phase 4:** Layouts — `AdminLayout.razor` (MudBlazor dark theme, AppBar with user name + logout, NavDrawer with role-gated nav groups), `EmptyLayout.razor` (chrome-free for login)
-- [x] **M4 Phase 5:** Pages — `Login.razor` (SSR form posting to `/admin/login`), `Dashboard.razor` (8 status cards + recent jobs + system info), `Jobs.razor` (5s auto-refresh table with status filter), `NewScrape.razor` (scrape trigger with JobQueue enqueue + ScrapeEvent outbox write), `ApiKeysPage.razor` + `CreateApiKeyDialog.razor` (key CRUD with one-time plaintext display), `Users.razor` + `CreateUserDialog.razor` (user CRUD with role assignment), `DeletedItems.razor` (soft-delete restore via `ExecuteUpdateAsync`), `ApiUsage.razor` (MudChart bar/donut + top endpoints/consumers tables)
+- [x] **M4 Phase 5:** Pages — `Login.razor`, `Dashboard.razor`, `Jobs.razor`, `NewScrape.razor`, `Backfill.razor`, `Coverage.razor` (detail + heat map), `DataQuality.razor`, `Corrections.razor`, `Push.razor`, `ApiKeysPage.razor`, `Users.razor`, `DeletedItems.razor`, `ApiUsage.razor` + create dialogs
 - [x] **M4 Phase 6:** Blazor circuit-safe DB access — all 5 data-driven pages inject `IServiceScopeFactory` and create per-operation scopes (`using var scope = ScopeFactory.CreateScope(); var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();`) so each query gets a fresh short-lived DbContext instead of one pinned to the circuit
 - [x] **M4 Phase 7:** Program.cs pipeline — `UseStaticFiles()`, `UseAntiforgery()`, `MapRazorComponents<App>().AddInteractiveServerRenderMode()` after `MapControllers()`; `wwwroot/css/admin.css` for body + status card styles
 - [x] **M4 Phase 8:** DI wiring — `AddRazorComponents().AddInteractiveServerComponents()`, `AddMudServices()`, `AddCascadingAuthenticationState()` in `ApiServiceCollectionExtensions`
@@ -1363,14 +1370,87 @@ Phase C from `AGENT_PLATFORM_PLAN.md` §2–3 and §7 Phase C. Migration: `Block
 - `POST /api/v1/corrections`, `GET /api/v1/corrections`, approve/reject (Admin JWT)
 - `/admin/corrections` — approval queue UI
 
-**MCP tools** (11 new, 25 total)
-- Operate: `nfl_trigger_scrape`, `nfl_get_job`, `nfl_list_jobs`, `nfl_get_coverage`, `nfl_find_gaps`, `nfl_retry_job`
-- Introspect: `nfl_describe_schema`, `nfl_get_data_dictionary`, `nfl_query_stats`
-- Propose: `nfl_propose_correction`, `nfl_list_corrections`
+**MCP tools** (Blocks 3–7; 36 total — see `src/WebScraper.Mcp/README.md`)
+- Read (19): teams, players, games (+drives/scoring/weather/officials/odds), venues, status
+- Operate (12): `nfl_trigger_scrape`, jobs, coverage, gaps, retry, backfill progress/pause/resume, push status/trigger, backup
+- Introspect (3): `nfl_describe_schema`, `nfl_get_data_dictionary`, `nfl_query_stats`
+- Propose (2): `nfl_propose_correction`, `nfl_list_corrections`
 
 **Skill**
 - `skills/nfl-db/SKILL.md` — entity resolution, coverage awareness, runbooks, mutation etiquette
 - `GET /api/v1/skill` — serves the Skill markdown
+
+### Block 4 — Tier 1 data expansion (complete)
+Phase D from `AGENT_PLATFORM_PLAN.md` §5.1. Migration: `Block4Tier1Data`.
+
+**New entities**
+- `GameDrive`, `ScoringPlay`, `GameWeather`, `GameOfficial`, `GameOdds` (opening/current/closing per sportsbook)
+- `Game.BroadcastNetworks` — comma-separated broadcast list from ESPN scoreboard/summary
+
+**ESPN parsing**
+- `EspnGameService` — broadcasts from scoreboard `competitions.broadcasts`
+- `EspnStatsService` — drives, scoring plays, weather, officials, odds from `/summary` pickcenter
+
+**API + MCP**
+- `GET /api/v1/games/{id}/drives|scoring-plays|weather|officials|odds`
+- MCP: `nfl_get_game_drives`, `nfl_get_game_scoring_plays`, `nfl_get_game_weather`, `nfl_get_game_officials`, `nfl_get_game_odds`
+
+**Coverage**
+- `SeasonCoverage.GamesWithOdds` — odds tracked separately from game/stats coverage
+
+### Block 5 — OddsPoll job (complete)
+`AGENT_PLATFORM_PLAN.md` §5.1 — capture opening/closing lines before kickoff.
+
+- `EspnOddsCapture` — Opening/Current/Closing snapshot semantics (shared with stats scrape)
+- `EspnOddsPollService` + `IOddsPollService` / `NoOpOddsPollService`
+- `ScrapeJobType.OddsPoll`, `POST /api/v1/scrape/odds-poll`, `OddsPollScheduler` (daily default)
+- MCP: `nfl_trigger_scrape(type=odds-poll)`
+
+### Block 6 — Incremental/resumable push (complete)
+Phase B deliverable from `AGENT_PLATFORM_PLAN.md` §7 Phase E item 1. Migration: `Block6IncrementalPush`.
+
+- `DatabasePushSession` checkpoint entity with staged pipeline (`MigrateSchema → Teams → … → GameOdds → Done`)
+- `DatabasePushService` rewritten as orchestrator; stage logic in `Services/Push/`
+- Batched push (default 500 via `Push:BatchSize`); `StageOffset` checkpointed after each batch
+- `GET /api/v1/push/status`, `POST /api/v1/push?resume=true&reset=true`
+- CLI: `push --resume`, `push --reset`
+- `DatabasePushService` + `SqliteBackupService` registered in Core DI
+
+### Block 7 — Phase E prep: backfill ops + backup + push UI (complete)
+
+**Backfill lifecycle**
+- `ScrapeJobStatus.Paused` — pause/resume without losing queued children
+- Backfill parent stays `Running` until all children complete; idempotent fan-out on resume
+- `BackfillProgressCalculator` — aggregate progress + ETA
+- `BackfillController` — `POST /api/v1/backfill`, `GET /{id}/progress`, pause/resume
+- `GET /api/v1/jobs/{id}/children`
+
+**SQLite backup** (Phase E requirement §7 item 3)
+- `SqliteBackupService` — `data/backups/`, prune to last 3 (`Backup:RetainCount`)
+- `POST /api/v1/backup`, `GET /api/v1/backup`, CLI `backup` command
+
+**Admin dashboard**
+- `/admin/backfill` — start 2006–2025, backup checkbox, progress bar, pause/resume
+- `/admin/push` — stage progress, Start/Resume/Reset
+- `/admin/coverage` — Heat Map tab (regular season season × week grid)
+
+**MCP tools added** (36 total across all tiers)
+- Backfill: `nfl_get_backfill_progress`, `nfl_pause_backfill`, `nfl_resume_backfill`
+- Publish: `nfl_get_push_status`, `nfl_trigger_push`, `nfl_backup_database`
+
+**Skill runbooks added**
+- 20-year Hermes backfill workflow, publish to PostgreSQL, backup before backfill
+
+### Remaining (post-Blocks 0–7)
+- [ ] **Phase E execution** — run 2006–2025 backfill on local Hermes agent (ops, not code)
+- [ ] **Phase C §5 e2e test** — automated agent backfills one season unattended and reports coverage
+- [ ] **Phase F** — play-by-play (~950k rows)
+- [ ] **Phase G** — deep history 1970–2005 via PFR
+- [ ] **M5** — contract tests, Docker, DigitalOcean deployment
+- [ ] **M6** — production polish (OTel, webhooks, FTS, etc.)
+- [ ] **SignalR on Backfill/Jobs pages** — still polling at 5s
+- [ ] **Agent activity log UI** — operate audit view over `ApiQueryLogs`
+- [ ] **Player headshots / team logos** — Tier 1, not yet implemented
 
 ## Adding a New Data Provider
 1. Create a folder: `Services/Scrapers/NewProvider/`

@@ -1,8 +1,10 @@
 # NFL Web Scraper
 
-A .NET 8 microservice that scrapes NFL football data from multiple sources and exposes it through a REST API, a Blazor Server admin dashboard, and an MCP server for Claude integration. Supports five pluggable data providers — switch between HTML scraping and REST API sources via configuration. Includes a standalone CLI mode and an interactive menu-driven REPL.
+A .NET 8 agent-managed NFL data platform that scrapes football data from multiple sources and exposes it through a REST API, a Blazor Server admin dashboard, and an MCP server for Claude integration. Supports five pluggable data providers — switch between HTML scraping and REST API sources via configuration. Includes a standalone CLI mode and an interactive menu-driven REPL.
 
-Collects teams, player rosters, game schedules/scores (including quarter scores, venues, attendance), per-game player statistics (10 categories: passing, rushing, receiving, fumbles, defensive, interceptions, kick returns, punt returns, kicking, punting), team-level aggregates, and injury reports.
+**Data collected:** teams, franchises, team-seasons, player rosters (keyed on `EspnId`), game schedules/scores (preseason/regular/postseason), quarter scores, venues, attendance, broadcast networks, per-game player stats (10 categories), team-level aggregates, injuries, drives, scoring plays, weather, officials, betting odds (opening/current/closing), and discovered API links.
+
+**Agent features:** operate-tier MCP tools, coverage/quality monitoring, multi-season backfill orchestration, incremental SQLite→PostgreSQL push, correction proposal queue, and an in-repo Skill at `skills/nfl-db/SKILL.md`. See `AGENT_PLATFORM_PLAN.md` for the full roadmap.
 
 ### Components
 
@@ -10,7 +12,7 @@ Collects teams, player rosters, game schedules/scores (including quarter scores,
 |-----------|---------|-------------|
 | **REST API** | `WebScraper.Api` | Read-only endpoints + admin write endpoints (JWT/API key auth) |
 | **Admin Dashboard** | `WebScraper.Api` | Blazor Server UI at `/admin/*` (MudBlazor dark theme) |
-| **MCP Server** | `WebScraper.Mcp` | Claude-callable tools over the API (stdio transport) |
+| **MCP Server** | `WebScraper.Mcp` | 36 Claude-callable tools over the API (stdio transport) |
 | **CLI** | `WebScraper.Cli` | Command-line scraper + interactive REPL |
 | **Core Library** | `WebScraper.Core` | Shared models, DbContext, repositories, scrapers |
 
@@ -119,7 +121,7 @@ Add to your Claude Code MCP config (`.mcp.json` or `settings.json`):
 }
 ```
 
-The API must be running for the MCP server to work. Create an API key via the admin dashboard at `/admin/api-keys`.
+The API must be running for the MCP server to work. Create an API key via the admin dashboard at `/admin/api-keys` (use `operate` scope for scrape/backfill tools, `admin` for push/backup/corrections). See `skills/nfl-db/SKILL.md` and `src/WebScraper.Mcp/README.md` for the full tool catalog.
 
 ## Admin Dashboard
 
@@ -129,11 +131,16 @@ The dashboard at `/admin/*` provides a visual interface for managing the entire 
 |------|------|--------|-------------|
 | Login | `/admin/login` | Public | Email/password login form |
 | Dashboard | `/admin` | All roles | Entity counts, recent jobs, system health |
-| Jobs | `/admin/jobs` | All roles | Live job table (auto-refreshes every 5s) with status filter |
-| New Scrape | `/admin/scrapes/new` | Admin, Operator | Trigger scrapes — select type, season, week |
+| Jobs | `/admin/jobs` | All roles | Job table (auto-refreshes every 5s) with status filter |
+| New Scrape | `/admin/scrapes/new` | Admin, Operator | Trigger scrapes — teams, games, stats, backfill, odds-poll |
+| Backfill | `/admin/backfill` | Admin, Operator | Multi-season backfill control — start, pause/resume, progress, optional backup |
+| Coverage | `/admin/coverage` | All roles | Week-by-week coverage table + regular-season heat map |
+| Data Quality | `/admin/quality` | All roles | Open findings with scan and repair enqueue |
+| Corrections | `/admin/corrections` | Admin | Approve/reject agent-proposed data corrections |
 | API Keys | `/admin/api-keys` | Admin | Create/revoke API keys (plaintext shown once on create) |
 | Users | `/admin/users` | Admin | Create users, assign roles (Admin/Operator/Viewer) |
 | Deleted Items | `/admin/deleted-items` | Admin | Review and restore soft-deleted records |
+| Push to Server | `/admin/push` | Admin | Batched, resumable SQLite → PostgreSQL push |
 | API Usage | `/admin/api-usage` | All roles | Request charts, response codes, top endpoints/consumers |
 
 ### Authentication
@@ -290,8 +297,11 @@ Scrape POSTs return **202 Accepted** with a `ScrapeJobDto` body and a `Location`
 | `POST /api/v1/scrape/games` | `{"season":2025,"week":1}` | `season` required; `week` optional |
 | `POST /api/v1/scrape/stats` | `{"season":2025,"week":1}` | Both required |
 | `POST /api/v1/scrape/all` | `{"season":2025,"week":1}` | `season` required; `week` optional |
+| `POST /api/v1/scrape/backfill` | `{"season":2006,"endSeason":2025}` | Multi-season backfill (Operator+) |
+| `POST /api/v1/scrape/odds-poll` | `{"season":2026}` | Poll ESPN pickcenter for odds snapshots |
 | `POST /api/v1/api-keys` | `{"name","scopes":["read"],"expiresAt":null}` | Admin only |
-| `POST /api/v1/push` | _(none)_ | Admin only — SQLite → PostgreSQL |
+| `POST /api/v1/push?resume=true&reset=false` | _(none)_ | Admin — batched SQLite → PostgreSQL |
+| `POST /api/v1/backup` | _(none)_ | Admin — timestamped SQLite backup |
 
 #### Common errors
 
@@ -319,26 +329,59 @@ Errors use [RFC 7807 Problem Details](https://datatracker.ietf.org/doc/html/rfc7
 | GET | `/api/v1/games/{id}/team-stats` | Team-level aggregates for a game |
 | GET | `/api/v1/games/{id}/player-stats` | All player stat lines for a game |
 | GET | `/api/v1/games/{id}/injuries` | Injury reports for a game |
+| GET | `/api/v1/games/{id}/drives` | Drive chart for a game |
+| GET | `/api/v1/games/{id}/scoring-plays` | Scoring plays for a game |
+| GET | `/api/v1/games/{id}/weather` | Game-day weather |
+| GET | `/api/v1/games/{id}/officials` | Referee crew |
+| GET | `/api/v1/games/{id}/odds` | Betting odds snapshots |
 | GET | `/api/v1/venues` | Paged venue list, optional `?state=`, `?isIndoor=` |
 | GET | `/api/v1/venues/{id}` | Single venue |
 | GET | `/api/v1/status` | Entity counts + freshest update timestamp |
 
-### Admin Endpoints (JWT)
+### Operate Endpoints (API Key `operate`/`admin` or JWT Operator/Admin)
 
-| Method | Route | Role | Description |
-|--------|-------|------|-------------|
-| POST | `/api/v1/auth/login` | — | Exchange email/password for JWT |
-| GET | `/api/v1/auth/me` | Viewer | Current user profile + roles |
-| POST | `/api/v1/auth/users` | Admin | Create user |
-| GET | `/api/v1/auth/users` | Admin | List all users |
-| GET/POST/DELETE | `/api/v1/api-keys` | Admin | API key management |
-| GET | `/api/v1/deleted-items` | Admin | List soft-deleted items |
-| POST | `/api/v1/deleted-items/{type}/{id}/restore` | Admin | Restore soft-deleted item |
-| POST | `/api/v1/push` | Admin | Push SQLite data to PostgreSQL |
-| POST | `/api/v1/scrape/{type}` | Operator | Trigger scrape (returns 202 + job ID) |
-| GET | `/api/v1/jobs` | Operator | List scrape jobs |
-| GET | `/api/v1/jobs/{id}` | Operator | Single job status |
-| GET | `/api/v1/events` | Viewer | Replay scrape events (for SignalR catch-up) |
+| Method | Route | Description |
+|--------|-------|-------------|
+| POST | `/api/v1/scrape/{type}` | Trigger scrape — types: `teams`, `players`, `games`, `stats`, `all`, `backfill`, `odds-poll` |
+| GET | `/api/v1/jobs` | List scrape jobs (paged, optional `?status=`) |
+| GET | `/api/v1/jobs/{id}` | Single job status |
+| GET | `/api/v1/jobs/{id}/children` | Child jobs for a backfill parent |
+| POST | `/api/v1/jobs/{id}/retry` | Re-queue a completed/failed job |
+| GET | `/api/v1/coverage` | Expected-vs-actual coverage per week |
+| POST | `/api/v1/coverage/refresh` | Recompute coverage (+ optional repair enqueue) |
+| GET | `/api/v1/quality/findings` | Open data-quality findings |
+| POST | `/api/v1/quality/scan` | Run quality rules scan |
+| POST | `/api/v1/quality/repairs` | Enqueue repair jobs from findings |
+| GET | `/api/v1/gaps` | Ranked coverage + quality gaps |
+| GET | `/api/v1/backfill/estimate` | Workload estimate for a season range |
+| POST | `/api/v1/backfill` | Start multi-season backfill (`backupFirst` in body) |
+| GET | `/api/v1/backfill/{id}/progress` | Aggregate backfill progress + ETA |
+| POST | `/api/v1/backfill/{id}/pause` | Pause a running backfill |
+| POST | `/api/v1/backfill/{id}/resume` | Resume a paused backfill |
+| GET | `/api/v1/schema` | Entity schema introspection |
+| GET | `/api/v1/schema/dictionary` | Human-readable data dictionary |
+| POST | `/api/v1/query/stats` | Parameterized stats aggregation (whitelist, no raw SQL) |
+| GET | `/api/v1/skill` | Agent Skill markdown (`skills/nfl-db/SKILL.md`) |
+| GET | `/api/v1/events` | Replay scrape events (SignalR catch-up) |
+
+### Admin Endpoints (JWT Admin)
+
+| Method | Route | Description |
+|--------|-------|-------------|
+| POST | `/api/v1/auth/login` | Exchange email/password for JWT |
+| GET | `/api/v1/auth/me` | Current user profile + roles |
+| POST | `/api/v1/auth/users` | Create user |
+| GET | `/api/v1/auth/users` | List all users |
+| GET/POST/DELETE | `/api/v1/api-keys` | API key management |
+| GET | `/api/v1/deleted-items` | List soft-deleted items |
+| POST | `/api/v1/deleted-items/{type}/{id}/restore` | Restore soft-deleted item |
+| GET | `/api/v1/push/status` | Latest push session checkpoint |
+| POST | `/api/v1/push?resume=&reset=` | Batched, resumable SQLite → PostgreSQL push |
+| POST | `/api/v1/backup` | Create timestamped SQLite backup |
+| GET | `/api/v1/backup` | List existing backups |
+| GET/POST | `/api/v1/corrections` | List/propose data corrections |
+| POST | `/api/v1/corrections/{id}/approve` | Approve a correction (Admin) |
+| POST | `/api/v1/corrections/{id}/reject` | Reject a correction (Admin) |
 
 ### Pagination
 
@@ -382,20 +425,37 @@ dotnet run --project src/WebScraper.Cli -- list players --team KC
 dotnet run --project src/WebScraper.Cli -- list games --season 2025 --week 1
 dotnet run --project src/WebScraper.Cli -- status
 
-# Push local SQLite to remote PostgreSQL
+# Push local SQLite to remote PostgreSQL (batched, resumable)
 dotnet run --project src/WebScraper.Cli -- push
+dotnet run --project src/WebScraper.Cli -- push --resume
+dotnet run --project src/WebScraper.Cli -- push --reset
+
+# Backup local SQLite database
+dotnet run --project src/WebScraper.Cli -- backup
 ```
 
 ### Recommended Scrape Order
 
-If running commands individually, follow this order to satisfy foreign key dependencies:
+For a **single season**, if running commands individually:
 
 1. `teams` — populates the teams table
-2. `players` — needs teams to exist for roster association
-3. `games --season <year>` — needs teams for home/away references
-4. `stats --season <year> --week <n>` — needs both players and games
+2. `players` — current-season roster enrichment (optional for historical; players are discovered from box scores)
+3. `games --season <year>` — needs team-seasons for home/away references
+4. `stats --season <year> --week <n>` — needs games; also creates historical players from box scores
 
-The `all` command handles steps 1-3 automatically.
+The `all` command handles steps 1–3 automatically.
+
+For a **multi-season historical load** (2006–2025), use the backfill job instead:
+
+```bash
+# Via API (Operator JWT) or dashboard at /admin/backfill
+POST /api/v1/backfill  {"startSeason":2006,"endSeason":2025,"backupFirst":true}
+
+# Or MCP
+nfl_trigger_scrape(type=backfill, season=2006, endSeason=2025)
+```
+
+Back up SQLite first (`backup` CLI command or `nfl_backup_database`). Monitor progress at `/admin/backfill` or via `nfl_get_backfill_progress`. Publish to PostgreSQL with `push` when coverage is green.
 
 ## Configuration
 
@@ -466,58 +526,108 @@ To push local SQLite data to a remote PostgreSQL instance, add the connection st
 }
 ```
 
-Then use the CLI (`dotnet run --project src/WebScraper.Cli -- push`) or the API (`POST /api/v1/push` with Admin JWT).
+Then use the CLI (`push`, `push --resume`, `push --reset`) or the dashboard at `/admin/push`, or the API:
+
+```bash
+# Fresh push
+curl -X POST -H "Authorization: Bearer TOKEN" "http://localhost:5080/api/v1/push"
+
+# Resume interrupted push
+curl -X POST -H "Authorization: Bearer TOKEN" "http://localhost:5080/api/v1/push?resume=true"
+
+# Check push status
+curl -H "Authorization: Bearer TOKEN" "http://localhost:5080/api/v1/push/status"
+```
+
+Push runs in batched stages (default 500 rows per batch, configurable via `Push:BatchSize`). Progress is checkpointed in the local SQLite `DatabasePushSessions` table so interrupted pushes can resume.
+
+### SQLite Backup
+
+Back up before a long backfill session (Phase E requirement):
+
+```bash
+dotnet run --project src/WebScraper.Cli -- backup
+# or POST /api/v1/backup (Admin JWT)
+```
+
+Copies `data/nfl_data.db` to `data/backups/nfl_data_{timestamp}.db` and prunes to the last 3 copies (`Backup:RetainCount` in config).
 
 ## Database
 
 EF Core with code-first migrations. The database is created and migrated automatically at startup for both the API and CLI.
 
-### Schema (12 tables)
+### Schema (domain + ops tables)
 
 | Table | Description |
 |-------|-------------|
-| Teams | 32 NFL teams (name, abbreviation, city, conference, division) |
-| Players | Rosters with position, jersey, physical attributes, college, EspnId |
-| Games | Schedules with quarter scores, venues, attendance, ESPN metadata |
-| PlayerGameStats | Per-game stats across 10 categories (~40 stat columns) |
+| Franchises | Stable franchise identity (handles relocations) |
+| TeamSeasons | Team name/city/abbr per season (FK target for games) |
+| Teams | Current-team convenience rows |
+| Players | Rosters keyed on `EspnId` when available |
+| PlayerTeamSeasons | Player ↔ team-season roster membership |
+| Games | Schedules with quarter scores, venues, broadcast, season type |
+| PlayerGameStats | Per-game stats across 10 categories (~40 columns) |
 | Venues | Stadiums (name, city, state, grass/indoor) |
 | TeamGameStats | Team-level per-game aggregates |
 | Injuries | Player injury reports per game |
+| GameDrives | Drive chart data |
+| ScoringPlays | Scoring play summaries |
+| GameWeathers | Game-day weather |
+| GameOfficials | Referee crews |
+| GameOdds | Betting odds snapshots (opening/current/closing per sportsbook) |
 | ApiLinks | Discovered ESPN API endpoints |
+| SeasonCoverages | Expected-vs-actual coverage snapshots per week |
+| DataQualityFindings | Quality rule findings with repair payloads |
+| DataCorrections | Agent-proposed corrections (approval queue) |
 | ApiKeys | DB-backed API keys (SHA-256 hashed) |
 | ApiQueryLogs | Observability log of every API request |
 | ScrapeJobs | Persistent scrape job queue with status tracking |
 | ScrapeEvents | Transactional outbox for real-time scrape notifications |
+| DatabasePushSessions | Incremental push checkpoints |
 
-All domain entities (Teams through ApiKeys) support soft delete and data lineage tracking.
+All domain entities support soft delete and data lineage tracking (`IAuditableEntity` + `ISoftDeletable`).
 
 ## Testing
 
 ```bash
-dotnet test                                    # Run all 220 tests
+dotnet test                                    # Run all 284 tests
 dotnet test --verbosity normal                 # Verbose output
 dotnet test tests/WebScraper.Core.Tests        # Core tests only
 ```
+
+## Agent Integration (MCP + Skill)
+
+The MCP server exposes **36 tools** prefixed `nfl_*` across four tiers:
+
+| Tier | Examples | API key scope |
+|------|----------|---------------|
+| Read | `nfl_list_teams`, `nfl_get_game`, `nfl_get_game_odds` | `read` |
+| Operate | `nfl_trigger_scrape`, `nfl_get_backfill_progress`, `nfl_find_gaps` | `operate` |
+| Publish | `nfl_trigger_push`, `nfl_backup_database` | `admin` |
+| Propose | `nfl_propose_correction` | `admin` |
+
+Full catalog: `src/WebScraper.Mcp/README.md`. Agent runbooks: `skills/nfl-db/SKILL.md` (also served at `GET /api/v1/skill`).
 
 ## Project Structure
 
 ```
 WebScraper.sln
+skills/nfl-db/SKILL.md          # Agent Skill (versioned in-repo)
 src/
-├── WebScraper.Core/          # Shared library: models, DbContext, repos, scrapers
-├── WebScraper.Cli/           # Console app: CLI + interactive REPL
-├── WebScraper.Api/           # Web API + Blazor admin dashboard
-│   ├── Auth/                 # Identity, JWT, API key, cookie auth
-│   ├── Controllers/          # REST endpoints (13 controllers)
-│   ├── Components/           # Blazor Server pages (MudBlazor)
-│   │   ├── Layout/           # AdminLayout (dark theme), EmptyLayout (login)
-│   │   └── Pages/Admin/      # 8 dashboard pages + 2 dialog components
-│   ├── Hubs/                 # SignalR hub for real-time scrape events
-│   ├── Middleware/            # Query logging, rate limiting
-│   └── Services/             # Job queue, event relay, API key management
-└── WebScraper.Mcp/           # MCP server: 14 Claude-callable tools
+├── WebScraper.Core/            # Shared library: models, DbContext, repos, scrapers, coverage, push
+├── WebScraper.Cli/             # Console app: CLI + interactive REPL
+├── WebScraper.Api/             # Web API + Blazor admin dashboard
+│   ├── Auth/                   # Identity, JWT, API key, cookie auth
+│   ├── Controllers/            # REST endpoints (20+ controllers)
+│   ├── Components/             # Blazor Server pages (MudBlazor)
+│   │   ├── Layout/             # AdminLayout (dark theme), EmptyLayout (login)
+│   │   └── Pages/Admin/        # 12 dashboard pages + 2 dialog components
+│   ├── Hubs/                   # SignalR hub for real-time scrape events
+│   ├── Middleware/             # Query logging, rate limiting
+│   └── Services/               # Job queue, event relay, odds scheduler, API key mgmt
+└── WebScraper.Mcp/             # MCP server: 36 Claude-callable tools
 tests/
-└── WebScraper.Core.Tests/    # 220 xUnit tests
+└── WebScraper.Core.Tests/      # 284 xUnit tests
 ```
 
 ## License
