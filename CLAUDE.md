@@ -4,7 +4,8 @@
 Originally a .NET 8 Console application that scrapes NFL football data from multiple sources (Pro Football Reference, ESPN API, and more) and stores it in a structured database. As of the M0 refactor, the project is in the process of becoming a containerized microservice — a reusable `WebScraper.Core` class library backs the existing CLI and will back a new ASP.NET Core Web API (+ SignalR + Blazor Server admin) + MCP server for Claude consumption. The architecture supports pluggable data providers — switch between HTML scraping and REST API sources via configuration. See:
 - `AGENT_MVP.md` — original design specification
 - `API_INTEGRATION_PLAN.md` — multi-provider extension plan (on review branch)
-- `CHATBOT_MICROSERVICE_PLAN.md` — **current** microservice transformation plan (milestones M0–M6)
+- `CHATBOT_MICROSERVICE_PLAN.md` — microservice transformation plan (milestones M0–M6)
+- `AGENT_PLATFORM_PLAN.md` — **current** agent-managed database plan (identity, coverage, backfill, MCP operate tools)
 
 ## Tech Stack
 - **Framework:** .NET 8 (class library, console app, Web API, Blazor Server admin dashboard, MCP server)
@@ -41,6 +42,7 @@ src/
 │   │   ├── ScrapeResult.cs                # Scraper operation result (Success, RecordsProcessed, Errors)
 │   │   ├── ScraperSettings.cs             # Config POCO: scraper options + DataProvider + Providers dict
 │   │   ├── DataProvider.cs                # Enum: ProFootballReference, Espn, SportsDataIo, MySportsFeeds, NflCom
+│   │   ├── NflSeasonType.cs               # ESPN seasontype enum: Preseason=1, Regular=2, Postseason=3
 │   │   └── ApiProviderSettings.cs         # Config POCO: BaseUrl, ApiKey, AuthType, headers per provider
 │   ├── Data/
 │   │   ├── AppDbContext.cs                # EF Core DbContext — 11 DbSets (+ ScrapeJobs, ScrapeEvents), global soft-delete query filters, registers interceptor
@@ -68,6 +70,9 @@ src/
 │   │   ├── ConsoleDisplayService.cs       # User-facing console output (tables, banners, menus, progress) — CLI-specific but kept in Core for now
 │   │   ├── DatabasePushService.cs         # Push local SQLite data to remote PostgreSQL
 │   │   ├── DataProviderFactory.cs         # Maps DataProvider config to correct DI registrations
+│   │   ├── Coverage/
+│   │   │   ├── NflSeasonSchedule.cs       # Era-aware expected game counts + scoreboard week math (§0)
+│   │   │   └── BackfillWorkloadEstimator.cs # API-call + wall-clock estimates for ESPN backfills (§0)
 │   │   └── Scrapers/
 │   │       ├── IScraperService.cs         # Scraper interfaces (ITeam/IPlayer/IGame/IStats)
 │   │       ├── BaseScraperService.cs      # Abstract base for HTML: FetchPageAsync, rate limiting
@@ -1257,6 +1262,30 @@ Main Menu
 - [x] **M4 Phase 8:** DI wiring — `AddRazorComponents().AddInteractiveServerComponents()`, `AddMudServices()`, `AddCascadingAuthenticationState()` in `ApiServiceCollectionExtensions`
 - [ ] **M5:** Contract tests — recorded fixtures per provider; Docker + DigitalOcean App Platform deployment (PostgreSQL); future Azure App Service + MSSQL migration path
 - [ ] **M6:** Production polish — scheduled scrapes, cross-provider reconciliation, OpenTelemetry, webhooks, full-text search, backups
+
+## Agent Platform Plan (see `AGENT_PLATFORM_PLAN.md`)
+
+### Block 0 — Backfill runtime framing (complete)
+The 20-season ESPN backfill (2006–2025) is **~5,900 API calls / ~2.5 hours** at the default 1.5s delay — fetch time is not the bottleneck; correctness is. Five code blockers (§1) must land before the November backfill.
+
+Codified in Core:
+- `NflSeasonType` — ESPN `seasontype` values (preseason/regular/postseason)
+- `NflSeasonSchedule` — era-aware expected game counts (256+11 through 272+13) and scoreboard week math
+- `BackfillWorkloadEstimator` — API-call and wall-clock estimates; `PlanTwentyYearGameCount = 5432`
+
+| Era | Regular games | Playoff games | Total/season | Seasons |
+|-----|---------------|---------------|--------------|---------|
+| 2006–2019 | 256 | 11 | 267 | 14 |
+| 2020 | 256 | 13 | 269 | 1 |
+| 2021–2025 | 272 | 13 | 285 | 5 |
+| **Total** | | | **5,432** | **20** |
+
+### Block 1 — Five blockers (pending)
+1. Player identity keyed on `Name+TeamId` instead of `EspnId`
+2. Only regular season scraped (`seasontype=2` hardcoded)
+3. Rosters only return current-season players
+4. Teams are single mutable rows keyed on abbreviation
+5. No backfill orchestration
 
 ## Adding a New Data Provider
 1. Create a folder: `Services/Scrapers/NewProvider/`
