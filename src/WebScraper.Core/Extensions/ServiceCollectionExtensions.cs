@@ -25,6 +25,7 @@ public static class ServiceCollectionExtensions
         var scraperSettings = new ScraperSettings();
         configuration.GetSection("ScraperSettings").Bind(scraperSettings);
         services.Configure<ScraperSettings>(configuration.GetSection("ScraperSettings"));
+        services.Configure<OddsPollSettings>(configuration.GetSection("OddsPoll"));
 
         // Configure database based on provider setting
         var provider = configuration.GetValue<string>("DatabaseProvider") ?? "Sqlite";
