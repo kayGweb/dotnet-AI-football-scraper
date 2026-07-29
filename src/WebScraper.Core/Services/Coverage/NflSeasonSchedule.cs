@@ -61,4 +61,38 @@ public static class NflSeasonSchedule
 
         return total;
     }
+
+    /// <summary>
+    /// Expected games for a single scoreboard week when determinable (preseason/postseason).
+    /// Regular-season weeks return null because bye weeks make per-week counts variable.
+    /// </summary>
+    public static int? GetExpectedGamesForWeek(NflSeasonType seasonType, int season, int week)
+    {
+        return seasonType switch
+        {
+            NflSeasonType.Preseason => week switch
+            {
+                1 or 2 or 3 => 16,
+                4 => 8,
+                _ => null,
+            },
+            NflSeasonType.Regular => null,
+            NflSeasonType.Postseason => GetExpectedPlayoffGamesForWeek(season, week),
+            _ => null,
+        };
+    }
+
+    private static int? GetExpectedPlayoffGamesForWeek(int season, int week)
+    {
+        var wildCardGames = season >= 2020 ? 6 : 4;
+
+        return week switch
+        {
+            1 => wildCardGames,
+            2 => 4,
+            3 => 2,
+            4 => 1,
+            _ => null,
+        };
+    }
 }

@@ -17,6 +17,9 @@ public class ScrapeJob
     /// <summary>Parent job when this row was created by a Backfill fan-out.</summary>
     public int? ParentJobId { get; set; }
 
+    /// <summary>Child job waits until this job succeeds (games before stats).</summary>
+    public int? DependsOnJobId { get; set; }
+
     public ScrapeJobStatus Status { get; set; } = ScrapeJobStatus.Queued;
 
     public int RecordsProcessed { get; set; }

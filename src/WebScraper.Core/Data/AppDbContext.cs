@@ -46,6 +46,12 @@ public class AppDbContext : DbContext
     /// </summary>
     public DbSet<ScrapeEvent> ScrapeEvents => Set<ScrapeEvent>();
 
+    /// <summary>Expected-vs-actual coverage per (season, seasonType, week). Phase B.</summary>
+    public DbSet<SeasonCoverage> SeasonCoverages => Set<SeasonCoverage>();
+
+    /// <summary>Data quality findings from post-scrape rules. Phase B.</summary>
+    public DbSet<DataQualityFinding> DataQualityFindings => Set<DataQualityFinding>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         // Game has two FKs to TeamSeason — must use Restrict to avoid cascade cycles
@@ -184,6 +190,24 @@ public class AppDbContext : DbContext
         // ScrapeJob parent/child for backfill fan-out
         modelBuilder.Entity<ScrapeJob>()
             .HasIndex(j => j.ParentJobId);
+
+        modelBuilder.Entity<ScrapeJob>()
+            .HasIndex(j => j.DependsOnJobId);
+
+        // SeasonCoverage unique per week
+        modelBuilder.Entity<SeasonCoverage>()
+            .HasIndex(c => new { c.Season, c.SeasonType, c.Week })
+            .IsUnique();
+
+        modelBuilder.Entity<SeasonCoverage>()
+            .HasIndex(c => c.Season);
+
+        // DataQualityFinding indexes for dashboard queries
+        modelBuilder.Entity<DataQualityFinding>()
+            .HasIndex(f => new { f.Status, f.Severity });
+
+        modelBuilder.Entity<DataQualityFinding>()
+            .HasIndex(f => new { f.RuleType, f.EntityType, f.EntityId });
 
         // Venue unique index on EspnId
         modelBuilder.Entity<Venue>()

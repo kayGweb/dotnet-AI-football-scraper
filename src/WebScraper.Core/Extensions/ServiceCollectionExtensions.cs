@@ -70,6 +70,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<RateLimiterService>();
         services.AddSingleton<ConsoleDisplayService>();
         services.AddScoped<BackfillOrchestrator>();
+        services.AddScoped<SeasonCoverageService>();
+        services.AddScoped<QualityRulesEngine>();
+        services.AddScoped<RepairJobEnqueuer>();
 
         // Register scraper services via provider factory (driven by DataProvider config)
         DataProviderFactory.RegisterScrapers(services, scraperSettings);

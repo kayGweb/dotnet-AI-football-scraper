@@ -1,0 +1,115 @@
+@page "/admin/coverage"
+@attribute [Authorize]
+@using WebScraper.Models
+@using WebScraper.Services.Coverage
+@inject IServiceScopeFactory ScopeFactory
+
+<MudText Typo="Typo.h4" Class="mb-4">Season Coverage</MudText>
+
+<MudGrid Class="mb-4">
+    <MudItem xs="12" sm="3">
+        <MudNumericField T="int?" Label="Season" @bind-Value="_season" Variant="Variant.Outlined" />
+    </MudItem>
+    <MudItem xs="12" sm="3">
+        <MudSelect T="NflSeasonType?" Label="Season Type" @bind-Value="_seasonType"
+                   Variant="Variant.Outlined" Clearable="true">
+            <MudSelectItem T="NflSeasonType?" Value="@((NflSeasonType?)NflSeasonType.Preseason)">Preseason</MudSelectItem>
+            <MudSelectItem T="NflSeasonType?" Value="@((NflSeasonType?)NflSeasonType.Regular)">Regular</MudSelectItem>
+            <MudSelectItem T="NflSeasonType?" Value="@((NflSeasonType?)NflSeasonType.Postseason)">Postseason</MudSelectItem>
+        </MudSelect>
+    </MudItem>
+    <MudItem xs="12" sm="6" Class="d-flex align-end gap-2">
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="RefreshAsync"
+                   StartIcon="@Icons.Material.Filled.Refresh">Refresh</MudButton>
+        <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="ScanQualityAsync"
+                   StartIcon="@Icons.Material.Filled.Rule">Run Quality Scan</MudButton>
+    </MudItem>
+</MudGrid>
+
+@if (!string.IsNullOrEmpty(_message))
+{
+    <MudAlert Severity="Severity.Info" Class="mb-4">@_message</MudAlert>
+}
+
+<MudTable Items="_rows" Dense="true" Hover="true" Loading="_loading" Striped="true">
+    <HeaderContent>
+        <MudTh>Season</MudTh>
+        <MudTh>Type</MudTh>
+        <MudTh>Week</MudTh>
+        <MudTh>Expected</MudTh>
+        <MudTh>Games</MudTh>
+        <MudTh>Player Stats</MudTh>
+        <MudTh>Team Stats</MudTh>
+        <MudTh>Status</MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd>@context.Season</MudTd>
+        <MudTd>@context.SeasonType</MudTd>
+        <MudTd>@context.Week</MudTd>
+        <MudTd>@(context.ExpectedGames?.ToString() ?? "—")</MudTd>
+        <MudTd>@context.ActualGames</MudTd>
+        <MudTd>@context.GamesWithPlayerStats</MudTd>
+        <MudTd>@context.GamesWithTeamStats</MudTd>
+        <MudTd>
+            <MudChip T="string" Size="Size.Small" Color="@StatusColor(context)">
+                @GetStatus(context)
+            </MudChip>
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText>No coverage data — click Refresh to compute.</MudText>
+    </NoRecordsContent>
+</MudTable>
+
+@code {
+    private List<SeasonCoverage> _rows = new();
+    private bool _loading = true;
+    private int? _season = DateTime.UtcNow.Year;
+    private NflSeasonType? _seasonType;
+    private string? _message;
+
+    protected override async Task OnInitializedAsync() => await RefreshAsync();
+
+    private async Task RefreshAsync()
+    {
+        _loading = true;
+        _message = null;
+
+        using var scope = ScopeFactory.CreateScope();
+        var coverage = scope.ServiceProvider.GetRequiredService<SeasonCoverageService>();
+        await coverage.RefreshAsync(_season, _seasonType);
+        _rows = (await coverage.GetAsync(_season, _seasonType)).ToList();
+
+        _loading = false;
+    }
+
+    private async Task ScanQualityAsync()
+    {
+        using var scope = ScopeFactory.CreateScope();
+        var quality = scope.ServiceProvider.GetRequiredService<QualityRulesEngine>();
+        var findings = await quality.RunAsync(_season, _seasonType);
+        _message = $"Quality scan complete — {findings.Count} findings recorded.";
+    }
+
+    private static string GetStatus(SeasonCoverage row)
+    {
+        if (row.ActualGames == 0)
+            return row.ExpectedGames > 0 ? "missing" : "empty";
+
+        if (row.ExpectedGames is int expected && row.ActualGames < expected)
+            return "partial";
+
+        if (row.GamesWithPlayerStats < row.ActualGames)
+            return "no-stats";
+
+        return "complete";
+    }
+
+    private static Color StatusColor(SeasonCoverage row) => GetStatus(row) switch
+    {
+        "complete" => Color.Success,
+        "partial" or "no-stats" => Color.Warning,
+        "missing" => Color.Error,
+        _ => Color.Default,
+    };
+}

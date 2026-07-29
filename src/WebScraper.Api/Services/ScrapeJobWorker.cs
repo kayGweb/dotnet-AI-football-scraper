@@ -58,7 +58,6 @@ public class ScrapeJobWorker : BackgroundService
         var orphaned = await db.ScrapeJobs
             .Where(j => j.Status == ScrapeJobStatus.Queued || j.Status == ScrapeJobStatus.Running)
             .OrderBy(j => j.CreatedAt)
-            .Select(j => j.Id)
             .ToListAsync(ct);
 
         if (orphaned.Count == 0) return;
@@ -69,10 +68,36 @@ public class ScrapeJobWorker : BackgroundService
             .Where(j => j.Status == ScrapeJobStatus.Running)
             .ExecuteUpdateAsync(s => s.SetProperty(j => j.Status, ScrapeJobStatus.Queued), ct);
 
-        foreach (var id in orphaned)
+        foreach (var job in orphaned)
         {
-            _queue.TryEnqueue(id);
+            if (await IsJobReadyToRunAsync(db, job, ct))
+                _queue.TryEnqueue(job.Id);
         }
+    }
+
+    private static async Task<bool> IsJobReadyToRunAsync(AppDbContext db, ScrapeJob job, CancellationToken ct)
+    {
+        if (job.DependsOnJobId is not int depId)
+            return true;
+
+        var dep = await db.ScrapeJobs
+            .AsNoTracking()
+            .Where(j => j.Id == depId)
+            .Select(j => j.Status)
+            .FirstOrDefaultAsync(ct);
+
+        return dep == ScrapeJobStatus.Succeeded;
+    }
+
+    private async Task EnqueueDependentJobsAsync(AppDbContext db, int completedJobId, CancellationToken ct)
+    {
+        var dependentIds = await db.ScrapeJobs
+            .Where(j => j.DependsOnJobId == completedJobId && j.Status == ScrapeJobStatus.Queued)
+            .Select(j => j.Id)
+            .ToListAsync(ct);
+
+        foreach (var id in dependentIds)
+            _queue.TryEnqueue(id);
     }
 
     private async Task RunJobAsync(int jobId, CancellationToken ct)
@@ -90,6 +115,14 @@ public class ScrapeJobWorker : BackgroundService
         if (job.Status != ScrapeJobStatus.Queued)
         {
             _logger.LogInformation("ScrapeJob {JobId} is {Status}, not Queued — skipping", jobId, job.Status);
+            return;
+        }
+
+        if (!await IsJobReadyToRunAsync(db, job, ct))
+        {
+            _logger.LogInformation(
+                "ScrapeJob {JobId} waiting on dependency {DepId}",
+                jobId, job.DependsOnJobId);
             return;
         }
 
@@ -137,6 +170,12 @@ public class ScrapeJobWorker : BackgroundService
 
         await BackfillOrchestrator.TryCompleteParentAsync(db, job, ct);
 
+        if (job.Status == ScrapeJobStatus.Succeeded)
+        {
+            await EnqueueDependentJobsAsync(db, jobId, ct);
+            await RunPostScrapeQualityAsync(scope.ServiceProvider, job, ct);
+        }
+
         _logger.LogInformation("ScrapeJob {JobId} finished: {Status} ({Processed} processed, {Failed} failed)",
             jobId, job.Status, job.RecordsProcessed, job.RecordsFailed);
     }
@@ -175,10 +214,29 @@ public class ScrapeJobWorker : BackgroundService
         var queue = services.GetRequiredService<IJobQueue>();
 
         var childIds = await orchestrator.FanOutAsync(job, job.Season.Value, endSeason, ct);
-        foreach (var childId in childIds)
+        foreach (var childId in childIds.InitialEnqueueIds)
             queue.TryEnqueue(childId);
 
-        return ScrapeResult.Succeeded(childIds.Count, $"Enqueued {childIds.Count} child scrape jobs");
+        return ScrapeResult.Succeeded(childIds.AllChildIds.Count, $"Enqueued {childIds.InitialEnqueueIds.Count} games jobs ({childIds.AllChildIds.Count} total child jobs)");
+    }
+
+    private static async Task RunPostScrapeQualityAsync(
+        IServiceProvider services, ScrapeJob job, CancellationToken ct)
+    {
+        if (job.Type is not (ScrapeJobType.Games or ScrapeJobType.Stats or ScrapeJobType.All))
+            return;
+
+        var coverage = services.GetRequiredService<SeasonCoverageService>();
+        var quality = services.GetRequiredService<QualityRulesEngine>();
+        var repair = services.GetRequiredService<RepairJobEnqueuer>();
+        var queue = services.GetRequiredService<IJobQueue>();
+
+        await coverage.RefreshAsync(job.Season, job.SeasonType, ct);
+        await quality.RunAsync(job.Season, job.SeasonType, job.Week, ct);
+
+        var repairJobIds = await repair.EnqueueRepairsForOpenFindingsAsync(10, job.RequestedBy, ct);
+        foreach (var id in repairJobIds)
+            queue.TryEnqueue(id);
     }
 
     private static async Task<ScrapeResult> RunTeamsAsync(IServiceProvider services)
