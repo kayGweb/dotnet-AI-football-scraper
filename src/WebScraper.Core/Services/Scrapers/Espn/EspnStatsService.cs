@@ -16,6 +16,11 @@ public class EspnStatsService : BaseApiService, IStatsScraperService
     private readonly ITeamGameStatsRepository _teamGameStatsRepository;
     private readonly IInjuryRepository _injuryRepository;
     private readonly IApiLinkRepository _apiLinkRepository;
+    private readonly IGameDriveRepository _gameDriveRepository;
+    private readonly IScoringPlayRepository _scoringPlayRepository;
+    private readonly IGameWeatherRepository _gameWeatherRepository;
+    private readonly IGameOfficialRepository _gameOfficialRepository;
+    private readonly IGameOddsRepository _gameOddsRepository;
 
     public EspnStatsService(
         HttpClient httpClient,
@@ -31,7 +36,12 @@ public class EspnStatsService : BaseApiService, IStatsScraperService
         IVenueRepository venueRepository,
         ITeamGameStatsRepository teamGameStatsRepository,
         IInjuryRepository injuryRepository,
-        IApiLinkRepository apiLinkRepository)
+        IApiLinkRepository apiLinkRepository,
+        IGameDriveRepository gameDriveRepository,
+        IScoringPlayRepository scoringPlayRepository,
+        IGameWeatherRepository gameWeatherRepository,
+        IGameOfficialRepository gameOfficialRepository,
+        IGameOddsRepository gameOddsRepository)
         : base(httpClient, logger, providerSettings, rateLimiter)
     {
         _statsRepository = statsRepository;
@@ -44,6 +54,11 @@ public class EspnStatsService : BaseApiService, IStatsScraperService
         _teamGameStatsRepository = teamGameStatsRepository;
         _injuryRepository = injuryRepository;
         _apiLinkRepository = apiLinkRepository;
+        _gameDriveRepository = gameDriveRepository;
+        _scoringPlayRepository = scoringPlayRepository;
+        _gameWeatherRepository = gameWeatherRepository;
+        _gameOfficialRepository = gameOfficialRepository;
+        _gameOddsRepository = gameOddsRepository;
     }
 
     public async Task<ScrapeResult> ScrapePlayerStatsAsync(int season, int week, NflSeasonType seasonType = NflSeasonType.Regular)
@@ -127,6 +142,9 @@ public class EspnStatsService : BaseApiService, IStatsScraperService
 
         // Store API links from header
         await ExtractApiLinksAsync(response, game, season, week, eventId);
+
+        // Tier 1 enrichment: drives, scoring plays, weather, officials, odds, broadcasts
+        await ExtractTier1EnrichmentAsync(response, game);
 
         return count;
     }
@@ -447,6 +465,252 @@ public class EspnStatsService : BaseApiService, IStatsScraperService
             {
                 _logger.LogDebug(ex, "Failed to store API link: {Url}", link.Href);
             }
+        }
+    }
+
+    private async Task ExtractTier1EnrichmentAsync(EspnSummaryResponse response, Game game)
+    {
+        await ExtractDrivesAsync(response, game);
+        await ExtractScoringPlaysAsync(response, game);
+        await ExtractWeatherAsync(response, game);
+        await ExtractOfficialsAsync(response, game);
+        await ExtractOddsAsync(response, game);
+        await ExtractSummaryBroadcastsAsync(response, game);
+    }
+
+    private async Task ExtractDrivesAsync(EspnSummaryResponse response, Game game)
+    {
+        var espnDrives = new List<EspnDrive>();
+        if (response.Drives?.Previous != null)
+            espnDrives.AddRange(response.Drives.Previous);
+        if (response.Drives?.Current != null)
+            espnDrives.Add(response.Drives.Current);
+
+        if (espnDrives.Count == 0)
+            return;
+
+        var drives = new List<GameDrive>();
+        var sequence = 0;
+        foreach (var d in espnDrives)
+        {
+            if (string.IsNullOrEmpty(d.Id))
+                continue;
+
+            int? teamSeasonId = null;
+            if (d.Team != null && !string.IsNullOrEmpty(d.Team.Abbreviation))
+            {
+                var teamSeason = await _teamSeasonRepository.GetByAbbreviationAndSeasonAsync(
+                    d.Team.Abbreviation, game.Season);
+                teamSeasonId = teamSeason?.Id;
+            }
+
+            drives.Add(new GameDrive
+            {
+                GameId = game.Id,
+                EspnDriveId = d.Id,
+                Sequence = sequence++,
+                TeamSeasonId = teamSeasonId,
+                Description = d.Description,
+                StartPeriod = d.Start?.Period?.Number,
+                EndPeriod = d.End?.Period?.Number,
+                TimeElapsed = d.TimeElapsed?.DisplayValue,
+                Yards = d.Yards,
+                OffensivePlays = d.OffensivePlays,
+                IsScore = d.IsScore,
+                Result = d.Result,
+                DisplayResult = d.DisplayResult,
+                DataSource = "Espn",
+                DataSourceFetchedAt = DateTime.UtcNow,
+                DataSourceRecordId = d.Id,
+            });
+        }
+
+        if (drives.Count == 0)
+            return;
+
+        try
+        {
+            await _gameDriveRepository.ReplaceForGameAsync(game.Id, drives);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to store drives for game {GameId}", game.Id);
+        }
+    }
+
+    private async Task ExtractScoringPlaysAsync(EspnSummaryResponse response, Game game)
+    {
+        if (response.ScoringPlays == null || response.ScoringPlays.Count == 0)
+            return;
+
+        var plays = new List<ScoringPlay>();
+        var sequence = 0;
+        foreach (var p in response.ScoringPlays)
+        {
+            if (string.IsNullOrEmpty(p.Id))
+                continue;
+
+            int? teamSeasonId = null;
+            if (p.Team != null && !string.IsNullOrEmpty(p.Team.Abbreviation))
+            {
+                var teamSeason = await _teamSeasonRepository.GetByAbbreviationAndSeasonAsync(
+                    p.Team.Abbreviation, game.Season);
+                teamSeasonId = teamSeason?.Id;
+            }
+
+            plays.Add(new ScoringPlay
+            {
+                GameId = game.Id,
+                EspnPlayId = p.Id,
+                Sequence = sequence++,
+                TeamSeasonId = teamSeasonId,
+                Period = p.Period?.Number ?? 0,
+                Clock = p.Clock?.DisplayValue,
+                PlayType = p.Type?.Text ?? string.Empty,
+                Description = p.Text,
+                HomeScore = p.HomeScore,
+                AwayScore = p.AwayScore,
+                ScoringType = p.ScoringType?.Text ?? p.Type?.Abbreviation,
+                DataSource = "Espn",
+                DataSourceFetchedAt = DateTime.UtcNow,
+                DataSourceRecordId = p.Id,
+            });
+        }
+
+        if (plays.Count == 0)
+            return;
+
+        try
+        {
+            await _scoringPlayRepository.ReplaceForGameAsync(game.Id, plays);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to store scoring plays for game {GameId}", game.Id);
+        }
+    }
+
+    private async Task ExtractWeatherAsync(EspnSummaryResponse response, Game game)
+    {
+        var w = response.GameInfo?.Weather;
+        if (w == null)
+            return;
+
+        var weather = new GameWeather
+        {
+            GameId = game.Id,
+            TemperatureF = w.Temperature,
+            HighTemperatureF = w.HighTemperature,
+            Condition = w.DisplayValue,
+            WindSpeedMph = w.WindSpeed,
+            WindDirection = w.WindDirection,
+            HumidityPercent = w.Humidity,
+            DataSource = "Espn",
+            DataSourceFetchedAt = DateTime.UtcNow,
+        };
+
+        try
+        {
+            await _gameWeatherRepository.UpsertAsync(weather);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to store weather for game {GameId}", game.Id);
+        }
+    }
+
+    private async Task ExtractOfficialsAsync(EspnSummaryResponse response, Game game)
+    {
+        if (response.GameInfo?.Officials == null || response.GameInfo.Officials.Count == 0)
+            return;
+
+        var officials = response.GameInfo.Officials
+            .Select((o, index) => new GameOfficial
+            {
+                GameId = game.Id,
+                Name = !string.IsNullOrWhiteSpace(o.FullName) ? o.FullName : o.DisplayName,
+                Position = o.Position?.DisplayName ?? string.Empty,
+                SortOrder = o.Order > 0 ? o.Order : index,
+                DataSource = "Espn",
+                DataSourceFetchedAt = DateTime.UtcNow,
+            })
+            .Where(o => !string.IsNullOrWhiteSpace(o.Name))
+            .ToList();
+
+        if (officials.Count == 0)
+            return;
+
+        try
+        {
+            await _gameOfficialRepository.ReplaceForGameAsync(game.Id, officials);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to store officials for game {GameId}", game.Id);
+        }
+    }
+
+    private async Task ExtractOddsAsync(EspnSummaryResponse response, Game game)
+    {
+        if (response.Pickcenter == null || response.Pickcenter.Count == 0)
+            return;
+
+        var capturedAt = DateTime.UtcNow;
+        foreach (var pick in response.Pickcenter)
+        {
+            var sportsbook = pick.Provider?.Name;
+            if (string.IsNullOrWhiteSpace(sportsbook))
+                sportsbook = "ESPN";
+
+            var odds = new GameOdds
+            {
+                GameId = game.Id,
+                Sportsbook = sportsbook,
+                Spread = pick.Spread,
+                OverUnder = pick.OverUnder,
+                HomeMoneyline = pick.HomeTeamOdds?.MoneyLine,
+                AwayMoneyline = pick.AwayTeamOdds?.MoneyLine,
+                SnapshotType = OddsSnapshotType.Current,
+                CapturedAt = capturedAt,
+                Details = pick.Details,
+                DataSource = "Espn",
+                DataSourceFetchedAt = capturedAt,
+            };
+
+            try
+            {
+                await _gameOddsRepository.AddSnapshotAsync(odds);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Failed to store odds for game {GameId} sportsbook {Sportsbook}",
+                    game.Id, sportsbook);
+            }
+        }
+    }
+
+    private async Task ExtractSummaryBroadcastsAsync(EspnSummaryResponse response, Game game)
+    {
+        if (response.Broadcasts == null || response.Broadcasts.Count == 0)
+            return;
+
+        var names = response.Broadcasts
+            .Select(b => b.Station ?? b.Media?.ShortName)
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (names.Count == 0)
+            return;
+
+        game.BroadcastNetworks = string.Join(", ", names);
+        try
+        {
+            await _gameRepository.UpdateAsync(game);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to update broadcast networks for game {GameId}", game.Id);
         }
     }
 

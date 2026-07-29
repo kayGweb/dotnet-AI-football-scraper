@@ -81,6 +81,21 @@ public class NflApiClient
     public Task<string> GetGameInjuriesAsync(int id, CancellationToken ct)
         => GetAsync($"api/v1/games/{id}/injuries", ct);
 
+    public Task<string> GetGameDrivesAsync(int id, CancellationToken ct)
+        => GetAsync($"api/v1/games/{id}/drives", ct);
+
+    public Task<string> GetGameScoringPlaysAsync(int id, CancellationToken ct)
+        => GetAsync($"api/v1/games/{id}/scoring-plays", ct);
+
+    public Task<string> GetGameWeatherAsync(int id, CancellationToken ct)
+        => GetAsync($"api/v1/games/{id}/weather", ct);
+
+    public Task<string> GetGameOfficialsAsync(int id, CancellationToken ct)
+        => GetAsync($"api/v1/games/{id}/officials", ct);
+
+    public Task<string> GetGameOddsAsync(int id, CancellationToken ct)
+        => GetAsync($"api/v1/games/{id}/odds", ct);
+
     // ---- Venues ----
 
     public Task<string> ListVenuesAsync(string? state, bool? isIndoor, int page, int pageSize, CancellationToken ct)

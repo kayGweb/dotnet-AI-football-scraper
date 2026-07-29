@@ -12,6 +12,7 @@ public class SeasonCoverageDto
     public int GamesWithPlayerStats { get; set; }
     public int GamesWithTeamStats { get; set; }
     public int GamesWithInjuries { get; set; }
+    public int GamesWithOdds { get; set; }
     public int PlayerCount { get; set; }
     public DateTime? LastVerifiedAt { get; set; }
     public string Status { get; set; } = string.Empty;

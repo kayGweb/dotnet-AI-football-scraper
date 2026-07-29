@@ -18,6 +18,7 @@ public class GameDto
 
     public int? Attendance { get; set; }
     public bool NeutralSite { get; set; }
+    public string? BroadcastNetworks { get; set; }
     public VenueSummaryDto? Venue { get; set; }
 
     public QuarterScoresDto? QuarterScores { get; set; }

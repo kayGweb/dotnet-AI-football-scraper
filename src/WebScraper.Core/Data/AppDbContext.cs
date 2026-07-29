@@ -19,6 +19,11 @@ public class AppDbContext : DbContext
     public DbSet<TeamGameStats> TeamGameStats => Set<TeamGameStats>();
     public DbSet<Injury> Injuries => Set<Injury>();
     public DbSet<ApiLink> ApiLinks => Set<ApiLink>();
+    public DbSet<GameDrive> GameDrives => Set<GameDrive>();
+    public DbSet<ScoringPlay> ScoringPlays => Set<ScoringPlay>();
+    public DbSet<GameWeather> GameWeathers => Set<GameWeather>();
+    public DbSet<GameOfficial> GameOfficials => Set<GameOfficial>();
+    public DbSet<GameOdds> GameOdds => Set<GameOdds>();
 
     /// <summary>
     /// Observability log of every public API request. Written asynchronously by the
@@ -223,6 +228,60 @@ public class AppDbContext : DbContext
             .HasIndex(v => v.EspnId)
             .IsUnique();
 
+        // Tier 1 game enrichment (drives, scoring plays, weather, officials, odds)
+        modelBuilder.Entity<GameDrive>()
+            .HasOne(d => d.Game)
+            .WithMany(g => g.Drives)
+            .HasForeignKey(d => d.GameId);
+
+        modelBuilder.Entity<GameDrive>()
+            .HasOne(d => d.TeamSeason)
+            .WithMany()
+            .HasForeignKey(d => d.TeamSeasonId)
+            .IsRequired(false);
+
+        modelBuilder.Entity<GameDrive>()
+            .HasIndex(d => new { d.GameId, d.EspnDriveId })
+            .IsUnique();
+
+        modelBuilder.Entity<ScoringPlay>()
+            .HasOne(p => p.Game)
+            .WithMany(g => g.ScoringPlays)
+            .HasForeignKey(p => p.GameId);
+
+        modelBuilder.Entity<ScoringPlay>()
+            .HasOne(p => p.TeamSeason)
+            .WithMany()
+            .HasForeignKey(p => p.TeamSeasonId)
+            .IsRequired(false);
+
+        modelBuilder.Entity<ScoringPlay>()
+            .HasIndex(p => new { p.GameId, p.EspnPlayId })
+            .IsUnique();
+
+        modelBuilder.Entity<GameWeather>()
+            .HasOne(w => w.Game)
+            .WithOne(g => g.Weather)
+            .HasForeignKey<GameWeather>(w => w.GameId);
+
+        modelBuilder.Entity<GameWeather>()
+            .HasIndex(w => w.GameId)
+            .IsUnique();
+
+        modelBuilder.Entity<GameOfficial>()
+            .HasOne(o => o.Game)
+            .WithMany(g => g.Officials)
+            .HasForeignKey(o => o.GameId);
+
+        modelBuilder.Entity<GameOdds>()
+            .HasOne(o => o.Game)
+            .WithMany(g => g.Odds)
+            .HasForeignKey(o => o.GameId);
+
+        modelBuilder.Entity<GameOdds>()
+            .HasIndex(o => new { o.GameId, o.Sportsbook, o.SnapshotType, o.CapturedAt })
+            .IsUnique();
+
         // ApiQueryLog — observability index for dashboard queries
         modelBuilder.Entity<ApiQueryLog>()
             .HasIndex(q => q.Timestamp);
@@ -259,6 +318,11 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<TeamGameStats>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<Injury>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<ApiLink>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<GameDrive>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<ScoringPlay>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<GameWeather>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<GameOfficial>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<GameOdds>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<ApiKey>().HasQueryFilter(e => !e.IsDeleted);
 
         // Ensure all DateTime properties are stored as UTC for PostgreSQL compatibility

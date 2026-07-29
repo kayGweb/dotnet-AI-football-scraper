@@ -25,6 +25,8 @@ public class SeasonCoverage
 
     public int GamesWithInjuries { get; set; }
 
+    public int GamesWithOdds { get; set; }
+
     public int PlayerCount { get; set; }
 
     public DateTime? LastVerifiedAt { get; set; }

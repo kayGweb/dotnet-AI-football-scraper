@@ -54,4 +54,44 @@ public static class GameTools
         [Description("Game primary key id (integer).")] int id,
         CancellationToken cancellationToken = default)
         => client.GetGameInjuriesAsync(id, cancellationToken);
+
+    [McpServerTool(Name = "nfl_get_game_drives"), Description(
+        "Get all drives for a game (sequence, team, yards, result, scoring context).")]
+    public static Task<string> GetGameDrives(
+        NflApiClient client,
+        [Description("Game primary key id (integer).")] int id,
+        CancellationToken cancellationToken = default)
+        => client.GetGameDrivesAsync(id, cancellationToken);
+
+    [McpServerTool(Name = "nfl_get_game_scoring_plays"), Description(
+        "Get all scoring plays for a game (period, clock, description, running score).")]
+    public static Task<string> GetGameScoringPlays(
+        NflApiClient client,
+        [Description("Game primary key id (integer).")] int id,
+        CancellationToken cancellationToken = default)
+        => client.GetGameScoringPlaysAsync(id, cancellationToken);
+
+    [McpServerTool(Name = "nfl_get_game_weather"), Description(
+        "Get game-day weather conditions (temperature, wind, humidity).")]
+    public static Task<string> GetGameWeather(
+        NflApiClient client,
+        [Description("Game primary key id (integer).")] int id,
+        CancellationToken cancellationToken = default)
+        => client.GetGameWeatherAsync(id, cancellationToken);
+
+    [McpServerTool(Name = "nfl_get_game_officials"), Description(
+        "Get the referee crew for a game (name and position).")]
+    public static Task<string> GetGameOfficials(
+        NflApiClient client,
+        [Description("Game primary key id (integer).")] int id,
+        CancellationToken cancellationToken = default)
+        => client.GetGameOfficialsAsync(id, cancellationToken);
+
+    [McpServerTool(Name = "nfl_get_game_odds"), Description(
+        "Get betting odds snapshots for a game (spread, over/under, moneylines by sportsbook).")]
+    public static Task<string> GetGameOdds(
+        NflApiClient client,
+        [Description("Game primary key id (integer).")] int id,
+        CancellationToken cancellationToken = default)
+        => client.GetGameOddsAsync(id, cancellationToken);
 }

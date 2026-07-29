@@ -110,6 +110,8 @@ public class GameRepository : IGameRepository
             existing.AwayQ3 = game.AwayQ3 ?? existing.AwayQ3;
             existing.AwayQ4 = game.AwayQ4 ?? existing.AwayQ4;
             existing.AwayOT = game.AwayOT ?? existing.AwayOT;
+            if (!string.IsNullOrEmpty(game.BroadcastNetworks))
+                existing.BroadcastNetworks = game.BroadcastNetworks;
             _context.Games.Update(existing);
         }
         else

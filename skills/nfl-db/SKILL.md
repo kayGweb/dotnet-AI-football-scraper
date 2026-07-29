@@ -22,6 +22,7 @@ Version: 1.0.0
 | Tier | Tools | Scope |
 |------|-------|-------|
 | Read | `nfl_list_*`, `nfl_get_*`, `nfl_get_status`, `nfl_describe_schema`, `nfl_get_data_dictionary`, `nfl_query_stats` | `read` |
+| Read (game detail) | `nfl_get_game_drives`, `nfl_get_game_scoring_plays`, `nfl_get_game_weather`, `nfl_get_game_officials`, `nfl_get_game_odds` | `read` |
 | Operate | `nfl_trigger_scrape`, `nfl_get_job`, `nfl_list_jobs`, `nfl_get_coverage`, `nfl_find_gaps`, `nfl_retry_job` | `operate` |
 | Propose | `nfl_propose_correction`, `nfl_list_corrections` | `admin` |
 
@@ -61,4 +62,5 @@ Use `nfl_query_stats` for aggregations — not free SQL. Example body:
 
 - Players for past seasons are discovered from box scores, not roster endpoints.
 - Team identity is per-season via `TeamSeason` / `Franchise` (relocations: STL→LAR, OAK→LV, etc.).
-- Odds, play-by-play, and pre-2002 ESPN coverage are limited — check coverage matrix.
+- Odds, play-by-play, and pre-2002 ESPN coverage are limited — check coverage matrix (`GamesWithOdds` is tracked separately from game/stats coverage).
+- Use `nfl_get_game_odds` for historical lines; absence does not mean the game is missing.
