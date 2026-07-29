@@ -88,6 +88,7 @@ public class CoverageController : ControllerBase
             GamesWithPlayerStats = row.GamesWithPlayerStats,
             GamesWithTeamStats = row.GamesWithTeamStats,
             GamesWithInjuries = row.GamesWithInjuries,
+            GamesWithOdds = row.GamesWithOdds,
             PlayerCount = row.PlayerCount,
             LastVerifiedAt = row.LastVerifiedAt,
             Status = status,

@@ -92,6 +92,14 @@ public class SeasonCoverageService
                 .Distinct()
                 .CountAsync(cancellationToken);
 
+        var gamesWithOdds = gameIds.Count == 0
+            ? 0
+            : await _db.GameOdds
+                .Where(o => gameIds.Contains(o.GameId))
+                .Select(o => o.GameId)
+                .Distinct()
+                .CountAsync(cancellationToken);
+
         var playerCount = await _db.PlayerTeamSeasons
             .Where(pts => pts.Season == season)
             .Select(pts => pts.PlayerId)
@@ -108,6 +116,7 @@ public class SeasonCoverageService
             GamesWithPlayerStats = gamesWithPlayerStats,
             GamesWithTeamStats = gamesWithTeamStats,
             GamesWithInjuries = gamesWithInjuries,
+            GamesWithOdds = gamesWithOdds,
             PlayerCount = playerCount,
             LastVerifiedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
@@ -154,6 +163,7 @@ public class SeasonCoverageService
             existing.GamesWithPlayerStats = snapshot.GamesWithPlayerStats;
             existing.GamesWithTeamStats = snapshot.GamesWithTeamStats;
             existing.GamesWithInjuries = snapshot.GamesWithInjuries;
+            existing.GamesWithOdds = snapshot.GamesWithOdds;
             existing.PlayerCount = snapshot.PlayerCount;
             existing.LastVerifiedAt = snapshot.LastVerifiedAt;
             existing.UpdatedAt = snapshot.UpdatedAt;

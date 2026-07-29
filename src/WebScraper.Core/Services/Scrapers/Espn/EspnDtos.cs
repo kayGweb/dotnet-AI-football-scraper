@@ -156,6 +156,18 @@ public class EspnCompetition
 
     [JsonPropertyName("status")]
     public EspnStatus? Status { get; set; }
+
+    [JsonPropertyName("broadcasts")]
+    public List<EspnScoreboardBroadcast>? Broadcasts { get; set; }
+}
+
+public class EspnScoreboardBroadcast
+{
+    [JsonPropertyName("market")]
+    public EspnBroadcastMarket? Market { get; set; }
+
+    [JsonPropertyName("names")]
+    public List<string>? Names { get; set; }
 }
 
 public class EspnCompetitor
@@ -265,6 +277,18 @@ public class EspnSummaryResponse
 
     [JsonPropertyName("header")]
     public EspnHeader? Header { get; set; }
+
+    [JsonPropertyName("drives")]
+    public EspnDrives? Drives { get; set; }
+
+    [JsonPropertyName("scoringPlays")]
+    public List<EspnScoringPlay>? ScoringPlays { get; set; }
+
+    [JsonPropertyName("pickcenter")]
+    public List<EspnPickCenter>? Pickcenter { get; set; }
+
+    [JsonPropertyName("broadcasts")]
+    public List<EspnSummaryBroadcast>? Broadcasts { get; set; }
 }
 
 public class EspnBoxscore
@@ -348,15 +372,45 @@ public class EspnGameInfo
 
     [JsonPropertyName("officials")]
     public List<EspnOfficial>? Officials { get; set; }
+
+    [JsonPropertyName("weather")]
+    public EspnWeather? Weather { get; set; }
+}
+
+public class EspnWeather
+{
+    [JsonPropertyName("temperature")]
+    public int? Temperature { get; set; }
+
+    [JsonPropertyName("highTemperature")]
+    public int? HighTemperature { get; set; }
+
+    [JsonPropertyName("displayValue")]
+    public string? DisplayValue { get; set; }
+
+    [JsonPropertyName("windSpeed")]
+    public int? WindSpeed { get; set; }
+
+    [JsonPropertyName("windDirection")]
+    public string? WindDirection { get; set; }
+
+    [JsonPropertyName("humidity")]
+    public int? Humidity { get; set; }
 }
 
 public class EspnOfficial
 {
+    [JsonPropertyName("fullName")]
+    public string? FullName { get; set; }
+
     [JsonPropertyName("displayName")]
     public string DisplayName { get; set; } = string.Empty;
 
     [JsonPropertyName("position")]
     public EspnOfficialPosition? Position { get; set; }
+
+    [JsonPropertyName("order")]
+    public int Order { get; set; }
 }
 
 public class EspnOfficialPosition
@@ -463,4 +517,177 @@ public class EspnHeaderCompetition
 
     [JsonPropertyName("status")]
     public EspnStatus? Status { get; set; }
+}
+
+// --- Tier 1 enrichment (drives, scoring plays, odds, broadcasts) ---
+
+public class EspnDrives
+{
+    [JsonPropertyName("previous")]
+    public List<EspnDrive>? Previous { get; set; }
+
+    [JsonPropertyName("current")]
+    public EspnDrive? Current { get; set; }
+}
+
+public class EspnDrive
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = string.Empty;
+
+    [JsonPropertyName("description")]
+    public string Description { get; set; } = string.Empty;
+
+    [JsonPropertyName("team")]
+    public EspnDriveTeam? Team { get; set; }
+
+    [JsonPropertyName("start")]
+    public EspnDriveSpot? Start { get; set; }
+
+    [JsonPropertyName("end")]
+    public EspnDriveSpot? End { get; set; }
+
+    [JsonPropertyName("timeElapsed")]
+    public EspnDriveTime? TimeElapsed { get; set; }
+
+    [JsonPropertyName("yards")]
+    public int Yards { get; set; }
+
+    [JsonPropertyName("isScore")]
+    public bool IsScore { get; set; }
+
+    [JsonPropertyName("offensivePlays")]
+    public int OffensivePlays { get; set; }
+
+    [JsonPropertyName("result")]
+    public string? Result { get; set; }
+
+    [JsonPropertyName("displayResult")]
+    public string? DisplayResult { get; set; }
+}
+
+public class EspnDriveTeam
+{
+    [JsonPropertyName("abbreviation")]
+    public string Abbreviation { get; set; } = string.Empty;
+}
+
+public class EspnDriveSpot
+{
+    [JsonPropertyName("period")]
+    public EspnDrivePeriod? Period { get; set; }
+}
+
+public class EspnDrivePeriod
+{
+    [JsonPropertyName("number")]
+    public int Number { get; set; }
+}
+
+public class EspnDriveTime
+{
+    [JsonPropertyName("displayValue")]
+    public string? DisplayValue { get; set; }
+}
+
+public class EspnScoringPlay
+{
+    [JsonPropertyName("id")]
+    public string Id { get; set; } = string.Empty;
+
+    [JsonPropertyName("type")]
+    public EspnScoringPlayType? Type { get; set; }
+
+    [JsonPropertyName("text")]
+    public string Text { get; set; } = string.Empty;
+
+    [JsonPropertyName("awayScore")]
+    public int AwayScore { get; set; }
+
+    [JsonPropertyName("homeScore")]
+    public int HomeScore { get; set; }
+
+    [JsonPropertyName("period")]
+    public EspnDrivePeriod? Period { get; set; }
+
+    [JsonPropertyName("clock")]
+    public EspnScoringClock? Clock { get; set; }
+
+    [JsonPropertyName("team")]
+    public EspnDriveTeam? Team { get; set; }
+
+    [JsonPropertyName("scoringType")]
+    public EspnScoringPlayType? ScoringType { get; set; }
+}
+
+public class EspnScoringPlayType
+{
+    [JsonPropertyName("text")]
+    public string Text { get; set; } = string.Empty;
+
+    [JsonPropertyName("abbreviation")]
+    public string Abbreviation { get; set; } = string.Empty;
+}
+
+public class EspnScoringClock
+{
+    [JsonPropertyName("displayValue")]
+    public string? DisplayValue { get; set; }
+}
+
+public class EspnPickCenter
+{
+    [JsonPropertyName("provider")]
+    public EspnOddsProvider? Provider { get; set; }
+
+    [JsonPropertyName("details")]
+    public string? Details { get; set; }
+
+    [JsonPropertyName("overUnder")]
+    public double? OverUnder { get; set; }
+
+    [JsonPropertyName("spread")]
+    public double? Spread { get; set; }
+
+    [JsonPropertyName("awayTeamOdds")]
+    public EspnTeamOdds? AwayTeamOdds { get; set; }
+
+    [JsonPropertyName("homeTeamOdds")]
+    public EspnTeamOdds? HomeTeamOdds { get; set; }
+}
+
+public class EspnOddsProvider
+{
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = string.Empty;
+}
+
+public class EspnTeamOdds
+{
+    [JsonPropertyName("moneyLine")]
+    public int? MoneyLine { get; set; }
+}
+
+public class EspnSummaryBroadcast
+{
+    [JsonPropertyName("station")]
+    public string? Station { get; set; }
+
+    [JsonPropertyName("media")]
+    public EspnBroadcastMedia? Media { get; set; }
+
+    [JsonPropertyName("market")]
+    public EspnBroadcastMarket? Market { get; set; }
+}
+
+public class EspnBroadcastMedia
+{
+    [JsonPropertyName("shortName")]
+    public string? ShortName { get; set; }
+}
+
+public class EspnBroadcastMarket
+{
+    [JsonPropertyName("type")]
+    public string? Type { get; set; }
 }

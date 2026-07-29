@@ -20,6 +20,9 @@ public class Game : IAuditableEntity, ISoftDeletable
     public string? GameStatus { get; set; }
     public bool? HomeWinner { get; set; }
 
+    // Broadcast (from scoreboard)
+    public string? BroadcastNetworks { get; set; }
+
     // Quarter scores
     public int? HomeQ1 { get; set; }
     public int? HomeQ2 { get; set; }
@@ -53,4 +56,9 @@ public class Game : IAuditableEntity, ISoftDeletable
     public ICollection<TeamGameStats> TeamStats { get; set; } = new List<TeamGameStats>();
     public ICollection<Injury> Injuries { get; set; } = new List<Injury>();
     public ICollection<ApiLink> ApiLinks { get; set; } = new List<ApiLink>();
+    public ICollection<GameDrive> Drives { get; set; } = new List<GameDrive>();
+    public ICollection<ScoringPlay> ScoringPlays { get; set; } = new List<ScoringPlay>();
+    public GameWeather? Weather { get; set; }
+    public ICollection<GameOfficial> Officials { get; set; } = new List<GameOfficial>();
+    public ICollection<GameOdds> Odds { get; set; } = new List<GameOdds>();
 }

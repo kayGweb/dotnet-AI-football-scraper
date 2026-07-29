@@ -333,6 +333,7 @@ public class DatabasePushService
                         existing.AwayQ3 = game.AwayQ3;
                         existing.AwayQ4 = game.AwayQ4;
                         existing.AwayOT = game.AwayOT;
+                        existing.BroadcastNetworks = game.BroadcastNetworks ?? existing.BroadcastNetworks;
                         gameIdMap[game.Id] = existing.Id;
                     }
                     else
@@ -362,7 +363,8 @@ public class DatabasePushService
                             AwayQ2 = game.AwayQ2,
                             AwayQ3 = game.AwayQ3,
                             AwayQ4 = game.AwayQ4,
-                            AwayOT = game.AwayOT
+                            AwayOT = game.AwayOT,
+                            BroadcastNetworks = game.BroadcastNetworks
                         };
                         remoteDb.Games.Add(newGame);
                         await remoteDb.SaveChangesAsync();
@@ -557,6 +559,251 @@ public class DatabasePushService
                 await remoteDb.SaveChangesAsync();
                 totalRecords += localApiLinks.Count;
                 display.PrintSuccess($"API links: {localApiLinks.Count} pushed");
+            }
+
+            // ── Tier 1 game enrichment ──
+            var localDrives = await localDb.GameDrives.AsNoTracking().ToListAsync();
+            if (localDrives.Count > 0)
+            {
+                display.PrintInfo($"Pushing {localDrives.Count} game drives...");
+                foreach (var drive in localDrives)
+                {
+                    if (!gameIdMap.ContainsKey(drive.GameId))
+                        continue;
+
+                    var remoteGameId = gameIdMap[drive.GameId];
+                    int? remoteTeamSeasonId = drive.TeamSeasonId.HasValue && teamSeasonIdMap.ContainsKey(drive.TeamSeasonId.Value)
+                        ? teamSeasonIdMap[drive.TeamSeasonId.Value]
+                        : null;
+
+                    var existing = await remoteDb.GameDrives
+                        .FirstOrDefaultAsync(d => d.GameId == remoteGameId && d.EspnDriveId == drive.EspnDriveId);
+
+                    if (existing != null)
+                    {
+                        existing.Sequence = drive.Sequence;
+                        existing.TeamSeasonId = remoteTeamSeasonId;
+                        existing.Description = drive.Description;
+                        existing.StartPeriod = drive.StartPeriod;
+                        existing.EndPeriod = drive.EndPeriod;
+                        existing.TimeElapsed = drive.TimeElapsed;
+                        existing.Yards = drive.Yards;
+                        existing.OffensivePlays = drive.OffensivePlays;
+                        existing.IsScore = drive.IsScore;
+                        existing.Result = drive.Result;
+                        existing.DisplayResult = drive.DisplayResult;
+                    }
+                    else
+                    {
+                        remoteDb.GameDrives.Add(new GameDrive
+                        {
+                            GameId = remoteGameId,
+                            EspnDriveId = drive.EspnDriveId,
+                            Sequence = drive.Sequence,
+                            TeamSeasonId = remoteTeamSeasonId,
+                            Description = drive.Description,
+                            StartPeriod = drive.StartPeriod,
+                            EndPeriod = drive.EndPeriod,
+                            TimeElapsed = drive.TimeElapsed,
+                            Yards = drive.Yards,
+                            OffensivePlays = drive.OffensivePlays,
+                            IsScore = drive.IsScore,
+                            Result = drive.Result,
+                            DisplayResult = drive.DisplayResult,
+                            DataSource = drive.DataSource,
+                            DataSourceFetchedAt = ToUtcOrNull(drive.DataSourceFetchedAt),
+                            DataSourceRecordId = drive.DataSourceRecordId,
+                            CreatedAt = ToUtc(drive.CreatedAt),
+                            UpdatedAt = ToUtc(drive.UpdatedAt),
+                        });
+                    }
+                }
+                await remoteDb.SaveChangesAsync();
+                totalRecords += localDrives.Count;
+                display.PrintSuccess($"Game drives: {localDrives.Count} pushed");
+            }
+
+            var localScoringPlays = await localDb.ScoringPlays.AsNoTracking().ToListAsync();
+            if (localScoringPlays.Count > 0)
+            {
+                display.PrintInfo($"Pushing {localScoringPlays.Count} scoring plays...");
+                foreach (var play in localScoringPlays)
+                {
+                    if (!gameIdMap.ContainsKey(play.GameId))
+                        continue;
+
+                    var remoteGameId = gameIdMap[play.GameId];
+                    int? remoteTeamSeasonId = play.TeamSeasonId.HasValue && teamSeasonIdMap.ContainsKey(play.TeamSeasonId.Value)
+                        ? teamSeasonIdMap[play.TeamSeasonId.Value]
+                        : null;
+
+                    var existing = await remoteDb.ScoringPlays
+                        .FirstOrDefaultAsync(p => p.GameId == remoteGameId && p.EspnPlayId == play.EspnPlayId);
+
+                    if (existing != null)
+                    {
+                        existing.Sequence = play.Sequence;
+                        existing.TeamSeasonId = remoteTeamSeasonId;
+                        existing.Period = play.Period;
+                        existing.Clock = play.Clock;
+                        existing.PlayType = play.PlayType;
+                        existing.Description = play.Description;
+                        existing.HomeScore = play.HomeScore;
+                        existing.AwayScore = play.AwayScore;
+                        existing.ScoringType = play.ScoringType;
+                    }
+                    else
+                    {
+                        remoteDb.ScoringPlays.Add(new ScoringPlay
+                        {
+                            GameId = remoteGameId,
+                            EspnPlayId = play.EspnPlayId,
+                            Sequence = play.Sequence,
+                            TeamSeasonId = remoteTeamSeasonId,
+                            Period = play.Period,
+                            Clock = play.Clock,
+                            PlayType = play.PlayType,
+                            Description = play.Description,
+                            HomeScore = play.HomeScore,
+                            AwayScore = play.AwayScore,
+                            ScoringType = play.ScoringType,
+                            DataSource = play.DataSource,
+                            DataSourceFetchedAt = ToUtcOrNull(play.DataSourceFetchedAt),
+                            DataSourceRecordId = play.DataSourceRecordId,
+                            CreatedAt = ToUtc(play.CreatedAt),
+                            UpdatedAt = ToUtc(play.UpdatedAt),
+                        });
+                    }
+                }
+                await remoteDb.SaveChangesAsync();
+                totalRecords += localScoringPlays.Count;
+                display.PrintSuccess($"Scoring plays: {localScoringPlays.Count} pushed");
+            }
+
+            var localWeather = await localDb.GameWeathers.AsNoTracking().ToListAsync();
+            if (localWeather.Count > 0)
+            {
+                display.PrintInfo($"Pushing {localWeather.Count} game weather records...");
+                foreach (var weather in localWeather)
+                {
+                    if (!gameIdMap.ContainsKey(weather.GameId))
+                        continue;
+
+                    var remoteGameId = gameIdMap[weather.GameId];
+                    var existing = await remoteDb.GameWeathers.FirstOrDefaultAsync(w => w.GameId == remoteGameId);
+
+                    if (existing != null)
+                    {
+                        existing.TemperatureF = weather.TemperatureF;
+                        existing.HighTemperatureF = weather.HighTemperatureF;
+                        existing.Condition = weather.Condition;
+                        existing.WindSpeedMph = weather.WindSpeedMph;
+                        existing.WindDirection = weather.WindDirection;
+                        existing.HumidityPercent = weather.HumidityPercent;
+                    }
+                    else
+                    {
+                        remoteDb.GameWeathers.Add(new GameWeather
+                        {
+                            GameId = remoteGameId,
+                            TemperatureF = weather.TemperatureF,
+                            HighTemperatureF = weather.HighTemperatureF,
+                            Condition = weather.Condition,
+                            WindSpeedMph = weather.WindSpeedMph,
+                            WindDirection = weather.WindDirection,
+                            HumidityPercent = weather.HumidityPercent,
+                            DataSource = weather.DataSource,
+                            DataSourceFetchedAt = ToUtcOrNull(weather.DataSourceFetchedAt),
+                            CreatedAt = ToUtc(weather.CreatedAt),
+                            UpdatedAt = ToUtc(weather.UpdatedAt),
+                        });
+                    }
+                }
+                await remoteDb.SaveChangesAsync();
+                totalRecords += localWeather.Count;
+                display.PrintSuccess($"Game weather: {localWeather.Count} pushed");
+            }
+
+            var localOfficials = await localDb.GameOfficials.AsNoTracking().ToListAsync();
+            if (localOfficials.Count > 0)
+            {
+                display.PrintInfo($"Pushing {localOfficials.Count} game officials...");
+                foreach (var official in localOfficials)
+                {
+                    if (!gameIdMap.ContainsKey(official.GameId))
+                        continue;
+
+                    var remoteGameId = gameIdMap[official.GameId];
+                    var existing = await remoteDb.GameOfficials
+                        .FirstOrDefaultAsync(o =>
+                            o.GameId == remoteGameId &&
+                            o.Name == official.Name &&
+                            o.Position == official.Position);
+
+                    if (existing != null)
+                    {
+                        existing.SortOrder = official.SortOrder;
+                    }
+                    else
+                    {
+                        remoteDb.GameOfficials.Add(new GameOfficial
+                        {
+                            GameId = remoteGameId,
+                            Name = official.Name,
+                            Position = official.Position,
+                            SortOrder = official.SortOrder,
+                            DataSource = official.DataSource,
+                            DataSourceFetchedAt = ToUtcOrNull(official.DataSourceFetchedAt),
+                            CreatedAt = ToUtc(official.CreatedAt),
+                            UpdatedAt = ToUtc(official.UpdatedAt),
+                        });
+                    }
+                }
+                await remoteDb.SaveChangesAsync();
+                totalRecords += localOfficials.Count;
+                display.PrintSuccess($"Game officials: {localOfficials.Count} pushed");
+            }
+
+            var localOdds = await localDb.GameOdds.AsNoTracking().ToListAsync();
+            if (localOdds.Count > 0)
+            {
+                display.PrintInfo($"Pushing {localOdds.Count} game odds snapshots...");
+                foreach (var odds in localOdds)
+                {
+                    if (!gameIdMap.ContainsKey(odds.GameId))
+                        continue;
+
+                    var remoteGameId = gameIdMap[odds.GameId];
+                    var capturedAt = ToUtc(odds.CapturedAt);
+                    var exists = await remoteDb.GameOdds.AnyAsync(o =>
+                        o.GameId == remoteGameId &&
+                        o.Sportsbook == odds.Sportsbook &&
+                        o.SnapshotType == odds.SnapshotType &&
+                        o.CapturedAt == capturedAt);
+
+                    if (!exists)
+                    {
+                        remoteDb.GameOdds.Add(new GameOdds
+                        {
+                            GameId = remoteGameId,
+                            Sportsbook = odds.Sportsbook,
+                            Spread = odds.Spread,
+                            OverUnder = odds.OverUnder,
+                            HomeMoneyline = odds.HomeMoneyline,
+                            AwayMoneyline = odds.AwayMoneyline,
+                            SnapshotType = odds.SnapshotType,
+                            CapturedAt = capturedAt,
+                            Details = odds.Details,
+                            DataSource = odds.DataSource,
+                            DataSourceFetchedAt = ToUtcOrNull(odds.DataSourceFetchedAt),
+                            CreatedAt = ToUtc(odds.CreatedAt),
+                            UpdatedAt = ToUtc(odds.UpdatedAt),
+                        });
+                    }
+                }
+                await remoteDb.SaveChangesAsync();
+                totalRecords += localOdds.Count;
+                display.PrintSuccess($"Game odds: {localOdds.Count} pushed");
             }
 
             Console.WriteLine();

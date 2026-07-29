@@ -182,7 +182,8 @@ public class EspnGameService : BaseApiService, IGameScraperService
                 AwayQ2 = awayQuarters[1],
                 AwayQ3 = awayQuarters[2],
                 AwayQ4 = awayQuarters[3],
-                AwayOT = awayQuarters[4]
+                AwayOT = awayQuarters[4],
+                BroadcastNetworks = FormatScoreboardBroadcasts(competition.Broadcasts)
             };
 
             await StoreApiLinkAsync(
@@ -230,6 +231,20 @@ public class EspnGameService : BaseApiService, IGameScraperService
             result[i] = (int)linescores[i].Value;
 
         return result;
+    }
+
+    internal static string? FormatScoreboardBroadcasts(List<EspnScoreboardBroadcast>? broadcasts)
+    {
+        if (broadcasts == null || broadcasts.Count == 0)
+            return null;
+
+        var names = broadcasts
+            .SelectMany(b => b.Names ?? [])
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return names.Count > 0 ? string.Join(", ", names) : null;
     }
 
     private async Task StoreApiLinkAsync(
