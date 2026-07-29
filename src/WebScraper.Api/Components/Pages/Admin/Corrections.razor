@@ -1,0 +1,90 @@
+@page "/admin/corrections"
+@attribute [Authorize(Roles = "Admin")]
+@using WebScraper.Models
+@using WebScraper.Services.Agent
+@inject IServiceScopeFactory ScopeFactory
+
+<MudText Typo="Typo.h4" Class="mb-4">Correction Approval Queue</MudText>
+
+<MudGrid Class="mb-4">
+    <MudItem xs="12" sm="4">
+        <MudSelect T="DataCorrectionStatus?" Label="Status" @bind-Value="_statusFilter"
+                   Variant="Variant.Outlined" Clearable="true">
+            <MudSelectItem T="DataCorrectionStatus?" Value="@DataCorrectionStatus.Pending">Pending</MudSelectItem>
+            <MudSelectItem T="DataCorrectionStatus?" Value="@DataCorrectionStatus.Applied">Applied</MudSelectItem>
+            <MudSelectItem T="DataCorrectionStatus?" Value="@DataCorrectionStatus.Rejected">Rejected</MudSelectItem>
+        </MudSelect>
+    </MudItem>
+    <MudItem xs="12" sm="4" Class="d-flex align-end">
+        <MudButton Variant="Variant.Outlined" OnClick="RefreshAsync" StartIcon="@Icons.Material.Filled.Refresh">Refresh</MudButton>
+    </MudItem>
+</MudGrid>
+
+<MudTable Items="_items" Dense="true" Hover="true" Loading="_loading" Striped="true">
+    <HeaderContent>
+        <MudTh>ID</MudTh>
+        <MudTh>Entity</MudTh>
+        <MudTh>Field</MudTh>
+        <MudTh>Change</MudTh>
+        <MudTh>Rationale</MudTh>
+        <MudTh>Proposed By</MudTh>
+        <MudTh>Status</MudTh>
+        <MudTh></MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd>@context.Id</MudTd>
+        <MudTd>@context.EntityType #@context.EntityId</MudTd>
+        <MudTd>@context.Field</MudTd>
+        <MudTd>
+            <MudText Typo="Typo.caption">@(context.OldValue ?? "—") → @context.NewValue</MudText>
+        </MudTd>
+        <MudTd>@context.Rationale</MudTd>
+        <MudTd>@context.ProposedBy</MudTd>
+        <MudTd>@context.Status</MudTd>
+        <MudTd>
+            @if (context.Status == DataCorrectionStatus.Pending)
+            {
+                <MudIconButton Icon="@Icons.Material.Filled.Check" Color="Color.Success" Size="Size.Small"
+                               OnClick="@(() => ApproveAsync(context.Id))" Title="Approve" />
+                <MudIconButton Icon="@Icons.Material.Filled.Close" Color="Color.Error" Size="Size.Small"
+                               OnClick="@(() => RejectAsync(context.Id))" Title="Reject" />
+            }
+        </MudTd>
+    </RowTemplate>
+    <NoRecordsContent>
+        <MudText>No corrections found.</MudText>
+    </NoRecordsContent>
+</MudTable>
+
+@code {
+    private List<DataCorrection> _items = new();
+    private bool _loading = true;
+    private DataCorrectionStatus? _statusFilter = DataCorrectionStatus.Pending;
+
+    protected override async Task OnInitializedAsync() => await RefreshAsync();
+
+    private async Task RefreshAsync()
+    {
+        _loading = true;
+        using var scope = ScopeFactory.CreateScope();
+        var svc = scope.ServiceProvider.GetRequiredService<DataCorrectionService>();
+        _items = (await svc.ListAsync(_statusFilter, 100)).ToList();
+        _loading = false;
+    }
+
+    private async Task ApproveAsync(long id)
+    {
+        using var scope = ScopeFactory.CreateScope();
+        var svc = scope.ServiceProvider.GetRequiredService<DataCorrectionService>();
+        await svc.ApproveAsync(id, "admin-dashboard");
+        await RefreshAsync();
+    }
+
+    private async Task RejectAsync(long id)
+    {
+        using var scope = ScopeFactory.CreateScope();
+        var svc = scope.ServiceProvider.GetRequiredService<DataCorrectionService>();
+        await svc.RejectAsync(id, "admin-dashboard");
+        await RefreshAsync();
+    }
+}

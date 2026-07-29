@@ -1315,6 +1315,63 @@ All five correctness blockers from `AGENT_PLATFORM_PLAN.md` §1 are implemented.
 
 **Breaking schema note:** existing `Games` rows are not migrated in-place — the `Block1IdentitySchema` migration renames legacy team FK columns. Fresh scrape/backfill is required for historical data.
 
+### Block 2 — Orchestration & coverage (complete)
+Phase B from `AGENT_PLATFORM_PLAN.md` §4 and §7 Phase B. Migration: `Block2CoverageQuality`.
+
+**Coverage model**
+- `SeasonCoverage` — persisted expected-vs-actual per (season, seasonType, week): game counts, stats coverage, player counts
+- `SeasonCoverageService` — computes from DB and upserts snapshots
+- `NflSeasonSchedule.GetExpectedGamesForWeek` — deterministic counts for preseason/postseason weeks
+
+**Quality rules engine**
+- `DataQualityFinding` — assertions with severity, status, repair payload
+- `QualityRulesEngine` — 7 rules: missing player/team stats, quarter-score mismatch, missing EspnId, implausible pass yards, venue location, week game-count mismatch
+- Runs automatically after Games/Stats/All scrape jobs complete
+
+**Repair loop**
+- `RepairJobEnqueuer` — creates idempotent re-scrape jobs from actionable findings
+- `POST /api/v1/coverage/refresh` — recompute coverage + optional repair enqueue
+- `GET /api/v1/coverage`, `GET /api/v1/quality/findings`, `POST /api/v1/quality/scan`, `POST /api/v1/quality/repairs`
+
+**Backfill dependency ordering**
+- `ScrapeJob.DependsOnJobId` — stats jobs wait for matching games job
+- `BackfillOrchestrator` only enqueues games jobs initially; worker enqueues stats when games succeed
+
+**Admin dashboard**
+- `/admin/coverage` — week-by-week coverage table with status chips
+- `/admin/quality` — open findings with scan and repair actions
+
+### Block 3 — Agent surface (complete)
+Phase C from `AGENT_PLATFORM_PLAN.md` §2–3 and §7 Phase C. Migration: `Block3AgentSurface`.
+
+**API key scopes**
+- `read` — existing 14 read tools + introspection (`describe_schema`, `data_dictionary`, `query_stats`)
+- `operate` — scrape triggers, jobs, coverage, gaps, retry (also satisfies read)
+- `admin` — correction proposals (also satisfies read + operate)
+
+**Operate API** (dual auth: API key `operate`/`admin` OR JWT Operator/Admin)
+- Scrape/jobs endpoints updated to `RequireOperate` policy
+- `POST /api/v1/jobs/{id}/retry` — re-queue failed/succeeded jobs
+- `GET /api/v1/gaps` — ranked coverage + quality gaps
+
+**Introspection API**
+- `GET /api/v1/schema`, `GET /api/v1/schema/dictionary`
+- `POST /api/v1/query/stats` — parameterized whitelist aggregation (no raw SQL)
+
+**Correction proposal flow**
+- `DataCorrection` table — Pending → Approved/Rejected → Applied
+- `POST /api/v1/corrections`, `GET /api/v1/corrections`, approve/reject (Admin JWT)
+- `/admin/corrections` — approval queue UI
+
+**MCP tools** (11 new, 25 total)
+- Operate: `nfl_trigger_scrape`, `nfl_get_job`, `nfl_list_jobs`, `nfl_get_coverage`, `nfl_find_gaps`, `nfl_retry_job`
+- Introspect: `nfl_describe_schema`, `nfl_get_data_dictionary`, `nfl_query_stats`
+- Propose: `nfl_propose_correction`, `nfl_list_corrections`
+
+**Skill**
+- `skills/nfl-db/SKILL.md` — entity resolution, coverage awareness, runbooks, mutation etiquette
+- `GET /api/v1/skill` — serves the Skill markdown
+
 ## Adding a New Data Provider
 1. Create a folder: `Services/Scrapers/NewProvider/`
 2. Create service classes implementing `ITeamScraperService`, `IPlayerScraperService`, `IGameScraperService`, `IStatsScraperService` — each extending `BaseApiService`
