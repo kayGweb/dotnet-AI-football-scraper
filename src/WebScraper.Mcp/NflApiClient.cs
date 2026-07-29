@@ -140,6 +140,27 @@ public class NflApiClient
     public Task<string> RetryJobAsync(int jobId, CancellationToken ct)
         => PostAsync($"api/v1/jobs/{jobId}/retry", "{}", ct);
 
+    public Task<string> GetBackfillProgressAsync(int jobId, CancellationToken ct)
+        => GetAsync($"api/v1/backfill/{jobId}/progress", ct);
+
+    public Task<string> PauseBackfillAsync(int jobId, CancellationToken ct)
+        => PostAsync($"api/v1/backfill/{jobId}/pause", "{}", ct);
+
+    public Task<string> ResumeBackfillAsync(int jobId, CancellationToken ct)
+        => PostAsync($"api/v1/backfill/{jobId}/resume", "{}", ct);
+
+    public Task<string> GetPushStatusAsync(CancellationToken ct)
+        => GetAsync("api/v1/push/status", ct);
+
+    public Task<string> TriggerPushAsync(bool resume, bool reset, CancellationToken ct)
+        => PostAsync($"api/v1/push?resume={resume.ToString().ToLowerInvariant()}&reset={reset.ToString().ToLowerInvariant()}", "{}", ct);
+
+    public Task<string> CreateBackupAsync(CancellationToken ct)
+        => PostAsync("api/v1/backup", "{}", ct);
+
+    public Task<string> ListBackupsAsync(CancellationToken ct)
+        => GetAsync("api/v1/backup", ct);
+
     public Task<string> GetCoverageAsync(int? season, string? seasonType, CancellationToken ct)
         => GetAsync(BuildQuery("api/v1/coverage",
             ("season", season?.ToString()),

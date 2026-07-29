@@ -1,0 +1,145 @@
+@page "/admin/push"
+@attribute [Authorize(Roles = "Admin")]
+@rendermode InteractiveServer
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.Extensions.Configuration
+@using WebScraper.Data
+@using WebScraper.Models
+@using WebScraper.Services
+@inject IServiceScopeFactory ScopeFactory
+@inject IConfiguration Configuration
+@inject ISnackbar Snackbar
+@implements IDisposable
+
+<MudText Typo="Typo.h4" Class="mb-4">Push to PostgreSQL</MudText>
+
+<MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+    Promotes local SQLite data to remote PostgreSQL in batched, resumable stages.
+</MudText>
+
+@if (_session is not null)
+{
+    <MudCard Class="mb-4">
+        <MudCardContent>
+            <MudText Typo="Typo.h6" Class="mb-2">Session #@_session.Id</MudText>
+            <MudStack Row="true" Spacing="2" Class="mb-3">
+                <MudChip T="string" Size="Size.Small" Color="@StatusColor(_session.Status.ToString())">@_session.Status</MudChip>
+                <MudChip T="string" Size="Size.Small">Stage: @_session.CurrentStage</MudChip>
+                @if (_session.StageOffset > 0)
+                {
+                    <MudChip T="string" Size="Size.Small">Offset: @_session.StageOffset</MudChip>
+                }
+            </MudStack>
+            <MudText Typo="Typo.body2" Class="mb-2">
+                @_session.TotalRecordsPushed.ToString("N0") records pushed
+            </MudText>
+            @if (!string.IsNullOrEmpty(_session.LastError))
+            {
+                <MudAlert Severity="Severity.Error" Dense="true">@_session.LastError</MudAlert>
+            }
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">
+                Started @_session.StartedAt.ToString("g") · Updated @_session.UpdatedAt.ToString("g")
+            </MudText>
+        </MudCardContent>
+    </MudCard>
+}
+else
+{
+    <MudAlert Severity="Severity.Normal" Class="mb-4">No push session yet — start a new push below.</MudAlert>
+}
+
+<MudStack Row="true" Spacing="2" Class="mb-4">
+    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="() => RunPushAsync(false, false)"
+               Disabled="_running" StartIcon="@Icons.Material.Filled.CloudUpload">
+        Start Push
+    </MudButton>
+    <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="() => RunPushAsync(true, false)"
+               Disabled="_running || _session is null">
+        Resume
+    </MudButton>
+    <MudButton Variant="Variant.Outlined" Color="Color.Warning" OnClick="() => RunPushAsync(false, true)"
+               Disabled="_running">
+        Reset &amp; Start Fresh
+    </MudButton>
+    <MudButton Variant="Variant.Text" OnClick="LoadSessionAsync" Disabled="_running">
+        Refresh Status
+    </MudButton>
+</MudStack>
+
+@if (_running)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-4" />
+    <MudText Typo="Typo.body2">Push in progress…</MudText>
+}
+
+@code {
+    private DatabasePushSession? _session;
+    private bool _running;
+    private Timer? _timer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSessionAsync();
+        _timer = new Timer(async _ => await LoadSessionAsync(), null, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(3));
+    }
+
+    private async Task LoadSessionAsync()
+    {
+        using var scope = ScopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var pushService = scope.ServiceProvider.GetRequiredService<DatabasePushService>();
+
+        _session = await pushService.GetSessionStatusAsync(db);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task RunPushAsync(bool resume, bool reset)
+    {
+        var connectionString = Configuration.GetConnectionString("PostgreSQL");
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            Snackbar.Add("PostgreSQL connection not configured (ConnectionStrings:PostgreSQL).", Severity.Error);
+            return;
+        }
+
+        _running = true;
+
+        try
+        {
+            using var scope = ScopeFactory.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            var pushService = scope.ServiceProvider.GetRequiredService<DatabasePushService>();
+            var display = scope.ServiceProvider.GetRequiredService<ConsoleDisplayService>();
+
+            var result = await pushService.PushToServerAsync(
+                db,
+                connectionString,
+                display,
+                new PushOptions { Resume = resume, Reset = reset });
+
+            if (result.Success)
+                Snackbar.Add($"Push complete: {result.RecordsProcessed:N0} records.", Severity.Success);
+            else
+                Snackbar.Add($"Push failed: {result.Message}", Severity.Error);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Push error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _running = false;
+            await LoadSessionAsync();
+        }
+    }
+
+    private static Color StatusColor(string status) => status switch
+    {
+        "Completed" => Color.Success,
+        "Failed" => Color.Error,
+        "InProgress" => Color.Info,
+        _ => Color.Default,
+    };
+
+    public void Dispose() => _timer?.Dispose();
+}

@@ -8,6 +8,7 @@ using WebScraper.Data.Repositories;
 using WebScraper.Extensions;
 using WebScraper.Models;
 using WebScraper.Services;
+using WebScraper.Services.Backup;
 using WebScraper.Services.Scrapers;
 
 // Configure Serilog from appsettings.json
@@ -247,6 +248,12 @@ static async Task<int> RunCommandAsync(IHost host, string[] args, ConsoleDisplay
             var resume = args.Any(a => a.Equals("--resume", StringComparison.OrdinalIgnoreCase));
             var reset = args.Any(a => a.Equals("--reset", StringComparison.OrdinalIgnoreCase));
             await HandlePushToServerAsync(services, configuration, display, resume, reset);
+            return 0;
+        }
+
+        case "backup":
+        {
+            await HandleBackupAsync(services, display);
             return 0;
         }
 
@@ -864,6 +871,24 @@ static async Task HandlePushToServerAsync(
     display.PrintScrapeResult("Push", result);
 }
 
+static Task HandleBackupAsync(IServiceProvider services, ConsoleDisplayService display)
+{
+    var backupService = services.GetRequiredService<SqliteBackupService>();
+    try
+    {
+        var result = backupService.CreateBackup();
+        display.PrintSuccess($"Backup created: {result.FileName} ({result.SizeBytes:N0} bytes)");
+        if (result.PrunedCount > 0)
+            display.PrintInfo($"Pruned {result.PrunedCount} old backup(s).");
+    }
+    catch (Exception ex)
+    {
+        display.PrintError($"Backup failed: {ex.Message}");
+    }
+
+    return Task.CompletedTask;
+}
+
 // --- Input helpers ---
 
 static int? PromptForInt(string prompt)
@@ -979,6 +1004,7 @@ static void PrintUsage()
           stats    --season <year> --week <n> Scrape player stats for a week
           all      --season <year>           Run full pipeline (teams, players, games)
           push [--resume] [--reset]            Push local SQLite to PostgreSQL (batched, resumable)
+          backup                               Copy SQLite database to data/backups/
 
         View Commands:
           list teams                         Show all teams in the database

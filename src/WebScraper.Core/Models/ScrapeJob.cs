@@ -52,6 +52,7 @@ public enum ScrapeJobStatus
 {
     Queued,
     Running,
+    Paused,
     Succeeded,
     Failed
 }

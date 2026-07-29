@@ -1,0 +1,277 @@
+@page "/admin/backfill"
+@attribute [Authorize(Roles = "Admin,Operator")]
+@rendermode InteractiveServer
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.Extensions.Options
+@using WebScraper.Api.Services
+@using WebScraper.Data
+@using WebScraper.Models
+@using WebScraper.Services.Backup
+@using WebScraper.Services.Coverage
+@inject IServiceScopeFactory ScopeFactory
+@inject IJobQueue JobQueue
+@inject IOptions<ScraperSettings> ScraperSettings
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
+@inject AuthenticationStateProvider AuthState
+@implements IDisposable
+
+<MudText Typo="Typo.h4" Class="mb-4">Backfill Control</MudText>
+
+<MudGrid Class="mb-4">
+    <MudItem xs="12" md="6">
+        <MudCard>
+            <MudCardContent>
+                <MudText Typo="Typo.h6" Class="mb-3">Start Backfill</MudText>
+                <MudNumericField T="int" @bind-Value="_startSeason" Label="Start Season" Variant="Variant.Outlined" Class="mb-3" />
+                <MudNumericField T="int" @bind-Value="_endSeason" Label="End Season" Variant="Variant.Outlined" Class="mb-3" />
+                <MudCheckBox T="bool" @bind-Value="_backupFirst" Label="Backup SQLite before starting" Color="Color.Primary" Class="mb-3" />
+
+                @if (_estimate is not null)
+                {
+                    <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+                        ~@_estimate.TotalApiCalls.ToString("N0") API calls,
+                        est. @_estimate.EstimatedWallClock.ToString(@"hh\:mm\:ss") wall-clock at 1.5s delay
+                    </MudAlert>
+                }
+
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="StartBackfillAsync"
+                           Disabled="_submitting" StartIcon="@Icons.Material.Filled.PlayArrow">
+                    Start Backfill
+                </MudButton>
+                <MudButton Variant="Variant.Outlined" Class="ml-2" OnClick="LoadEstimateAsync">Refresh Estimate</MudButton>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+
+    <MudItem xs="12" md="6">
+        @if (_progress is not null)
+        {
+            <MudCard>
+                <MudCardContent>
+                    <MudText Typo="Typo.h6" Class="mb-2">Job #@_progress.ParentJobId</MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+                        Seasons @_progress.StartSeason–@_progress.EndSeason · Status: @_progress.ParentStatus
+                    </MudText>
+
+                    <MudProgressLinear Value="@((double)_progress.PercentComplete)" Color="Color.Primary" Class="mb-2" />
+                    <MudText Typo="Typo.body2" Class="mb-3">
+                        @_progress.Succeeded / @_progress.TotalChildJobs succeeded
+                        (@_progress.PercentComplete%)
+                        @if (_progress.EstimatedRemaining is not null)
+                        {
+                            <span> · ETA @_progress.EstimatedRemaining.Value.ToString(@"hh\:mm\:ss")</span>
+                        }
+                    </MudText>
+
+                    <MudStack Row="true" Spacing="2">
+                        <MudChip T="string" Size="Size.Small">Running: @_progress.Running</MudChip>
+                        <MudChip T="string" Size="Size.Small">Queued: @_progress.Queued</MudChip>
+                        <MudChip T="string" Size="Size.Small" Color="Color.Error">Failed: @_progress.Failed</MudChip>
+                    </MudStack>
+
+                    <MudStack Row="true" Class="mt-4" Spacing="2">
+                        @if (_progress.ParentStatus == "Paused")
+                        {
+                            <MudButton Variant="Variant.Filled" Color="Color.Success" OnClick="ResumeAsync">Resume</MudButton>
+                        }
+                        else if (_progress.ParentStatus is "Running" or "Queued")
+                        {
+                            <MudButton Variant="Variant.Outlined" Color="Color.Warning" OnClick="PauseAsync">Pause</MudButton>
+                        }
+                        <MudButton Variant="Variant.Text" Href="@($"/admin/jobs")">View Jobs</MudButton>
+                    </MudStack>
+                </MudCardContent>
+            </MudCard>
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Normal">No active backfill — start one above or pick a recent job below.</MudAlert>
+        }
+    </MudItem>
+</MudGrid>
+
+<MudText Typo="Typo.h6" Class="mb-2">Recent Backfills</MudText>
+<MudTable Items="_recentBackfills" Dense="true" Hover="true" Loading="_loading">
+    <HeaderContent>
+        <MudTh>ID</MudTh>
+        <MudTh>Seasons</MudTh>
+        <MudTh>Status</MudTh>
+        <MudTh>Created</MudTh>
+        <MudTh></MudTh>
+    </HeaderContent>
+    <RowTemplate>
+        <MudTd>@context.Id</MudTd>
+        <MudTd>@context.Season–@context.Week</MudTd>
+        <MudTd><MudChip T="string" Size="Size.Small">@context.Status</MudChip></MudTd>
+        <MudTd>@context.CreatedAt.ToString("g")</MudTd>
+        <MudTd>
+            <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small"
+                           OnClick="@(() => SelectJobAsync(context.Id))" />
+        </MudTd>
+    </RowTemplate>
+</MudTable>
+
+@code {
+    private int _startSeason = 2006;
+    private int _endSeason = 2025;
+    private bool _backupFirst = true;
+    private bool _submitting;
+    private bool _loading = true;
+    private BackfillProgress? _progress;
+    private BackfillWorkloadEstimate? _estimate;
+    private List<ScrapeJob> _recentBackfills = new();
+    private int? _activeJobId;
+    private Timer? _timer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadEstimateAsync();
+        await LoadRecentAsync();
+        _timer = new Timer(async _ => await RefreshProgressAsync(), null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+    }
+
+    private async Task LoadEstimateAsync()
+    {
+        _estimate = BackfillWorkloadEstimator.Estimate(_startSeason, _endSeason);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadRecentAsync()
+    {
+        _loading = true;
+        using var scope = ScopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        _recentBackfills = await db.ScrapeJobs
+            .AsNoTracking()
+            .Where(j => j.Type == ScrapeJobType.Backfill)
+            .OrderByDescending(j => j.CreatedAt)
+            .Take(10)
+            .ToListAsync();
+
+        _activeJobId ??= _recentBackfills
+            .FirstOrDefault(j => j.Status is ScrapeJobStatus.Running or ScrapeJobStatus.Paused or ScrapeJobStatus.Queued)?.Id;
+
+        _loading = false;
+        await RefreshProgressAsync();
+    }
+
+    private async Task RefreshProgressAsync()
+    {
+        if (_activeJobId is not int jobId)
+            return;
+
+        using var scope = ScopeFactory.CreateScope();
+        var orchestrator = scope.ServiceProvider.GetRequiredService<BackfillOrchestrator>();
+        try
+        {
+            _progress = await orchestrator.GetProgressAsync(jobId);
+            await InvokeAsync(StateHasChanged);
+        }
+        catch
+        {
+            // Job may have been deleted
+        }
+    }
+
+    private async Task SelectJobAsync(int jobId)
+    {
+        _activeJobId = jobId;
+        await RefreshProgressAsync();
+    }
+
+    private async Task StartBackfillAsync()
+    {
+        if (_endSeason < _startSeason)
+        {
+            Snackbar.Add("End season must be >= start season.", Severity.Warning);
+            return;
+        }
+
+        _submitting = true;
+
+        if (_backupFirst)
+        {
+            using var backupScope = ScopeFactory.CreateScope();
+            var backup = backupScope.ServiceProvider.GetRequiredService<SqliteBackupService>();
+            try
+            {
+                var result = backup.CreateBackup();
+                Snackbar.Add($"Backup created: {result.FileName}", Severity.Success);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Backup failed: {ex.Message}", Severity.Error);
+                _submitting = false;
+                return;
+            }
+        }
+
+        var authState = await AuthState.GetAuthenticationStateAsync();
+        var email = authState.User.FindFirst(System.Security.Claims.ClaimTypes.Name)?.Value;
+
+        using var scope = ScopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var job = new ScrapeJob
+        {
+            Type = ScrapeJobType.Backfill,
+            Source = ScraperSettings.Value.DataProvider,
+            Season = _startSeason,
+            Week = _endSeason,
+            Status = ScrapeJobStatus.Queued,
+            CreatedAt = DateTime.UtcNow,
+            RequestedBy = email,
+        };
+
+        db.ScrapeJobs.Add(job);
+        await db.SaveChangesAsync();
+        JobQueue.TryEnqueue(job.Id);
+
+        _activeJobId = job.Id;
+        Snackbar.Add($"Backfill job #{job.Id} queued.", Severity.Success);
+        _submitting = false;
+        await LoadRecentAsync();
+    }
+
+    private async Task PauseAsync()
+    {
+        if (_activeJobId is not int jobId) return;
+
+        using var scope = ScopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var job = await db.ScrapeJobs.FindAsync(jobId);
+        if (job is null) return;
+
+        job.Status = ScrapeJobStatus.Paused;
+        await db.SaveChangesAsync();
+        Snackbar.Add("Backfill paused.", Severity.Info);
+        await RefreshProgressAsync();
+    }
+
+    private async Task ResumeAsync()
+    {
+        if (_activeJobId is not int jobId) return;
+
+        using var scope = ScopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var orchestrator = scope.ServiceProvider.GetRequiredService<BackfillOrchestrator>();
+
+        var job = await db.ScrapeJobs.FindAsync(jobId);
+        if (job is null) return;
+
+        job.Status = ScrapeJobStatus.Running;
+        job.StartedAt ??= DateTime.UtcNow;
+        await db.SaveChangesAsync();
+
+        var children = await db.ScrapeJobs.Where(j => j.ParentJobId == jobId).ToListAsync();
+        foreach (var childId in BackfillProgressCalculator.GetEnqueueableChildIds(children))
+            JobQueue.TryEnqueue(childId);
+
+        Snackbar.Add("Backfill resumed.", Severity.Success);
+        await RefreshProgressAsync();
+    }
+
+    public void Dispose() => _timer?.Dispose();
+}
