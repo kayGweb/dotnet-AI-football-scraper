@@ -3,10 +3,21 @@
 **Goals**
 1. A database an agent can manage end-to-end (not just read).
 2. 20 seasons of NFL data loaded before end of 2026.
-3. All available football data by summer 2027.
+3. All available football data back to the 1970 merger by summer 2027.
 4. An MCP server + a Skill so Claude can operate it.
 5. A self-improving loop — the system finds and fills its own gaps.
 6. A human login to check the state of the application.
+
+**Decisions locked (2026-07-29)**
+
+| # | Decision | Consequence |
+|---|---|---|
+| 1 | Agent writes go through a **proposal queue** | `DataCorrection` table + approval UI (§2, §6) |
+| 2 | **Parameterized `query_stats` only** — no raw SQL | No read-only replica needed; whitelist is the contract (§2) |
+| 3 | Play-by-play — *unanswered*, defaulted to **Phase F** | Not in the December milestone (§7) |
+| 4 | **Include betting odds** | Promoted to a first-class modeled entity (§5.1) |
+| 5 | Backfill runs on the **local Hermes agent** | Changes the run/delivery architecture (§7, Phase E) |
+| 6 | Deep history **stops at 1970** (merger era) | Phase G rescoped: ~8,400 games, not ~14,000 (§7, Phase G) |
 
 ---
 
@@ -122,7 +133,7 @@ Three tiers of capability, each gated differently:
 | **Operate** (new) | trigger scrape, check job, query coverage, retry failed job | API key, `operate` scope | none |
 | **Mutate** (new, guarded) | correct a field, merge duplicate players, soft-delete a row | API key, `admin` scope | **human approval queue** |
 
-**Recommendation: agents propose mutations, humans approve them.** A `DataCorrection`
+**DECIDED: agents propose mutations, humans approve them.** A `DataCorrection`
 table holds proposed changes (entity, field, old value, new value, rationale,
 proposing agent, status). The agent writes proposals; the dashboard has an approve/
 reject queue; an approved correction is applied by a worker and logged. This gives
@@ -149,11 +160,27 @@ known-bad game are auto-approved — re-running a scraper is idempotent and safe
 - `nfl_propose_correction(entityType, id, field, newValue, rationale)`
 - `nfl_list_corrections(status)`
 
-On `nfl_query_stats` vs. raw SQL: raw SQL against the DB is the fastest way to give
-an agent power and the fastest way to get table scans, lock contention, and
-accidental writes. A parameterized aggregation tool covers ~90% of real questions
-with a bounded blast radius. If it proves too restrictive, the escape hatch is a
-**read-only replica connection with a statement timeout**, never the primary.
+**DECIDED: parameterized `nfl_query_stats` only — no raw SQL, no replica.** Raw SQL
+is the fastest way to give an agent power and the fastest way to get table scans,
+lock contention, and accidental writes. A parameterized aggregation tool covers
+~90% of real questions with a bounded blast radius.
+
+Because the whitelist *is* the contract, it has to be designed rather than grown
+ad hoc. Initial surface:
+
+- **Dimensions:** season, seasonType, week, team, franchise, player, position,
+  venue, conference, division, homeAway, opponent
+- **Measures:** every numeric column on `PlayerGameStats` and `TeamGameStats`,
+  plus game-level scores
+- **Aggregations:** sum, avg, min, max, count, rank
+- **Modifiers:** filter (=, !=, >, <, between, in), groupBy (≤3 dimensions),
+  orderBy, limit (hard cap 500), having
+
+Every call is logged to `ApiQueryLogs` with its parsed shape. **Review those logs
+monthly** — the queries agents *try* and fail to express are the roadmap for
+extending the whitelist. If a real question can't be expressed after two rounds of
+extension, that's the signal to revisit the no-SQL decision, not a reason to hedge
+now.
 
 ---
 
@@ -237,9 +264,49 @@ Assessed against what ESPN and PFR actually expose.
 | **Scoring plays** | ESPN `/summary` → `scoringPlays` | "How did they score?" — very common question |
 | **Weather** | ESPN `/summary` → `gameInfo.weather` | Game-day conditions, already in a DTO you parse |
 | **Officials / referee crew** | ESPN `/summary` → `gameInfo.officials` | Penalty-tendency analysis |
-| **Game odds / betting lines** | ESPN `/summary` → `pickcenter` | Heavily requested; spread, O/U, moneyline |
+| **Betting odds** | ESPN `/summary` → `pickcenter` | **DECIDED: in scope.** First-class entity — see §5.1 |
 | **Broadcast + kickoff time** | ESPN scoreboard `competitions.broadcasts` | "Gameday" completeness |
 | **Player headshots / team logos** | ESPN CDN | Already scoped in UpdatePlan_v1 W2 |
+
+### 5.1 Betting odds — modeled, not a column
+
+Odds are not one value per game. They are *many values per game, per sportsbook,
+over time*. Flattening them into three columns on `Game` throws away the thing
+that makes odds interesting (line movement) and is unmigratable later.
+
+**`GameOdds` table**
+- `Id`, `GameId` (FK), `Sportsbook` (ESPN returns several providers)
+- `Spread` (home-relative, signed), `OverUnder`, `HomeMoneyline`, `AwayMoneyline`
+- `SnapshotType` (enum: Opening, Current, Closing)
+- `CapturedAt` (UTC) — when *we* observed it
+- Standard audit + soft-delete columns
+- Unique index on `(GameId, Sportsbook, SnapshotType, CapturedAt)`
+
+Opening and closing lines are the two rows that matter for analysis. Intraday
+movement is optional and only obtainable going forward — see the coverage caveat.
+
+**Three consequences you should expect:**
+
+1. **Historical odds coverage is thin and we will not know how thin until we
+   look.** ESPN's `pickcenter` block is populated for recent seasons but degrades
+   going back, and is very likely absent for most of 2006–2012. Odds coverage
+   therefore needs its **own row in the coverage matrix**, tracked separately from
+   game/stats coverage, so "we have 2008" never implies "we have 2008 odds."
+   Expect to fill historical gaps from a secondary source later; design for it now
+   by keying on `Sportsbook` rather than assuming ESPN.
+
+2. **Closing lines can only be captured live.** Once a game is final, ESPN reports
+   whatever the last-known line was — you cannot reconstruct the true opening line
+   after the fact. To get real opening/closing pairs for the 2026 season onward,
+   an `OddsPoll` job must run on upcoming games (daily is enough; hourly in the
+   24h before kickoff). **Start this in September 2026 regardless of where the rest
+   of the plan is** — every week it isn't running is a week of lines lost forever.
+
+3. **It changes the product's character, as flagged.** Once odds are in, the
+   obvious next questions are against-the-spread records and over/under trends.
+   Those are cheap to compute *if* `GameOdds` is modeled as above and expensive to
+   retrofit if it isn't. No gambling-advice framing in the Skill — the Skill
+   reports historical lines and results as data, and does not predict.
 
 ### Tier 2 — high value, more work
 | Data | Source | Notes |
@@ -323,6 +390,32 @@ already banked the seasons people actually ask about. Budget one week of
 supervised running, not one afternoon, because the first three seasons will surface
 parse bugs the quality rules then catch for the remaining seventeen.
 
+**DECIDED: the backfill runs on the local Hermes agent, not App Platform.** Good
+call — this is a batch job, not a service, and paying for cloud uptime to run it
+would be waste. It does change four things:
+
+1. **Local SQLite is the write target; Postgres is the publish target.** The
+   backfill writes to `data/nfl_data.db`, and the existing `DatabasePushService`
+   promotes it. That's the right split, but push is currently an all-or-nothing
+   full-table upsert — at ~5,400 games plus stats it needs **batching and
+   resumability** before it's the delivery path for a dataset this size. Treat
+   "make push incremental" as a Phase B deliverable, not a Phase E surprise.
+
+2. **The machine will sleep, reboot, and lose Wi-Fi.** Assume interruption as the
+   normal case. The `Backfill` job's checkpoint/resume (Phase B) is what makes
+   this survivable, and it is now load-bearing rather than a nicety. Resume must
+   work from a cold start with no in-memory state.
+
+3. **Back up the SQLite file before each backfill session.** A corrupted local DB
+   with no replica is the one failure mode here that costs real time. Cheap
+   insurance: copy the file, keep the last three.
+
+4. **Nothing needs to be internet-reachable during the backfill.** The API,
+   dashboard, and MCP server can all point at the same local SQLite while it runs
+   — you get live coverage monitoring with zero hosting. Deploy to App Platform
+   when you want the data *served*, which is a separate decision from where it's
+   *built*.
+
 **Milestone: 20 seasons loaded + coverage green — target Dec 1, 2026.**
 December is reconciliation, cross-provider checks, and closing findings. This is
 the buffer that makes the deadline credible.
@@ -331,39 +424,89 @@ the buffer that makes the deadline credible.
 ~950k rows for 20 seasons. Separate table, separate job type, run after the core
 data is green.
 
-### Phase G — Deep history, 1920–2005 (Feb–Jun 2027)
-This is a genuinely different project and needs to be scoped as one:
-- **ESPN box score coverage degrades before ~2002** and is unreliable before ~1994.
-  Pre-2002 must come from **PFR HTML**, which means fragile parsers and a much
-  more aggressive politeness budget (PFR rate-limits hard — assume 5–6s/request).
-- Volume: ~14,000 games 1920–2005. At 5s ≈ 20 hours of fetch, spread over weeks.
-- Identity resolution across 100 years is the real cost: franchise mergers
-  (1943 "Steagles"), defunct teams, the AFL/NFL merger, name normalization.
-- Play-by-play does not exist before ~1999. Set expectations: pre-1999 is
-  scores + box scores, not plays.
+### Phase G — Deep history, 1970–2005 (Feb–Jun 2027)
 
-**Milestone: all reliably-available football data — target Jun 2027.**
-"All football data" should be defined as: **every game, team, and player-game
-stat line that a public source actually exposes**, with a documented coverage
-matrix showing what exists per era. Anything stronger is not achievable, and
-saying so now is better than discovering it in May.
+**DECIDED: stop at 1970.** The right cutoff, and for a better reason than volume.
+1970 is the AFL–NFL merger: it is the first season with one league, one set of
+rules, one statistical standard, and a franchise set that mostly still exists.
+Everything before it requires modeling defunct leagues, defunct teams, and
+wartime franchise mergers (the 1943 "Steagles") for data almost nobody queries.
+
+**Revised volume: ~8,400 games, 1970–2005.**
+
+| Era | Teams | Games/season | Seasons | Games |
+|---|---|---|---|---|
+| 1970–1975 | 26 | 182 + 7 playoff | 6 | 1,134 |
+| 1976–1977 | 28 | 196 + 7 | 2 | 406 |
+| 1978–1989 | 28 | 224 + 10 | 12 | 2,808 |
+| 1990–1994 | 28 | 224 + 11 | 5 | 1,175 |
+| 1995–1998 | 30 | 240 + 11 | 4 | 1,004 |
+| 1999–2001 | 31 | 248 + 11 | 3 | 777 |
+| 2002–2005 | 32 | 256 + 11 | 4 | 1,068 |
+| **Total** | | | **36** | **~8,372** |
+
+Combined with Phase E, the finished dataset is **56 seasons, ~13,800 games**.
+
+At a PFR-polite 5s/request that's ~12 hours of fetch — again, not the constraint.
+The constraints are:
+
+- **ESPN box score coverage degrades before ~2002** and is unreliable before
+  ~1994. Pre-2002 comes from **PFR HTML**: fragile parsers, and PFR rate-limits
+  hard. Budget 5–6s/request and expect to be throttled anyway.
+- **Stat categories are not constant across eras.** Sacks are not official before
+  1982. Targets don't exist before 1992. QBR is 2006+. The schema must permit
+  nulls and the coverage matrix must record *which categories exist per era* —
+  otherwise every historical leaderboard is silently wrong. This is the single
+  biggest correctness risk in Phase G.
+- **Franchise identity still moves after 1970**, just less chaotically: Colts
+  BAL→IND (1984), Cardinals STL→PHX→ARI, Raiders OAK→LA→OAK→LV, Rams LA→STL→LA,
+  Oilers→Titans (1997–99). The `Franchise`/`TeamSeason` model from Phase A handles
+  all of these.
+- **The Browns/Ravens case needs an explicit ruling.** In 1996 the Cleveland
+  franchise physically moved to Baltimore and became the Ravens, but the NFL
+  treats the Browns' records and identity as having *stayed in Cleveland*, with
+  the 1999 expansion team continuing them. So the legal franchise and the
+  record-keeping franchise diverge. **Recommendation: follow the NFL's convention**
+  — Browns history is continuous 1946→1995, dormant 1996–1998, resumes 1999;
+  Ravens are a new franchise starting 1996. Encode it as data in the `Franchise`
+  table, not as a special case in code.
+- **Play-by-play does not exist before ~1999.** Pre-1999 is scores + box scores,
+  and that should be stated in the coverage matrix rather than discovered.
+
+**Milestone: all reliably-available football data back to 1970 — target Jun 2027.**
+Definition of done: **every game, team, and player-game stat line from 1970 onward
+that a public source actually exposes**, plus a published coverage matrix showing
+what exists per era and per category. Anything stronger isn't achievable, and
+saying so now beats discovering it in May.
 
 ---
 
-## 8. Decisions I need from you
+## 8. Decisions
 
-1. **Agent write access** — proposal queue (recommended) vs. direct writes for
-   scoped operations?
-2. **Raw SQL for agents** — parameterized `query_stats` only (recommended), or
-   read-only replica with free SQL as an escape hatch?
-3. **Play-by-play** — in scope for the December milestone, or Phase F as scoped?
-   It roughly doubles storage and adds a season's worth of parse surface.
-4. **Betting odds** — include? It's the most-requested category and it's already
-   in the `/summary` payload you fetch, but it changes the character of the product.
-5. **Hosting for the backfill** — a 20-season run needs a machine that stays up for
-   days. DigitalOcean App Platform (per CLAUDE.md) or something you control?
-6. **Deep-history ambition** — full 1920+ (Phase G as written), or stop at 1970
-   (merger era, far better data quality, ~60% less parser work)?
+Five of six resolved 2026-07-29 — see the table at the top. Consequences are
+folded into §2 (proposal queue, query whitelist), §5.1 (odds), and §7 (local
+backfill, 1970 cutoff).
+
+### Still open
+
+**Play-by-play in the December milestone, or Phase F?** Defaulted to **Phase F**
+(after the December milestone) so the plan can proceed. Reasons to leave it there:
+it's ~950k rows for 20 seasons, roughly doubles storage, and adds a large new
+parse surface right when Phase E needs attention on core correctness. Reasons to
+pull it forward: it's the richest data ESPN exposes, and re-walking 5,400 games
+later costs another full backfill pass.
+
+Answer any time before **November**; after the Phase E run starts, pulling it
+forward means a second pass over every game.
+
+### Two new items that surfaced from these answers
+
+- **Start the `OddsPoll` job in September 2026**, ahead of its phase. Closing lines
+  can't be reconstructed after kickoff (§5.1). Every week it isn't running is a
+  week of 2026 lines permanently lost.
+- **Make `DatabasePushService` incremental and resumable in Phase B.** With the
+  backfill running locally, push is now the only delivery path for ~5,400 games of
+  data, and it's currently an all-or-nothing full-table upsert (§7 Phase E).
 
 ## 9. Environment note
 This container has no .NET SDK (`dotnet: command not found`), so nothing here has
