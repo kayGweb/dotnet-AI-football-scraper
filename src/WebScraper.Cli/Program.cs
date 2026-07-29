@@ -375,8 +375,8 @@ static async Task<int> RunListCommandAsync(string[] args, IServiceProvider servi
             var tgsRepo = services.GetRequiredService<ITeamGameStatsRepository>();
             foreach (var game in tgsGames)
             {
-                var homeAbbr = game.HomeTeam?.Abbreviation ?? "???";
-                var awayAbbr = game.AwayTeam?.Abbreviation ?? "???";
+                var homeAbbr = game.HomeTeamSeason?.Abbreviation ?? "???";
+                var awayAbbr = game.AwayTeamSeason?.Abbreviation ?? "???";
                 display.PrintInfo($"{awayAbbr} @ {homeAbbr} — Week {game.Week}");
                 var tgsStats = await tgsRepo.GetByGameAsync(game.Id);
                 display.PrintTeamGameStatsTable(tgsStats);
@@ -394,8 +394,8 @@ static async Task<int> RunListCommandAsync(string[] args, IServiceProvider servi
             var injRepo = services.GetRequiredService<IInjuryRepository>();
             foreach (var game in injGames)
             {
-                var homeAbbr = game.HomeTeam?.Abbreviation ?? "???";
-                var awayAbbr = game.AwayTeam?.Abbreviation ?? "???";
+                var homeAbbr = game.HomeTeamSeason?.Abbreviation ?? "???";
+                var awayAbbr = game.AwayTeamSeason?.Abbreviation ?? "???";
                 var gameInjuries = await injRepo.GetByGameAsync(game.Id);
                 var injList = gameInjuries.ToList();
                 if (injList.Count > 0)
@@ -749,8 +749,8 @@ static async Task HandleViewMenuAsync(IServiceProvider services, ConsoleDisplayS
             var tgsRepo = services.GetRequiredService<ITeamGameStatsRepository>();
             foreach (var game in tgsGames)
             {
-                var homeAbbr = game.HomeTeam?.Abbreviation ?? "???";
-                var awayAbbr = game.AwayTeam?.Abbreviation ?? "???";
+                var homeAbbr = game.HomeTeamSeason?.Abbreviation ?? "???";
+                var awayAbbr = game.AwayTeamSeason?.Abbreviation ?? "???";
                 display.PrintInfo($"{awayAbbr} @ {homeAbbr} — Week {game.Week}");
                 var tgsStats = await tgsRepo.GetByGameAsync(game.Id);
                 display.PrintTeamGameStatsTable(tgsStats);
@@ -767,8 +767,8 @@ static async Task HandleViewMenuAsync(IServiceProvider services, ConsoleDisplayS
             var injRepo = services.GetRequiredService<IInjuryRepository>();
             foreach (var game in injGames)
             {
-                var homeAbbr = game.HomeTeam?.Abbreviation ?? "???";
-                var awayAbbr = game.AwayTeam?.Abbreviation ?? "???";
+                var homeAbbr = game.HomeTeamSeason?.Abbreviation ?? "???";
+                var awayAbbr = game.AwayTeamSeason?.Abbreviation ?? "???";
                 var gameInjuries = await injRepo.GetByGameAsync(game.Id);
                 var injList = gameInjuries.ToList();
                 if (injList.Count > 0)

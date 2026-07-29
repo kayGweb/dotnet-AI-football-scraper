@@ -10,7 +10,12 @@ public class ScrapeJob
 
     public int? Season { get; set; }
 
+    public NflSeasonType? SeasonType { get; set; }
+
     public int? Week { get; set; }
+
+    /// <summary>Parent job when this row was created by a Backfill fan-out.</summary>
+    public int? ParentJobId { get; set; }
 
     public ScrapeJobStatus Status { get; set; } = ScrapeJobStatus.Queued;
 
@@ -35,7 +40,8 @@ public enum ScrapeJobType
     Players,
     Games,
     Stats,
-    All
+    All,
+    Backfill,
 }
 
 public enum ScrapeJobStatus

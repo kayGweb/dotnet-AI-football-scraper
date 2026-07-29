@@ -39,8 +39,8 @@ public class GamesController : ControllerBase
     {
         var query = _db.Games
             .AsNoTracking()
-            .Include(g => g.HomeTeam)
-            .Include(g => g.AwayTeam)
+            .Include(g => g.HomeTeamSeason)
+            .Include(g => g.AwayTeamSeason)
             .Include(g => g.Venue)
             .AsQueryable();
 
@@ -54,7 +54,8 @@ public class GamesController : ControllerBase
         }
         if (teamId.HasValue)
         {
-            query = query.Where(g => g.HomeTeamId == teamId.Value || g.AwayTeamId == teamId.Value);
+            query = query.Where(g =>
+                g.HomeTeamSeasonId == teamId.Value || g.AwayTeamSeasonId == teamId.Value);
         }
 
         var totalCount = await query.CountAsync(cancellationToken);
@@ -80,8 +81,8 @@ public class GamesController : ControllerBase
     {
         var game = await _db.Games
             .AsNoTracking()
-            .Include(g => g.HomeTeam)
-            .Include(g => g.AwayTeam)
+            .Include(g => g.HomeTeamSeason)
+            .Include(g => g.AwayTeamSeason)
             .Include(g => g.Venue)
             .FirstOrDefaultAsync(g => g.Id == id, cancellationToken);
         if (game is null)
@@ -111,7 +112,7 @@ public class GamesController : ControllerBase
 
         var rows = await _db.TeamGameStats
             .AsNoTracking()
-            .Include(s => s.Team)
+            .Include(s => s.TeamSeason)
             .Where(s => s.GameId == id)
             .ToListAsync(cancellationToken);
 

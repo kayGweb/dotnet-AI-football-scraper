@@ -4,7 +4,7 @@ public class TeamGameStats : IAuditableEntity, ISoftDeletable
 {
     public int Id { get; set; }
     public int GameId { get; set; }
-    public int TeamId { get; set; }
+    public int TeamSeasonId { get; set; }
 
     // First downs
     public int FirstDowns { get; set; }
@@ -58,5 +58,5 @@ public class TeamGameStats : IAuditableEntity, ISoftDeletable
     public string? DeleteReason { get; set; }
 
     public Game Game { get; set; } = null!;
-    public Team Team { get; set; } = null!;
+    public TeamSeason TeamSeason { get; set; } = null!;
 }

@@ -114,14 +114,14 @@ public class ConsoleDisplayServiceTests
     [Fact]
     public void PrintGamesTable_ShouldShowGameData()
     {
-        var homeTeam = new Team { Abbreviation = "KC" };
-        var awayTeam = new Team { Abbreviation = "BUF" };
+        var homeTeam = new TeamSeason { Abbreviation = "KC" };
+        var awayTeam = new TeamSeason { Abbreviation = "BUF" };
         var games = new List<Game>
         {
             new()
             {
                 Season = 2025, Week = 1, HomeScore = 27, AwayScore = 24,
-                HomeTeam = homeTeam, AwayTeam = awayTeam,
+                HomeTeamSeason = homeTeam, AwayTeamSeason = awayTeam,
                 GameDate = new DateTime(2025, 9, 7)
             }
         };

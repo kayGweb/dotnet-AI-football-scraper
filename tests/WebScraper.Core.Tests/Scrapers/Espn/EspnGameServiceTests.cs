@@ -46,7 +46,12 @@ public class EspnGameServiceTests
         return new RateLimiterService(Options.Create(new ScraperSettings { RequestDelayMs = 0 }));
     }
 
-    private static (EspnGameService Service, Mock<IGameRepository> GameRepo, Mock<ITeamRepository> TeamRepo)
+    private static (
+        EspnGameService Service,
+        Mock<IGameRepository> GameRepo,
+        Mock<ITeamRepository> TeamRepo,
+        Mock<ITeamSeasonRepository> TeamSeasonRepo,
+        Mock<IFranchiseRepository> FranchiseRepo)
         CreateService(HttpMessageHandler handler)
     {
         var httpClient = new HttpClient(handler) { BaseAddress = new Uri("http://espn.test") };
@@ -54,27 +59,38 @@ public class EspnGameServiceTests
         var providerSettings = new ApiProviderSettings { AuthType = "None" };
         var gameRepo = new Mock<IGameRepository>();
         var teamRepo = new Mock<ITeamRepository>();
+        var teamSeasonRepo = new Mock<ITeamSeasonRepository>();
+        var franchiseRepo = new Mock<IFranchiseRepository>();
         var venueRepo = new Mock<IVenueRepository>();
         var apiLinkRepo = new Mock<IApiLinkRepository>();
         var service = new EspnGameService(httpClient, logger, providerSettings, CreateRateLimiter(),
-            gameRepo.Object, teamRepo.Object, venueRepo.Object, apiLinkRepo.Object);
-        return (service, gameRepo, teamRepo);
+            gameRepo.Object, teamRepo.Object, teamSeasonRepo.Object, franchiseRepo.Object,
+            venueRepo.Object, apiLinkRepo.Object);
+        return (service, gameRepo, teamRepo, teamSeasonRepo, franchiseRepo);
     }
 
-    private static void SetupTeamLookup(Mock<ITeamRepository> teamRepo)
+    private static void SetupTeamLookup(Mock<ITeamRepository> teamRepo, Mock<ITeamSeasonRepository>? teamSeasonRepo = null)
     {
         teamRepo.Setup(r => r.GetByAbbreviationAsync("KC"))
             .ReturnsAsync(new Team { Id = 1, Abbreviation = "KC", Name = "Kansas City Chiefs" });
         teamRepo.Setup(r => r.GetByAbbreviationAsync("BUF"))
             .ReturnsAsync(new Team { Id = 2, Abbreviation = "BUF", Name = "Buffalo Bills" });
+
+        if (teamSeasonRepo != null)
+        {
+            teamSeasonRepo.Setup(r => r.EnsureFromTeamAsync(It.Is<Team>(t => t.Abbreviation == "KC"), 2025))
+                .ReturnsAsync(new TeamSeason { Id = 10, Abbreviation = "KC", Season = 2025 });
+            teamSeasonRepo.Setup(r => r.EnsureFromTeamAsync(It.Is<Team>(t => t.Abbreviation == "BUF"), 2025))
+                .ReturnsAsync(new TeamSeason { Id = 20, Abbreviation = "BUF", Season = 2025 });
+        }
     }
 
     [Fact]
     public async Task ScrapeGamesAsync_WithWeek_ShouldParseAndUpsertGame()
     {
         var handler = new FakeHttpHandler(SampleScoreboardJson);
-        var (service, gameRepo, teamRepo) = CreateService(handler);
-        SetupTeamLookup(teamRepo);
+        var (service, gameRepo, teamRepo, teamSeasonRepo, _) = CreateService(handler);
+        SetupTeamLookup(teamRepo, teamSeasonRepo);
 
         var result = await service.ScrapeGamesAsync(2025, 1);
 
@@ -87,8 +103,8 @@ public class EspnGameServiceTests
     public async Task ScrapeGamesAsync_ShouldMapHomeAndAwayTeamsCorrectly()
     {
         var handler = new FakeHttpHandler(SampleScoreboardJson);
-        var (service, gameRepo, teamRepo) = CreateService(handler);
-        SetupTeamLookup(teamRepo);
+        var (service, gameRepo, teamRepo, teamSeasonRepo, _) = CreateService(handler);
+        SetupTeamLookup(teamRepo, teamSeasonRepo);
 
         Game? capturedGame = null;
         gameRepo.Setup(r => r.UpsertAsync(It.IsAny<Game>()))
@@ -99,16 +115,16 @@ public class EspnGameServiceTests
 
         Assert.True(result.Success);
         Assert.NotNull(capturedGame);
-        Assert.Equal(1, capturedGame.HomeTeamId);  // KC = ID 1
-        Assert.Equal(2, capturedGame.AwayTeamId);   // BUF = ID 2
+        Assert.Equal(10, capturedGame.HomeTeamSeasonId);
+        Assert.Equal(20, capturedGame.AwayTeamSeasonId);
     }
 
     [Fact]
     public async Task ScrapeGamesAsync_ShouldParseScoresCorrectly()
     {
         var handler = new FakeHttpHandler(SampleScoreboardJson);
-        var (service, gameRepo, teamRepo) = CreateService(handler);
-        SetupTeamLookup(teamRepo);
+        var (service, gameRepo, teamRepo, teamSeasonRepo, _) = CreateService(handler);
+        SetupTeamLookup(teamRepo, teamSeasonRepo);
 
         Game? capturedGame = null;
         gameRepo.Setup(r => r.UpsertAsync(It.IsAny<Game>()))
@@ -127,8 +143,8 @@ public class EspnGameServiceTests
     public async Task ScrapeGamesAsync_ShouldSetSeasonAndWeek()
     {
         var handler = new FakeHttpHandler(SampleScoreboardJson);
-        var (service, gameRepo, teamRepo) = CreateService(handler);
-        SetupTeamLookup(teamRepo);
+        var (service, gameRepo, teamRepo, teamSeasonRepo, _) = CreateService(handler);
+        SetupTeamLookup(teamRepo, teamSeasonRepo);
 
         Game? capturedGame = null;
         gameRepo.Setup(r => r.UpsertAsync(It.IsAny<Game>()))
@@ -144,24 +160,33 @@ public class EspnGameServiceTests
     }
 
     [Fact]
-    public async Task ScrapeGamesAsync_TeamNotInDb_ShouldSkipGame()
+    public async Task ScrapeGamesAsync_TeamNotInDb_ShouldCreateTeamSeasonViaFranchise()
     {
         var handler = new FakeHttpHandler(SampleScoreboardJson);
-        var (service, gameRepo, teamRepo) = CreateService(handler);
-        // Don't set up team lookups -> both return null
+        var (service, gameRepo, _, teamSeasonRepo, franchiseRepo) = CreateService(handler);
+
+        franchiseRepo.Setup(r => r.GetOrCreateAsync("KC", "KC"))
+            .ReturnsAsync(new Franchise { Id = 1, CanonicalAbbreviation = "KC", DisplayName = "KC" });
+        franchiseRepo.Setup(r => r.GetOrCreateAsync("BUF", "BUF"))
+            .ReturnsAsync(new Franchise { Id = 2, CanonicalAbbreviation = "BUF", DisplayName = "BUF" });
+        teamSeasonRepo.Setup(r => r.UpsertAsync(It.Is<TeamSeason>(ts => ts.Abbreviation == "KC")))
+            .ReturnsAsync(new TeamSeason { Id = 10, Abbreviation = "KC", Season = 2025, FranchiseId = 1 });
+        teamSeasonRepo.Setup(r => r.UpsertAsync(It.Is<TeamSeason>(ts => ts.Abbreviation == "BUF")))
+            .ReturnsAsync(new TeamSeason { Id = 20, Abbreviation = "BUF", Season = 2025, FranchiseId = 2 });
 
         var result = await service.ScrapeGamesAsync(2025, 1);
 
         Assert.True(result.Success);
-        Assert.Equal(0, result.RecordsProcessed);
-        gameRepo.Verify(r => r.UpsertAsync(It.IsAny<Game>()), Times.Never);
+        Assert.Equal(1, result.RecordsProcessed);
+        gameRepo.Verify(r => r.UpsertAsync(It.IsAny<Game>()), Times.Once);
+        franchiseRepo.Verify(r => r.GetOrCreateAsync(It.IsAny<string>(), It.IsAny<string>()), Times.Exactly(2));
     }
 
     [Fact]
     public async Task ScrapeGamesAsync_NullResponse_ShouldNotThrow()
     {
         var handler = new FakeHttpHandler(HttpStatusCode.InternalServerError);
-        var (service, gameRepo, _) = CreateService(handler);
+        var (service, gameRepo, _, _, _) = CreateService(handler);
 
         var result = await service.ScrapeGamesAsync(2025, 1);
 
@@ -185,7 +210,7 @@ public class EspnGameServiceTests
         }
         """;
         var handler = new FakeHttpHandler(json);
-        var (service, gameRepo, _) = CreateService(handler);
+        var (service, gameRepo, _, _, _) = CreateService(handler);
 
         var result = await service.ScrapeGamesAsync(2025, 1);
 
@@ -199,8 +224,8 @@ public class EspnGameServiceTests
     {
         EspnGameService.ClearEventIdCache();
         var handler = new FakeHttpHandler(SampleScoreboardJson);
-        var (service, gameRepo, teamRepo) = CreateService(handler);
-        SetupTeamLookup(teamRepo);
+        var (service, _, teamRepo, teamSeasonRepo, _) = CreateService(handler);
+        SetupTeamLookup(teamRepo, teamSeasonRepo);
 
         await service.ScrapeGamesAsync(2025, 1);
 

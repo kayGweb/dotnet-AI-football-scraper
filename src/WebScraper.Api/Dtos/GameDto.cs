@@ -4,6 +4,7 @@ public class GameDto
 {
     public int Id { get; set; }
     public int Season { get; set; }
+    public string SeasonType { get; set; } = "Regular";
     public int Week { get; set; }
     public DateTime GameDate { get; set; }
     public string? GameStatus { get; set; }

@@ -27,7 +27,7 @@ public class StatsScraperService : BaseScraperService, IStatsScraperService
         _gameRepository = gameRepository;
     }
 
-    public async Task<ScrapeResult> ScrapePlayerStatsAsync(int season, int week)
+    public async Task<ScrapeResult> ScrapePlayerStatsAsync(int season, int week, NflSeasonType seasonType = NflSeasonType.Regular)
     {
         _logger.LogInformation("Starting player stats scrape for season {Season} week {Week}", season, week);
 
@@ -54,7 +54,7 @@ public class StatsScraperService : BaseScraperService, IStatsScraperService
     private async Task<int> ScrapeBoxScoreAsync(Game game)
     {
         // PFR box score URL pattern: /boxscores/YYYYMMDD0<home_pfr_abbr>.htm
-        var homeTeam = game.HomeTeam;
+        var homeTeam = game.HomeTeamSeason;
         if (homeTeam == null)
         {
             _logger.LogWarning("Home team not loaded for game {GameId}", game.Id);

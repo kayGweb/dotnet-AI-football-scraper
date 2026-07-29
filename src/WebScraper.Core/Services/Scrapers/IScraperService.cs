@@ -16,11 +16,11 @@ public interface IPlayerScraperService
 
 public interface IGameScraperService
 {
-    Task<ScrapeResult> ScrapeGamesAsync(int season);
-    Task<ScrapeResult> ScrapeGamesAsync(int season, int week);
+    Task<ScrapeResult> ScrapeGamesAsync(int season, NflSeasonType seasonType = NflSeasonType.Regular);
+    Task<ScrapeResult> ScrapeGamesAsync(int season, int week, NflSeasonType seasonType = NflSeasonType.Regular);
 }
 
 public interface IStatsScraperService
 {
-    Task<ScrapeResult> ScrapePlayerStatsAsync(int season, int week);
+    Task<ScrapeResult> ScrapePlayerStatsAsync(int season, int week, NflSeasonType seasonType = NflSeasonType.Regular);
 }

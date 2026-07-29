@@ -14,15 +14,15 @@ public class GameRepository : IGameRepository
 
     public async Task<Game?> GetByIdAsync(int id)
         => await _context.Games
-            .Include(g => g.HomeTeam)
-            .Include(g => g.AwayTeam)
+            .Include(g => g.HomeTeamSeason)
+            .Include(g => g.AwayTeamSeason)
             .Include(g => g.Venue)
             .FirstOrDefaultAsync(g => g.Id == id);
 
     public async Task<IEnumerable<Game>> GetAllAsync()
         => await _context.Games
-            .Include(g => g.HomeTeam)
-            .Include(g => g.AwayTeam)
+            .Include(g => g.HomeTeamSeason)
+            .Include(g => g.AwayTeamSeason)
             .Include(g => g.Venue)
             .ToListAsync();
 
@@ -52,22 +52,30 @@ public class GameRepository : IGameRepository
     public async Task<bool> ExistsAsync(int id)
         => await _context.Games.AnyAsync(g => g.Id == id);
 
-    public async Task<IEnumerable<Game>> GetBySeasonAsync(int season)
-        => await _context.Games
-            .Include(g => g.HomeTeam)
-            .Include(g => g.AwayTeam)
+    public async Task<IEnumerable<Game>> GetBySeasonAsync(int season, NflSeasonType? seasonType = null)
+    {
+        var query = _context.Games
+            .Include(g => g.HomeTeamSeason)
+            .Include(g => g.AwayTeamSeason)
             .Include(g => g.Venue)
-            .Where(g => g.Season == season)
-            .OrderBy(g => g.Week)
+            .Where(g => g.Season == season);
+
+        if (seasonType.HasValue)
+            query = query.Where(g => g.SeasonType == seasonType.Value);
+
+        return await query
+            .OrderBy(g => g.SeasonType)
+            .ThenBy(g => g.Week)
             .ThenBy(g => g.GameDate)
             .ToListAsync();
+    }
 
-    public async Task<IEnumerable<Game>> GetByWeekAsync(int season, int week)
+    public async Task<IEnumerable<Game>> GetByWeekAsync(int season, int week, NflSeasonType seasonType = NflSeasonType.Regular)
         => await _context.Games
-            .Include(g => g.HomeTeam)
-            .Include(g => g.AwayTeam)
+            .Include(g => g.HomeTeamSeason)
+            .Include(g => g.AwayTeamSeason)
             .Include(g => g.Venue)
-            .Where(g => g.Season == season && g.Week == week)
+            .Where(g => g.Season == season && g.Week == week && g.SeasonType == seasonType)
             .OrderBy(g => g.GameDate)
             .ToListAsync();
 
@@ -76,9 +84,10 @@ public class GameRepository : IGameRepository
         var existing = await _context.Games
             .FirstOrDefaultAsync(g =>
                 g.Season == game.Season &&
+                g.SeasonType == game.SeasonType &&
                 g.Week == game.Week &&
-                g.HomeTeamId == game.HomeTeamId &&
-                g.AwayTeamId == game.AwayTeamId);
+                g.HomeTeamSeasonId == game.HomeTeamSeasonId &&
+                g.AwayTeamSeasonId == game.AwayTeamSeasonId);
 
         if (existing != null)
         {
@@ -107,6 +116,7 @@ public class GameRepository : IGameRepository
         {
             await _context.Games.AddAsync(game);
         }
+
         await _context.SaveChangesAsync();
     }
 }

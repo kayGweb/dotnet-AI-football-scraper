@@ -8,13 +8,11 @@ public class GameRepositoryTests : IDisposable
 {
     private readonly Data.AppDbContext _context;
     private readonly GameRepository _gameRepo;
-    private readonly TeamRepository _teamRepo;
 
     public GameRepositoryTests()
     {
         _context = TestDbContextFactory.Create();
         _gameRepo = new GameRepository(_context);
-        _teamRepo = new TeamRepository(_context);
     }
 
     public void Dispose()
@@ -23,29 +21,14 @@ public class GameRepositoryTests : IDisposable
         _context.Dispose();
     }
 
-    private async Task<(Team home, Team away)> SeedTeamsAsync()
-    {
-        var home = await _teamRepo.AddAsync(new Team
-        {
-            Name = "Kansas City Chiefs", Abbreviation = "KC",
-            City = "Kansas City", Conference = "AFC", Division = "West"
-        });
-        var away = await _teamRepo.AddAsync(new Team
-        {
-            Name = "Buffalo Bills", Abbreviation = "BUF",
-            City = "Buffalo", Conference = "AFC", Division = "East"
-        });
-        return (home, away);
-    }
-
     [Fact]
     public async Task AddAsync_ShouldInsertGame()
     {
-        var (home, away) = await SeedTeamsAsync();
+        var (home, away, _, _) = await RepositoryTestHelpers.SeedTeamSeasonsAsync(_context);
         var game = new Game
         {
             Season = 2025, Week = 1, GameDate = new DateTime(2025, 9, 7),
-            HomeTeamId = home.Id, AwayTeamId = away.Id,
+            HomeTeamSeasonId = home.Id, AwayTeamSeasonId = away.Id,
             HomeScore = 27, AwayScore = 24
         };
 
@@ -58,10 +41,10 @@ public class GameRepositoryTests : IDisposable
     [Fact]
     public async Task GetBySeasonAsync_ShouldReturnGamesForSeason()
     {
-        var (home, away) = await SeedTeamsAsync();
-        await _gameRepo.AddAsync(new Game { Season = 2025, Week = 1, GameDate = DateTime.Now, HomeTeamId = home.Id, AwayTeamId = away.Id });
-        await _gameRepo.AddAsync(new Game { Season = 2025, Week = 2, GameDate = DateTime.Now, HomeTeamId = away.Id, AwayTeamId = home.Id });
-        await _gameRepo.AddAsync(new Game { Season = 2024, Week = 1, GameDate = DateTime.Now, HomeTeamId = home.Id, AwayTeamId = away.Id });
+        var (home, away, _, _) = await RepositoryTestHelpers.SeedTeamSeasonsAsync(_context);
+        await _gameRepo.AddAsync(new Game { Season = 2025, Week = 1, GameDate = DateTime.Now, HomeTeamSeasonId = home.Id, AwayTeamSeasonId = away.Id });
+        await _gameRepo.AddAsync(new Game { Season = 2025, Week = 2, GameDate = DateTime.Now, HomeTeamSeasonId = away.Id, AwayTeamSeasonId = home.Id });
+        await _gameRepo.AddAsync(new Game { Season = 2024, Week = 1, GameDate = DateTime.Now, HomeTeamSeasonId = home.Id, AwayTeamSeasonId = away.Id });
 
         var result = (await _gameRepo.GetBySeasonAsync(2025)).ToList();
 
@@ -72,9 +55,9 @@ public class GameRepositoryTests : IDisposable
     [Fact]
     public async Task GetByWeekAsync_ShouldFilterBySeasonAndWeek()
     {
-        var (home, away) = await SeedTeamsAsync();
-        await _gameRepo.AddAsync(new Game { Season = 2025, Week = 1, GameDate = DateTime.Now, HomeTeamId = home.Id, AwayTeamId = away.Id });
-        await _gameRepo.AddAsync(new Game { Season = 2025, Week = 2, GameDate = DateTime.Now, HomeTeamId = away.Id, AwayTeamId = home.Id });
+        var (home, away, _, _) = await RepositoryTestHelpers.SeedTeamSeasonsAsync(_context);
+        await _gameRepo.AddAsync(new Game { Season = 2025, Week = 1, GameDate = DateTime.Now, HomeTeamSeasonId = home.Id, AwayTeamSeasonId = away.Id });
+        await _gameRepo.AddAsync(new Game { Season = 2025, Week = 2, GameDate = DateTime.Now, HomeTeamSeasonId = away.Id, AwayTeamSeasonId = home.Id });
 
         var result = (await _gameRepo.GetByWeekAsync(2025, 1)).ToList();
 
@@ -85,11 +68,11 @@ public class GameRepositoryTests : IDisposable
     [Fact]
     public async Task UpsertAsync_ShouldInsert_WhenNew()
     {
-        var (home, away) = await SeedTeamsAsync();
+        var (home, away, _, _) = await RepositoryTestHelpers.SeedTeamSeasonsAsync(_context);
         var game = new Game
         {
             Season = 2025, Week = 5, GameDate = new DateTime(2025, 10, 12),
-            HomeTeamId = home.Id, AwayTeamId = away.Id, HomeScore = 31, AwayScore = 17
+            HomeTeamSeasonId = home.Id, AwayTeamSeasonId = away.Id, HomeScore = 31, AwayScore = 17
         };
 
         await _gameRepo.UpsertAsync(game);
@@ -102,18 +85,17 @@ public class GameRepositoryTests : IDisposable
     [Fact]
     public async Task UpsertAsync_ShouldUpdate_WhenExisting()
     {
-        var (home, away) = await SeedTeamsAsync();
+        var (home, away, _, _) = await RepositoryTestHelpers.SeedTeamSeasonsAsync(_context);
         await _gameRepo.AddAsync(new Game
         {
             Season = 2025, Week = 3, GameDate = new DateTime(2025, 9, 21),
-            HomeTeamId = home.Id, AwayTeamId = away.Id, HomeScore = null, AwayScore = null
+            HomeTeamSeasonId = home.Id, AwayTeamSeasonId = away.Id, HomeScore = null, AwayScore = null
         });
 
-        // Update with final scores
         var updated = new Game
         {
             Season = 2025, Week = 3, GameDate = new DateTime(2025, 9, 21),
-            HomeTeamId = home.Id, AwayTeamId = away.Id, HomeScore = 24, AwayScore = 20
+            HomeTeamSeasonId = home.Id, AwayTeamSeasonId = away.Id, HomeScore = 24, AwayScore = 20
         };
         await _gameRepo.UpsertAsync(updated);
 

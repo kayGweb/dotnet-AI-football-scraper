@@ -8,6 +8,7 @@ public class MySportsFeedsGameService : BaseApiService, IGameScraperService
 {
     private readonly IGameRepository _gameRepository;
     private readonly ITeamRepository _teamRepository;
+    private readonly ITeamSeasonRepository _teamSeasonRepository;
 
     public MySportsFeedsGameService(
         HttpClient httpClient,
@@ -15,15 +16,19 @@ public class MySportsFeedsGameService : BaseApiService, IGameScraperService
         ApiProviderSettings providerSettings,
         RateLimiterService rateLimiter,
         IGameRepository gameRepository,
-        ITeamRepository teamRepository)
+        ITeamRepository teamRepository,
+        ITeamSeasonRepository teamSeasonRepository)
         : base(httpClient, logger, providerSettings, rateLimiter)
     {
         _gameRepository = gameRepository;
         _teamRepository = teamRepository;
+        _teamSeasonRepository = teamSeasonRepository;
     }
 
-    public async Task<ScrapeResult> ScrapeGamesAsync(int season)
+    public async Task<ScrapeResult> ScrapeGamesAsync(int season, NflSeasonType seasonType = NflSeasonType.Regular)
     {
+        if (seasonType != NflSeasonType.Regular)
+            return ScrapeResult.Succeeded(0, $"MySportsFeeds only supports regular season (requested {seasonType})");
         _logger.LogInformation("Starting games scrape for season {Season} from MySportsFeeds API", season);
 
         int totalCount = 0;
@@ -37,8 +42,10 @@ public class MySportsFeedsGameService : BaseApiService, IGameScraperService
         return ScrapeResult.Succeeded(totalCount, $"{totalCount} games processed for season {season} from MySportsFeeds API");
     }
 
-    public async Task<ScrapeResult> ScrapeGamesAsync(int season, int week)
+    public async Task<ScrapeResult> ScrapeGamesAsync(int season, int week, NflSeasonType seasonType = NflSeasonType.Regular)
     {
+        if (seasonType != NflSeasonType.Regular)
+            return ScrapeResult.Succeeded(0, $"MySportsFeeds only supports regular season (requested {seasonType})");
         _logger.LogInformation("Starting games scrape for season {Season} week {Week} from MySportsFeeds API",
             season, week);
 
@@ -87,6 +94,9 @@ public class MySportsFeedsGameService : BaseApiService, IGameScraperService
                 return null;
             }
 
+            var homeTeamSeason = await _teamSeasonRepository.EnsureFromTeamAsync(homeTeam, season);
+            var awayTeamSeason = await _teamSeasonRepository.EnsureFromTeamAsync(awayTeam, season);
+
             DateTime gameDate = DateTime.MinValue;
             if (!string.IsNullOrEmpty(schedule.StartTime))
             {
@@ -96,10 +106,11 @@ public class MySportsFeedsGameService : BaseApiService, IGameScraperService
             return new Game
             {
                 Season = season,
+                SeasonType = NflSeasonType.Regular,
                 Week = schedule.Week,
                 GameDate = gameDate,
-                HomeTeamId = homeTeam.Id,
-                AwayTeamId = awayTeam.Id,
+                HomeTeamSeasonId = homeTeamSeason.Id,
+                AwayTeamSeasonId = awayTeamSeason.Id,
                 HomeScore = schedule.Score?.HomeScoreTotal,
                 AwayScore = schedule.Score?.AwayScoreTotal
             };

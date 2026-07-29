@@ -112,6 +112,82 @@ public class DatabasePushService
                     teamIdMap[localTeam.Id] = remoteTeam.Id;
             }
 
+            // ── Franchises + TeamSeasons (needed before Games) ──
+            var localFranchises = await localDb.Franchises.AsNoTracking().ToListAsync();
+            var franchiseIdMap = new Dictionary<int, int>();
+            if (localFranchises.Count > 0)
+            {
+                display.PrintInfo($"Pushing {localFranchises.Count} franchises...");
+                foreach (var franchise in localFranchises)
+                {
+                    var existing = await remoteDb.Franchises
+                        .FirstOrDefaultAsync(f => f.CanonicalAbbreviation == franchise.CanonicalAbbreviation);
+                    if (existing != null)
+                    {
+                        existing.DisplayName = franchise.DisplayName;
+                        franchiseIdMap[franchise.Id] = existing.Id;
+                    }
+                    else
+                    {
+                        var newFranchise = new Franchise
+                        {
+                            CanonicalAbbreviation = franchise.CanonicalAbbreviation,
+                            DisplayName = franchise.DisplayName,
+                        };
+                        remoteDb.Franchises.Add(newFranchise);
+                        await remoteDb.SaveChangesAsync();
+                        franchiseIdMap[franchise.Id] = newFranchise.Id;
+                    }
+                }
+                await remoteDb.SaveChangesAsync();
+            }
+
+            var localTeamSeasons = await localDb.TeamSeasons.AsNoTracking().ToListAsync();
+            var teamSeasonIdMap = new Dictionary<int, int>();
+            if (localTeamSeasons.Count > 0)
+            {
+                display.PrintInfo($"Pushing {localTeamSeasons.Count} team seasons...");
+                foreach (var ts in localTeamSeasons)
+                {
+                    if (!franchiseIdMap.ContainsKey(ts.FranchiseId))
+                    {
+                        errors.Add($"TeamSeason {ts.Abbreviation} {ts.Season}: franchise mapping missing");
+                        continue;
+                    }
+
+                    var remoteFranchiseId = franchiseIdMap[ts.FranchiseId];
+                    var existing = await remoteDb.TeamSeasons
+                        .FirstOrDefaultAsync(r => r.FranchiseId == remoteFranchiseId && r.Season == ts.Season);
+
+                    if (existing != null)
+                    {
+                        existing.Name = ts.Name;
+                        existing.Abbreviation = ts.Abbreviation;
+                        existing.City = ts.City;
+                        existing.Conference = ts.Conference;
+                        existing.Division = ts.Division;
+                        teamSeasonIdMap[ts.Id] = existing.Id;
+                    }
+                    else
+                    {
+                        var newTs = new TeamSeason
+                        {
+                            FranchiseId = remoteFranchiseId,
+                            Season = ts.Season,
+                            Name = ts.Name,
+                            Abbreviation = ts.Abbreviation,
+                            City = ts.City,
+                            Conference = ts.Conference,
+                            Division = ts.Division,
+                        };
+                        remoteDb.TeamSeasons.Add(newTs);
+                        await remoteDb.SaveChangesAsync();
+                        teamSeasonIdMap[ts.Id] = newTs.Id;
+                    }
+                }
+                await remoteDb.SaveChangesAsync();
+            }
+
             // ── Players (FK to Teams) ──
             var localPlayers = await localDb.Players.AsNoTracking().ToListAsync();
             var playerIdMap = new Dictionary<int, int>();
@@ -205,7 +281,7 @@ public class DatabasePushService
                 display.PrintSuccess($"Venues: {localVenues.Count} pushed");
             }
 
-            // ── Games (FK to Teams, optional FK to Venues) ──
+            // ── Games (FK to TeamSeasons, optional FK to Venues) ──
             var localGames = await localDb.Games.AsNoTracking().ToListAsync();
             var gameIdMap = new Dictionary<int, int>();
             if (localGames.Count > 0)
@@ -214,14 +290,14 @@ public class DatabasePushService
 
                 foreach (var game in localGames)
                 {
-                    if (!teamIdMap.ContainsKey(game.HomeTeamId) || !teamIdMap.ContainsKey(game.AwayTeamId))
+                    if (!teamSeasonIdMap.ContainsKey(game.HomeTeamSeasonId) || !teamSeasonIdMap.ContainsKey(game.AwayTeamSeasonId))
                     {
-                        errors.Add($"Game {game.Season} week {game.Week}: team ID mapping missing");
+                        errors.Add($"Game {game.Season} week {game.Week}: team season ID mapping missing");
                         continue;
                     }
 
-                    var remoteHomeId = teamIdMap[game.HomeTeamId];
-                    var remoteAwayId = teamIdMap[game.AwayTeamId];
+                    var remoteHomeId = teamSeasonIdMap[game.HomeTeamSeasonId];
+                    var remoteAwayId = teamSeasonIdMap[game.AwayTeamSeasonId];
                     var gameDate = game.GameDate.Kind == DateTimeKind.Unspecified
                         ? DateTime.SpecifyKind(game.GameDate, DateTimeKind.Utc)
                         : game.GameDate.ToUniversalTime();
@@ -231,9 +307,10 @@ public class DatabasePushService
 
                     var existing = await remoteDb.Games
                         .FirstOrDefaultAsync(g => g.Season == game.Season
+                            && g.SeasonType == game.SeasonType
                             && g.Week == game.Week
-                            && g.HomeTeamId == remoteHomeId
-                            && g.AwayTeamId == remoteAwayId);
+                            && g.HomeTeamSeasonId == remoteHomeId
+                            && g.AwayTeamSeasonId == remoteAwayId);
 
                     if (existing != null)
                     {
@@ -263,10 +340,11 @@ public class DatabasePushService
                         var newGame = new Game
                         {
                             Season = game.Season,
+                            SeasonType = game.SeasonType,
                             Week = game.Week,
                             GameDate = gameDate,
-                            HomeTeamId = remoteHomeId,
-                            AwayTeamId = remoteAwayId,
+                            HomeTeamSeasonId = remoteHomeId,
+                            AwayTeamSeasonId = remoteAwayId,
                             HomeScore = game.HomeScore,
                             AwayScore = game.AwayScore,
                             VenueId = remoteVenueId,
@@ -335,24 +413,24 @@ public class DatabasePushService
                 display.PrintSuccess($"Stats: {localStats.Count} pushed");
             }
 
-            // ── TeamGameStats (FK to Games and Teams) ──
+            // ── TeamGameStats (FK to Games and TeamSeasons) ──
             var localTeamStats = await localDb.TeamGameStats.AsNoTracking().ToListAsync();
             if (localTeamStats.Count > 0)
             {
                 display.PrintInfo($"Pushing {localTeamStats.Count} team game stats...");
                 foreach (var tgs in localTeamStats)
                 {
-                    if (!gameIdMap.ContainsKey(tgs.GameId) || !teamIdMap.ContainsKey(tgs.TeamId))
+                    if (!gameIdMap.ContainsKey(tgs.GameId) || !teamSeasonIdMap.ContainsKey(tgs.TeamSeasonId))
                     {
-                        errors.Add($"TeamGameStats: game/team ID mapping missing (G:{tgs.GameId} T:{tgs.TeamId})");
+                        errors.Add($"TeamGameStats: game/team season ID mapping missing (G:{tgs.GameId} TS:{tgs.TeamSeasonId})");
                         continue;
                     }
 
                     var remoteGameId = gameIdMap[tgs.GameId];
-                    var remoteTeamId = teamIdMap[tgs.TeamId];
+                    var remoteTeamSeasonId = teamSeasonIdMap[tgs.TeamSeasonId];
 
                     var existing = await remoteDb.TeamGameStats
-                        .FirstOrDefaultAsync(t => t.GameId == remoteGameId && t.TeamId == remoteTeamId);
+                        .FirstOrDefaultAsync(t => t.GameId == remoteGameId && t.TeamSeasonId == remoteTeamSeasonId);
 
                     if (existing != null)
                     {
@@ -363,7 +441,7 @@ public class DatabasePushService
                         var newTgs = new TeamGameStats
                         {
                             GameId = remoteGameId,
-                            TeamId = remoteTeamId
+                            TeamSeasonId = remoteTeamSeasonId
                         };
                         CopyAllTeamGameStats(tgs, newTgs);
                         remoteDb.TeamGameStats.Add(newTgs);
