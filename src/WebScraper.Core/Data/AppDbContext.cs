@@ -60,6 +60,9 @@ public class AppDbContext : DbContext
     /// <summary>Agent-proposed field corrections awaiting approval. Phase C.</summary>
     public DbSet<DataCorrection> DataCorrections => Set<DataCorrection>();
 
+    /// <summary>Checkpoint for incremental SQLite → PostgreSQL push.</summary>
+    public DbSet<DatabasePushSession> DatabasePushSessions => Set<DatabasePushSession>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         // Game has two FKs to TeamSeason — must use Restrict to avoid cascade cycles

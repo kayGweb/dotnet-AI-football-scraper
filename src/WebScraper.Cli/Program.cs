@@ -242,9 +242,13 @@ static async Task<int> RunCommandAsync(IHost host, string[] args, ConsoleDisplay
             return 0;
 
         case "push":
+        {
             var configuration = host.Services.GetRequiredService<IConfiguration>();
-            await HandlePushToServerAsync(services, configuration, display);
+            var resume = args.Any(a => a.Equals("--resume", StringComparison.OrdinalIgnoreCase));
+            var reset = args.Any(a => a.Equals("--reset", StringComparison.OrdinalIgnoreCase));
+            await HandlePushToServerAsync(services, configuration, display, resume, reset);
             return 0;
+        }
 
         default:
             display.PrintError($"Unknown command: '{command}'");
@@ -816,7 +820,12 @@ static string? HandleChangeSource(ConsoleDisplayService display, string currentS
 
 // --- Push to server ---
 
-static async Task HandlePushToServerAsync(IServiceProvider services, IConfiguration configuration, ConsoleDisplayService display)
+static async Task HandlePushToServerAsync(
+    IServiceProvider services,
+    IConfiguration configuration,
+    ConsoleDisplayService display,
+    bool resume = false,
+    bool reset = false)
 {
     // Look for PostgreSQL connection string: DATABASE_URL env var, then ConnectionStrings:PostgreSQL in config
     var postgresConnString = Environment.GetEnvironmentVariable("DATABASE_URL");
@@ -846,8 +855,12 @@ static async Task HandlePushToServerAsync(IServiceProvider services, IConfigurat
     }
 
     var localDb = services.GetRequiredService<AppDbContext>();
-    var pushService = new DatabasePushService();
-    var result = await pushService.PushToServerAsync(localDb, postgresConnString, display);
+    var pushService = services.GetRequiredService<DatabasePushService>();
+    var result = await pushService.PushToServerAsync(
+        localDb,
+        postgresConnString,
+        display,
+        new PushOptions { Resume = resume, Reset = reset });
     display.PrintScrapeResult("Push", result);
 }
 
@@ -965,7 +978,7 @@ static void PrintUsage()
           games    --season <year> --week <n> Scrape games for a specific week
           stats    --season <year> --week <n> Scrape player stats for a week
           all      --season <year>           Run full pipeline (teams, players, games)
-          push                               Push local SQLite data to remote PostgreSQL
+          push [--resume] [--reset]            Push local SQLite to PostgreSQL (batched, resumable)
 
         View Commands:
           list teams                         Show all teams in the database
@@ -1010,5 +1023,7 @@ static void PrintUsage()
           dotnet run -- list injuries --season 2025 --week 1
           dotnet run -- status
           dotnet run -- push
+          dotnet run -- push --resume
+          dotnet run -- push --reset
         """);
 }
