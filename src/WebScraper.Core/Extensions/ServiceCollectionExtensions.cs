@@ -6,6 +6,7 @@ using WebScraper.Data.Repositories;
 using WebScraper.Models;
 using WebScraper.Services;
 using WebScraper.Services.Agent;
+using WebScraper.Services.Backup;
 using WebScraper.Services.Coverage;
 
 namespace WebScraper.Extensions;
@@ -27,6 +28,7 @@ public static class ServiceCollectionExtensions
         services.Configure<ScraperSettings>(configuration.GetSection("ScraperSettings"));
         services.Configure<OddsPollSettings>(configuration.GetSection("OddsPoll"));
         services.Configure<PushSettings>(configuration.GetSection("Push"));
+        services.Configure<BackupSettings>(configuration.GetSection("Backup"));
 
         // Configure database based on provider setting
         var provider = configuration.GetValue<string>("DatabaseProvider") ?? "Sqlite";
@@ -77,6 +79,8 @@ public static class ServiceCollectionExtensions
         // Register rate limiter, display service, and push service
         services.AddSingleton<RateLimiterService>();
         services.AddSingleton<ConsoleDisplayService>();
+        services.AddScoped<DatabasePushService>();
+        services.AddScoped<SqliteBackupService>();
         services.AddScoped<BackfillOrchestrator>();
         services.AddScoped<SeasonCoverageService>();
         services.AddScoped<QualityRulesEngine>();

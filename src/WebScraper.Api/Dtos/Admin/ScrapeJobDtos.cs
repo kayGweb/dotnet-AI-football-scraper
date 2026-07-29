@@ -19,6 +19,8 @@ public class ScrapeJobDto
     public int? Season { get; set; }
     public string? SeasonType { get; set; }
     public int? Week { get; set; }
+    public int? ParentJobId { get; set; }
+    public int? DependsOnJobId { get; set; }
     public string Status { get; set; } = string.Empty;
     public int RecordsProcessed { get; set; }
     public int RecordsFailed { get; set; }
@@ -39,6 +41,8 @@ public static class ScrapeJobMappings
         Season = job.Season,
         SeasonType = job.SeasonType?.ToString(),
         Week = job.Week,
+        ParentJobId = job.ParentJobId,
+        DependsOnJobId = job.DependsOnJobId,
         Status = job.Status.ToString(),
         RecordsProcessed = job.RecordsProcessed,
         RecordsFailed = job.RecordsFailed,

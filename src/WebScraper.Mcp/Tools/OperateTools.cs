@@ -59,4 +59,48 @@ public static class OperateTools
         [Description("Scrape job id.")] int jobId,
         CancellationToken cancellationToken = default)
         => client.RetryJobAsync(jobId, cancellationToken);
+
+    [McpServerTool(Name = "nfl_get_backfill_progress"), Description(
+        "Get aggregate progress for a backfill parent job (child counts, percent complete, ETA).")]
+    public static Task<string> GetBackfillProgress(
+        NflApiClient client,
+        [Description("Backfill parent job id.")] int jobId,
+        CancellationToken cancellationToken = default)
+        => client.GetBackfillProgressAsync(jobId, cancellationToken);
+
+    [McpServerTool(Name = "nfl_pause_backfill"), Description("Pause a running backfill — queued children stop dequeuing.")]
+    public static Task<string> PauseBackfill(
+        NflApiClient client,
+        [Description("Backfill parent job id.")] int jobId,
+        CancellationToken cancellationToken = default)
+        => client.PauseBackfillAsync(jobId, cancellationToken);
+
+    [McpServerTool(Name = "nfl_resume_backfill"), Description("Resume a paused backfill and re-enqueue ready child jobs.")]
+    public static Task<string> ResumeBackfill(
+        NflApiClient client,
+        [Description("Backfill parent job id.")] int jobId,
+        CancellationToken cancellationToken = default)
+        => client.ResumeBackfillAsync(jobId, cancellationToken);
+
+    [McpServerTool(Name = "nfl_get_push_status"), Description("Get the latest SQLite → PostgreSQL push session checkpoint.")]
+    public static Task<string> GetPushStatus(
+        NflApiClient client,
+        CancellationToken cancellationToken = default)
+        => client.GetPushStatusAsync(cancellationToken);
+
+    [McpServerTool(Name = "nfl_trigger_push"), Description(
+        "Push local SQLite data to PostgreSQL. Use resume=true to continue, reset=true to start fresh. Requires admin scope.")]
+    public static Task<string> TriggerPush(
+        NflApiClient client,
+        [Description("Continue an interrupted push.")] bool resume = false,
+        [Description("Clear session and start fresh.")] bool reset = false,
+        CancellationToken cancellationToken = default)
+        => client.TriggerPushAsync(resume, reset, cancellationToken);
+
+    [McpServerTool(Name = "nfl_backup_database"), Description(
+        "Create a timestamped backup of the local SQLite database (keeps last 3). Requires admin scope.")]
+    public static Task<string> BackupDatabase(
+        NflApiClient client,
+        CancellationToken cancellationToken = default)
+        => client.CreateBackupAsync(cancellationToken);
 }

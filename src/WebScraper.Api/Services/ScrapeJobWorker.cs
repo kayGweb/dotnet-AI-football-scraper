@@ -70,9 +70,26 @@ public class ScrapeJobWorker : BackgroundService
 
         foreach (var job in orphaned)
         {
+            if (await IsParentPausedAsync(db, job, ct))
+                continue;
+
             if (await IsJobReadyToRunAsync(db, job, ct))
                 _queue.TryEnqueue(job.Id);
         }
+    }
+
+    private static async Task<bool> IsParentPausedAsync(AppDbContext db, ScrapeJob job, CancellationToken ct)
+    {
+        if (job.ParentJobId is not int parentId)
+            return false;
+
+        var parentStatus = await db.ScrapeJobs
+            .AsNoTracking()
+            .Where(j => j.Id == parentId)
+            .Select(j => j.Status)
+            .FirstOrDefaultAsync(ct);
+
+        return parentStatus == ScrapeJobStatus.Paused;
     }
 
     private static async Task<bool> IsJobReadyToRunAsync(AppDbContext db, ScrapeJob job, CancellationToken ct)
@@ -126,6 +143,12 @@ public class ScrapeJobWorker : BackgroundService
             return;
         }
 
+        if (await IsParentPausedAsync(db, job, ct))
+        {
+            _logger.LogInformation("ScrapeJob {JobId} skipped — parent backfill is paused", jobId);
+            return;
+        }
+
         job.Status = ScrapeJobStatus.Running;
         job.StartedAt = DateTime.UtcNow;
         db.ScrapeEvents.Add(NewEvent(job, ScrapeEventType.JobStarted, new { startedAt = job.StartedAt }));
@@ -138,13 +161,20 @@ public class ScrapeJobWorker : BackgroundService
         {
             var result = await ExecuteScrapeAsync(scope.ServiceProvider, job, ct);
 
-            job.Status = result.Success ? ScrapeJobStatus.Succeeded : ScrapeJobStatus.Failed;
-            job.RecordsProcessed = result.RecordsProcessed;
-            job.RecordsFailed = result.RecordsFailed;
-            job.Error = result.Success ? null : result.Message;
-            if (result.Errors.Count > 0)
+            if (job.Type == ScrapeJobType.Backfill)
             {
-                job.Error = string.Join("; ", result.Errors);
+                job.Status = ScrapeJobStatus.Running;
+                job.RecordsProcessed = result.RecordsProcessed;
+                job.Error = result.Success ? null : result.Message;
+            }
+            else
+            {
+                job.Status = result.Success ? ScrapeJobStatus.Succeeded : ScrapeJobStatus.Failed;
+                job.RecordsProcessed = result.RecordsProcessed;
+                job.RecordsFailed = result.RecordsFailed;
+                job.Error = result.Success ? null : result.Message;
+                if (result.Errors.Count > 0)
+                    job.Error = string.Join("; ", result.Errors);
             }
         }
         catch (Exception ex)
@@ -155,6 +185,16 @@ public class ScrapeJobWorker : BackgroundService
         }
 
         job.CompletedAt = DateTime.UtcNow;
+
+        if (job.Type == ScrapeJobType.Backfill && job.Status == ScrapeJobStatus.Running)
+        {
+            await db.SaveChangesAsync(ct);
+            _logger.LogInformation(
+                "Backfill job {JobId} fan-out complete — {ChildCount} child jobs, parent stays Running",
+                jobId, job.RecordsProcessed);
+            return;
+        }
+
         db.ScrapeEvents.Add(NewEvent(
             job,
             job.Status == ScrapeJobStatus.Succeeded ? ScrapeEventType.JobCompleted : ScrapeEventType.JobFailed,

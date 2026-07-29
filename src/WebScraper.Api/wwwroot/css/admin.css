@@ -13,3 +13,37 @@ body {
     align-items: center;
     justify-content: center;
 }
+
+.coverage-heatmap {
+    border-collapse: collapse;
+    font-size: 0.75rem;
+}
+
+.coverage-heatmap th,
+.coverage-heatmap td {
+    border: 1px solid #333;
+    padding: 2px;
+    text-align: center;
+}
+
+.coverage-heatmap th {
+    background: #1e1e1e;
+    color: #ccc;
+    min-width: 28px;
+}
+
+.coverage-heatmap td:first-child {
+    font-weight: 600;
+    padding: 4px 8px;
+    background: #1e1e1e;
+}
+
+.heat-cell {
+    width: 24px;
+    height: 20px;
+}
+
+.heat-complete { background: #2e7d32; }
+.heat-partial { background: #f9a825; }
+.heat-missing { background: #c62828; }
+.heat-empty { background: #424242; }

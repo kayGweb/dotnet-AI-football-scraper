@@ -1,65 +1,121 @@
 @page "/admin/coverage"
 @attribute [Authorize]
+@using Microsoft.EntityFrameworkCore
+@using WebScraper.Data
 @using WebScraper.Models
 @using WebScraper.Services.Coverage
 @inject IServiceScopeFactory ScopeFactory
 
 <MudText Typo="Typo.h4" Class="mb-4">Season Coverage</MudText>
 
-<MudGrid Class="mb-4">
-    <MudItem xs="12" sm="3">
-        <MudNumericField T="int?" Label="Season" @bind-Value="_season" Variant="Variant.Outlined" />
-    </MudItem>
-    <MudItem xs="12" sm="3">
-        <MudSelect T="NflSeasonType?" Label="Season Type" @bind-Value="_seasonType"
-                   Variant="Variant.Outlined" Clearable="true">
-            <MudSelectItem T="NflSeasonType?" Value="@((NflSeasonType?)NflSeasonType.Preseason)">Preseason</MudSelectItem>
-            <MudSelectItem T="NflSeasonType?" Value="@((NflSeasonType?)NflSeasonType.Regular)">Regular</MudSelectItem>
-            <MudSelectItem T="NflSeasonType?" Value="@((NflSeasonType?)NflSeasonType.Postseason)">Postseason</MudSelectItem>
-        </MudSelect>
-    </MudItem>
-    <MudItem xs="12" sm="6" Class="d-flex align-end gap-2">
-        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="RefreshAsync"
-                   StartIcon="@Icons.Material.Filled.Refresh">Refresh</MudButton>
-        <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="ScanQualityAsync"
-                   StartIcon="@Icons.Material.Filled.Rule">Run Quality Scan</MudButton>
-    </MudItem>
-</MudGrid>
+<MudTabs Elevation="0" Rounded="true" Class="mb-4">
+    <MudTabPanel Text="Detail">
+        <MudGrid Class="mb-4 mt-2">
+            <MudItem xs="12" sm="3">
+                <MudNumericField T="int?" Label="Season" @bind-Value="_season" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" sm="3">
+                <MudSelect T="NflSeasonType?" Label="Season Type" @bind-Value="_seasonType"
+                           Variant="Variant.Outlined" Clearable="true">
+                    <MudSelectItem T="NflSeasonType?" Value="@((NflSeasonType?)NflSeasonType.Preseason)">Preseason</MudSelectItem>
+                    <MudSelectItem T="NflSeasonType?" Value="@((NflSeasonType?)NflSeasonType.Regular)">Regular</MudSelectItem>
+                    <MudSelectItem T="NflSeasonType?" Value="@((NflSeasonType?)NflSeasonType.Postseason)">Postseason</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6" Class="d-flex align-end gap-2">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="RefreshAsync"
+                           StartIcon="@Icons.Material.Filled.Refresh">Refresh</MudButton>
+                <MudButton Variant="Variant.Outlined" Color="Color.Secondary" OnClick="ScanQualityAsync"
+                           StartIcon="@Icons.Material.Filled.Rule">Run Quality Scan</MudButton>
+            </MudItem>
+        </MudGrid>
 
-@if (!string.IsNullOrEmpty(_message))
-{
-    <MudAlert Severity="Severity.Info" Class="mb-4">@_message</MudAlert>
-}
+        @if (!string.IsNullOrEmpty(_message))
+        {
+            <MudAlert Severity="Severity.Info" Class="mb-4">@_message</MudAlert>
+        }
 
-<MudTable Items="_rows" Dense="true" Hover="true" Loading="_loading" Striped="true">
-    <HeaderContent>
-        <MudTh>Season</MudTh>
-        <MudTh>Type</MudTh>
-        <MudTh>Week</MudTh>
-        <MudTh>Expected</MudTh>
-        <MudTh>Games</MudTh>
-        <MudTh>Player Stats</MudTh>
-        <MudTh>Team Stats</MudTh>
-        <MudTh>Status</MudTh>
-    </HeaderContent>
-    <RowTemplate>
-        <MudTd>@context.Season</MudTd>
-        <MudTd>@context.SeasonType</MudTd>
-        <MudTd>@context.Week</MudTd>
-        <MudTd>@(context.ExpectedGames?.ToString() ?? "—")</MudTd>
-        <MudTd>@context.ActualGames</MudTd>
-        <MudTd>@context.GamesWithPlayerStats</MudTd>
-        <MudTd>@context.GamesWithTeamStats</MudTd>
-        <MudTd>
-            <MudChip T="string" Size="Size.Small" Color="@StatusColor(context)">
-                @GetStatus(context)
-            </MudChip>
-        </MudTd>
-    </RowTemplate>
-    <NoRecordsContent>
-        <MudText>No coverage data — click Refresh to compute.</MudText>
-    </NoRecordsContent>
-</MudTable>
+        <MudTable Items="_rows" Dense="true" Hover="true" Loading="_loading" Striped="true">
+            <HeaderContent>
+                <MudTh>Season</MudTh>
+                <MudTh>Type</MudTh>
+                <MudTh>Week</MudTh>
+                <MudTh>Expected</MudTh>
+                <MudTh>Games</MudTh>
+                <MudTh>Player Stats</MudTh>
+                <MudTh>Team Stats</MudTh>
+                <MudTh>Status</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>@context.Season</MudTd>
+                <MudTd>@context.SeasonType</MudTd>
+                <MudTd>@context.Week</MudTd>
+                <MudTd>@(context.ExpectedGames?.ToString() ?? "—")</MudTd>
+                <MudTd>@context.ActualGames</MudTd>
+                <MudTd>@context.GamesWithPlayerStats</MudTd>
+                <MudTd>@context.GamesWithTeamStats</MudTd>
+                <MudTd>
+                    <MudChip T="string" Size="Size.Small" Color="@StatusColor(context)">
+                        @GetStatus(context)
+                    </MudChip>
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText>No coverage data — click Refresh to compute.</MudText>
+            </NoRecordsContent>
+        </MudTable>
+    </MudTabPanel>
+
+    <MudTabPanel Text="Heat Map (Regular)">
+        <MudGrid Class="mb-4 mt-2">
+            <MudItem xs="12" sm="3">
+                <MudNumericField T="int" @bind-Value="_heatStartSeason" Label="Start Season" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" sm="3">
+                <MudNumericField T="int" @bind-Value="_heatEndSeason" Label="End Season" Variant="Variant.Outlined" />
+            </MudItem>
+            <MudItem xs="12" sm="6" Class="d-flex align-end">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="LoadHeatMapAsync"
+                           StartIcon="@Icons.Material.Filled.GridOn">Load Heat Map</MudButton>
+            </MudItem>
+        </MudGrid>
+
+        @if (_heatMapRows.Count > 0)
+        {
+            <div style="overflow-x: auto;">
+                <table class="coverage-heatmap">
+                    <thead>
+                        <tr>
+                            <th>Season</th>
+                            @for (var w = 1; w <= _maxWeek; w++)
+                            {
+                                <th>W@w</th>
+                            }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var row in _heatMapRows)
+                        {
+                            <tr>
+                                <td>@row.Season</td>
+                                @foreach (var cell in row.Weeks)
+                                {
+                                    <td class="heat-cell @cell.CssClass" title="@cell.Tooltip"></td>
+                                }
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <MudStack Row="true" Spacing="2" Class="mt-3">
+                <MudChip T="string" Size="Size.Small" Style="background:#2e7d32">Complete</MudChip>
+                <MudChip T="string" Size="Size.Small" Style="background:#f9a825">Partial</MudChip>
+                <MudChip T="string" Size="Size.Small" Style="background:#c62828">Missing</MudChip>
+                <MudChip T="string" Size="Size.Small" Style="background:#424242">Empty/N/A</MudChip>
+            </MudStack>
+        }
+    </MudTabPanel>
+</MudTabs>
 
 @code {
     private List<SeasonCoverage> _rows = new();
@@ -67,8 +123,55 @@
     private int? _season = DateTime.UtcNow.Year;
     private NflSeasonType? _seasonType;
     private string? _message;
+    private int _heatStartSeason = 2006;
+    private int _heatEndSeason = 2025;
+    private int _maxWeek = 18;
+    private List<HeatMapRow> _heatMapRows = new();
 
     protected override async Task OnInitializedAsync() => await RefreshAsync();
+
+    private async Task LoadHeatMapAsync()
+    {
+        using var scope = ScopeFactory.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        var coverage = scope.ServiceProvider.GetRequiredService<SeasonCoverageService>();
+
+        await coverage.RefreshAsync(null, NflSeasonType.Regular);
+
+        var data = await db.SeasonCoverages
+            .AsNoTracking()
+            .Where(c => c.Season >= _heatStartSeason && c.Season <= _heatEndSeason
+                        && c.SeasonType == NflSeasonType.Regular)
+            .ToListAsync();
+
+        _maxWeek = data.Count > 0 ? data.Max(c => c.Week) : 18;
+        _heatMapRows = new List<HeatMapRow>();
+
+        for (var season = _heatEndSeason; season >= _heatStartSeason; season--)
+        {
+            var weeks = new List<HeatMapCell>();
+            for (var w = 1; w <= _maxWeek; w++)
+            {
+                var row = data.FirstOrDefault(c => c.Season == season && c.Week == w);
+                weeks.Add(row is null
+                    ? new HeatMapCell("heat-empty", "No data")
+                    : new HeatMapCell(HeatClass(row), $"{season} W{w}: {GetStatus(row)} ({row.ActualGames} games)"));
+            }
+
+            _heatMapRows.Add(new HeatMapRow(season, weeks));
+        }
+    }
+
+    private static string HeatClass(SeasonCoverage row) => GetStatus(row) switch
+    {
+        "complete" => "heat-complete",
+        "partial" or "no-stats" => "heat-partial",
+        "missing" => "heat-missing",
+        _ => "heat-empty",
+    };
+
+    private sealed record HeatMapRow(int Season, List<HeatMapCell> Weeks);
+    private sealed record HeatMapCell(string CssClass, string Tooltip);
 
     private async Task RefreshAsync()
     {

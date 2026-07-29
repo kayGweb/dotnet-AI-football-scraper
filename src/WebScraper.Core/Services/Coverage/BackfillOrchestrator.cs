@@ -25,6 +25,22 @@ public class BackfillOrchestrator
         int endSeason,
         CancellationToken cancellationToken = default)
     {
+        var existing = await _db.ScrapeJobs
+            .Where(j => j.ParentJobId == parentJob.Id)
+            .ToListAsync(cancellationToken);
+
+        if (existing.Count > 0)
+        {
+            _logger.LogInformation(
+                "Backfill job {ParentId} already has {Count} children — resuming fan-out",
+                parentJob.Id, existing.Count);
+
+            var enqueueIds = BackfillProgressCalculator.GetEnqueueableChildIds(existing);
+            return new BackfillFanOutResult(
+                existing.Select(c => c.Id).ToList(),
+                enqueueIds);
+        }
+
         var workItems = BackfillPlanner.Plan(startSeason, endSeason);
         var childIds = new List<int>(workItems.Count);
         var initialEnqueueIds = new List<int>();
@@ -66,6 +82,22 @@ public class BackfillOrchestrator
         }
 
         return new BackfillFanOutResult(childIds, initialEnqueueIds);
+    }
+
+    public async Task<BackfillProgress> GetProgressAsync(int parentJobId, CancellationToken ct = default)
+    {
+        var parent = await _db.ScrapeJobs.FindAsync(new object[] { parentJobId }, ct)
+            ?? throw new KeyNotFoundException($"Backfill job {parentJobId} not found.");
+
+        if (parent.Type != ScrapeJobType.Backfill)
+            throw new InvalidOperationException($"Job {parentJobId} is not a Backfill job.");
+
+        var children = await _db.ScrapeJobs
+            .AsNoTracking()
+            .Where(j => j.ParentJobId == parentJobId)
+            .ToListAsync(ct);
+
+        return BackfillProgressCalculator.Compute(parent, children);
     }
 
     public static async Task TryCompleteParentAsync(AppDbContext db, ScrapeJob completedChild, CancellationToken ct = default)

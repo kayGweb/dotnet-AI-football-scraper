@@ -22,7 +22,15 @@
             <MudSelectItem Value="@("Games")">Games</MudSelectItem>
             <MudSelectItem Value="@("Stats")">Stats</MudSelectItem>
             <MudSelectItem Value="@("All")">Full Pipeline</MudSelectItem>
+            <MudSelectItem Value="@("Backfill")">Backfill (multi-season)</MudSelectItem>
+            <MudSelectItem Value="@("OddsPoll")">Odds Poll</MudSelectItem>
         </MudSelect>
+
+        @if (_jobType == "Backfill")
+        {
+            <MudNumericField T="int?" @bind-Value="_endSeason" Label="End Season" Variant="Variant.Outlined"
+                             Min="1920" Max="@DateTime.UtcNow.Year" Class="mb-3" />
+        }
 
         @if (NeedsSeason)
         {
@@ -52,9 +60,10 @@
     private string _jobType = "Teams";
     private int? _season;
     private int? _week;
+    private int? _endSeason;
     private bool _submitting;
 
-    private bool NeedsSeason => _jobType is "Games" or "Stats" or "All";
+    private bool NeedsSeason => _jobType is "Games" or "Stats" or "All" or "Backfill";
     private bool NeedsWeek => _jobType is "Stats" or "Games" or "All";
 
     private async Task SubmitAsync()
@@ -86,7 +95,7 @@
             Type = jobType,
             Source = ScraperSettings.Value.DataProvider,
             Season = _season,
-            Week = _week,
+            Week = jobType == ScrapeJobType.Backfill ? (_endSeason ?? _season) : _week,
             Status = ScrapeJobStatus.Queued,
             CreatedAt = DateTime.UtcNow,
             RequestedBy = email,
