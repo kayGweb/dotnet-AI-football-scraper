@@ -15,13 +15,13 @@ public class TeamGameStatsRepository : ITeamGameStatsRepository
     public async Task<TeamGameStats?> GetByIdAsync(int id)
         => await _context.TeamGameStats
             .Include(tgs => tgs.Game)
-            .Include(tgs => tgs.Team)
+            .Include(tgs => tgs.TeamSeason)
             .FirstOrDefaultAsync(tgs => tgs.Id == id);
 
     public async Task<IEnumerable<TeamGameStats>> GetAllAsync()
         => await _context.TeamGameStats
             .Include(tgs => tgs.Game)
-            .Include(tgs => tgs.Team)
+            .Include(tgs => tgs.TeamSeason)
             .ToListAsync();
 
     public async Task<TeamGameStats> AddAsync(TeamGameStats entity)
@@ -52,18 +52,20 @@ public class TeamGameStatsRepository : ITeamGameStatsRepository
 
     public async Task<IEnumerable<TeamGameStats>> GetByGameAsync(int gameId)
         => await _context.TeamGameStats
-            .Include(tgs => tgs.Team)
+            .Include(tgs => tgs.TeamSeason)
             .Where(tgs => tgs.GameId == gameId)
             .ToListAsync();
 
-    public async Task<TeamGameStats?> GetByGameAndTeamAsync(int gameId, int teamId)
+    public async Task<TeamGameStats?> GetByGameAndTeamSeasonAsync(int gameId, int teamSeasonId)
         => await _context.TeamGameStats
-            .FirstOrDefaultAsync(tgs => tgs.GameId == gameId && tgs.TeamId == teamId);
+            .FirstOrDefaultAsync(tgs => tgs.GameId == gameId && tgs.TeamSeasonId == teamSeasonId);
 
     public async Task UpsertAsync(TeamGameStats teamGameStats)
     {
         var existing = await _context.TeamGameStats
-            .FirstOrDefaultAsync(tgs => tgs.GameId == teamGameStats.GameId && tgs.TeamId == teamGameStats.TeamId);
+            .FirstOrDefaultAsync(tgs =>
+                tgs.GameId == teamGameStats.GameId &&
+                tgs.TeamSeasonId == teamGameStats.TeamSeasonId);
 
         if (existing != null)
         {
@@ -101,6 +103,7 @@ public class TeamGameStatsRepository : ITeamGameStatsRepository
         {
             await _context.TeamGameStats.AddAsync(teamGameStats);
         }
+
         await _context.SaveChangesAsync();
     }
 }

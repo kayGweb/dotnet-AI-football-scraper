@@ -4,7 +4,8 @@
 Originally a .NET 8 Console application that scrapes NFL football data from multiple sources (Pro Football Reference, ESPN API, and more) and stores it in a structured database. As of the M0 refactor, the project is in the process of becoming a containerized microservice — a reusable `WebScraper.Core` class library backs the existing CLI and will back a new ASP.NET Core Web API (+ SignalR + Blazor Server admin) + MCP server for Claude consumption. The architecture supports pluggable data providers — switch between HTML scraping and REST API sources via configuration. See:
 - `AGENT_MVP.md` — original design specification
 - `API_INTEGRATION_PLAN.md` — multi-provider extension plan (on review branch)
-- `CHATBOT_MICROSERVICE_PLAN.md` — **current** microservice transformation plan (milestones M0–M6)
+- `CHATBOT_MICROSERVICE_PLAN.md` — microservice transformation plan (milestones M0–M6)
+- `AGENT_PLATFORM_PLAN.md` — **current** agent-managed database plan (identity, coverage, backfill, MCP operate tools)
 
 ## Tech Stack
 - **Framework:** .NET 8 (class library, console app, Web API, Blazor Server admin dashboard, MCP server)
@@ -41,6 +42,7 @@ src/
 │   │   ├── ScrapeResult.cs                # Scraper operation result (Success, RecordsProcessed, Errors)
 │   │   ├── ScraperSettings.cs             # Config POCO: scraper options + DataProvider + Providers dict
 │   │   ├── DataProvider.cs                # Enum: ProFootballReference, Espn, SportsDataIo, MySportsFeeds, NflCom
+│   │   ├── NflSeasonType.cs               # ESPN seasontype enum: Preseason=1, Regular=2, Postseason=3
 │   │   └── ApiProviderSettings.cs         # Config POCO: BaseUrl, ApiKey, AuthType, headers per provider
 │   ├── Data/
 │   │   ├── AppDbContext.cs                # EF Core DbContext — 11 DbSets (+ ScrapeJobs, ScrapeEvents), global soft-delete query filters, registers interceptor
@@ -68,6 +70,9 @@ src/
 │   │   ├── ConsoleDisplayService.cs       # User-facing console output (tables, banners, menus, progress) — CLI-specific but kept in Core for now
 │   │   ├── DatabasePushService.cs         # Push local SQLite data to remote PostgreSQL
 │   │   ├── DataProviderFactory.cs         # Maps DataProvider config to correct DI registrations
+│   │   ├── Coverage/
+│   │   │   ├── NflSeasonSchedule.cs       # Era-aware expected game counts + scoreboard week math (§0)
+│   │   │   └── BackfillWorkloadEstimator.cs # API-call + wall-clock estimates for ESPN backfills (§0)
 │   │   └── Scrapers/
 │   │       ├── IScraperService.cs         # Scraper interfaces (ITeam/IPlayer/IGame/IStats)
 │   │       ├── BaseScraperService.cs      # Abstract base for HTML: FetchPageAsync, rate limiting
@@ -1257,6 +1262,115 @@ Main Menu
 - [x] **M4 Phase 8:** DI wiring — `AddRazorComponents().AddInteractiveServerComponents()`, `AddMudServices()`, `AddCascadingAuthenticationState()` in `ApiServiceCollectionExtensions`
 - [ ] **M5:** Contract tests — recorded fixtures per provider; Docker + DigitalOcean App Platform deployment (PostgreSQL); future Azure App Service + MSSQL migration path
 - [ ] **M6:** Production polish — scheduled scrapes, cross-provider reconciliation, OpenTelemetry, webhooks, full-text search, backups
+
+## Agent Platform Plan (see `AGENT_PLATFORM_PLAN.md`)
+
+### Block 0 — Backfill runtime framing (complete)
+The 20-season ESPN backfill (2006–2025) is **~5,900 API calls / ~2.5 hours** at the default 1.5s delay — fetch time is not the bottleneck; correctness is. Five code blockers (§1) must land before the November backfill.
+
+Codified in Core:
+- `NflSeasonType` — ESPN `seasontype` values (preseason/regular/postseason)
+- `NflSeasonSchedule` — era-aware expected game counts (256+11 through 272+13) and scoreboard week math
+- `BackfillWorkloadEstimator` — API-call and wall-clock estimates; `PlanTwentyYearGameCount = 5432`
+
+| Era | Regular games | Playoff games | Total/season | Seasons |
+|-----|---------------|---------------|--------------|---------|
+| 2006–2019 | 256 | 11 | 267 | 14 |
+| 2020 | 256 | 13 | 269 | 1 |
+| 2021–2025 | 272 | 13 | 285 | 5 |
+| **Total** | | | **5,432** | **20** |
+
+### Block 1 — Five blockers (complete)
+All five correctness blockers from `AGENT_PLATFORM_PLAN.md` §1 are implemented. Migration: `Block1IdentitySchema`.
+
+**1.1 Player identity on `EspnId`**
+- `PlayerRepository.UpsertAsync` prefers `EspnId` when present; `UpsertByEspnIdAsync` / `GetByEspnIdAsync` added
+- Unique filtered index on `Players.EspnId`
+- New `PlayerTeamSeason` join table (player ↔ team-season roster membership)
+- `EspnPlayerService` sets `EspnId` on roster upsert; `EspnStatsService` discovers players from box scores by ESPN athlete ID
+
+**1.2 Season type parameterization**
+- `Game.SeasonType` (`NflSeasonType`: Preseason=1, Regular=2, Postseason=3)
+- `ScrapeJob.SeasonType`, `ScrapeJob.ParentJobId`
+- `IGameScraperService` / `IStatsScraperService` accept `NflSeasonType` (default Regular)
+- ESPN scoreboard uses `seasontype` query param; event-ID cache keys include season type
+- API: `CreateScrapeJobRequest.SeasonType`, `ScrapeJobDto.SeasonType`, `GameDto.SeasonType`
+
+**1.3 Player discovery from box scores**
+- Stats pipeline creates players + `PlayerTeamSeason` rows when athletes appear in box scores before roster scrape
+
+**1.4 Franchise + TeamSeason (historical team identity)**
+- New models: `Franchise` (canonical abbreviation), `TeamSeason` (franchise × season)
+- `Game` FKs: `HomeTeamSeasonId` / `AwayTeamSeasonId` (replaces `HomeTeamId`/`AwayTeamId`)
+- `TeamGameStats.TeamSeasonId` (replaces `TeamId`)
+- `FranchiseMappings` — relocation abbreviations (STL→LAR, SD→LAC, OAK→LV, etc.)
+- Repos: `FranchiseRepository`, `TeamSeasonRepository`, `PlayerTeamSeasonRepository`
+- All game scrapers resolve `TeamSeason`; `DatabasePushService` pushes Franchises + TeamSeasons before Games
+
+**1.5 Backfill orchestration**
+- `ScrapeJobType.Backfill` + `BackfillPlanner` (season × seasonType × week work items)
+- `BackfillOrchestrator` fans out child jobs with `ParentJobId`; `TryCompleteParentAsync` on child completion
+- `POST /api/v1/scrape/backfill` — body: `{ season, endSeason?, week? }` (Operator)
+- `ScrapeJobWorker.RunBackfillAsync` enqueues child Games/Stats jobs
+
+**Breaking schema note:** existing `Games` rows are not migrated in-place — the `Block1IdentitySchema` migration renames legacy team FK columns. Fresh scrape/backfill is required for historical data.
+
+### Block 2 — Orchestration & coverage (complete)
+Phase B from `AGENT_PLATFORM_PLAN.md` §4 and §7 Phase B. Migration: `Block2CoverageQuality`.
+
+**Coverage model**
+- `SeasonCoverage` — persisted expected-vs-actual per (season, seasonType, week): game counts, stats coverage, player counts
+- `SeasonCoverageService` — computes from DB and upserts snapshots
+- `NflSeasonSchedule.GetExpectedGamesForWeek` — deterministic counts for preseason/postseason weeks
+
+**Quality rules engine**
+- `DataQualityFinding` — assertions with severity, status, repair payload
+- `QualityRulesEngine` — 7 rules: missing player/team stats, quarter-score mismatch, missing EspnId, implausible pass yards, venue location, week game-count mismatch
+- Runs automatically after Games/Stats/All scrape jobs complete
+
+**Repair loop**
+- `RepairJobEnqueuer` — creates idempotent re-scrape jobs from actionable findings
+- `POST /api/v1/coverage/refresh` — recompute coverage + optional repair enqueue
+- `GET /api/v1/coverage`, `GET /api/v1/quality/findings`, `POST /api/v1/quality/scan`, `POST /api/v1/quality/repairs`
+
+**Backfill dependency ordering**
+- `ScrapeJob.DependsOnJobId` — stats jobs wait for matching games job
+- `BackfillOrchestrator` only enqueues games jobs initially; worker enqueues stats when games succeed
+
+**Admin dashboard**
+- `/admin/coverage` — week-by-week coverage table with status chips
+- `/admin/quality` — open findings with scan and repair actions
+
+### Block 3 — Agent surface (complete)
+Phase C from `AGENT_PLATFORM_PLAN.md` §2–3 and §7 Phase C. Migration: `Block3AgentSurface`.
+
+**API key scopes**
+- `read` — existing 14 read tools + introspection (`describe_schema`, `data_dictionary`, `query_stats`)
+- `operate` — scrape triggers, jobs, coverage, gaps, retry (also satisfies read)
+- `admin` — correction proposals (also satisfies read + operate)
+
+**Operate API** (dual auth: API key `operate`/`admin` OR JWT Operator/Admin)
+- Scrape/jobs endpoints updated to `RequireOperate` policy
+- `POST /api/v1/jobs/{id}/retry` — re-queue failed/succeeded jobs
+- `GET /api/v1/gaps` — ranked coverage + quality gaps
+
+**Introspection API**
+- `GET /api/v1/schema`, `GET /api/v1/schema/dictionary`
+- `POST /api/v1/query/stats` — parameterized whitelist aggregation (no raw SQL)
+
+**Correction proposal flow**
+- `DataCorrection` table — Pending → Approved/Rejected → Applied
+- `POST /api/v1/corrections`, `GET /api/v1/corrections`, approve/reject (Admin JWT)
+- `/admin/corrections` — approval queue UI
+
+**MCP tools** (11 new, 25 total)
+- Operate: `nfl_trigger_scrape`, `nfl_get_job`, `nfl_list_jobs`, `nfl_get_coverage`, `nfl_find_gaps`, `nfl_retry_job`
+- Introspect: `nfl_describe_schema`, `nfl_get_data_dictionary`, `nfl_query_stats`
+- Propose: `nfl_propose_correction`, `nfl_list_corrections`
+
+**Skill**
+- `skills/nfl-db/SKILL.md` — entity resolution, coverage awareness, runbooks, mutation etiquette
+- `GET /api/v1/skill` — serves the Skill markdown
 
 ## Adding a New Data Provider
 1. Create a folder: `Services/Scrapers/NewProvider/`

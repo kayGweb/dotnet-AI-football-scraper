@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using WebScraper.Data;
 using WebScraper.Models;
+using WebScraper.Services.Coverage;
 using WebScraper.Services.Scrapers;
 
 namespace WebScraper.Api.Services;
@@ -57,7 +58,6 @@ public class ScrapeJobWorker : BackgroundService
         var orphaned = await db.ScrapeJobs
             .Where(j => j.Status == ScrapeJobStatus.Queued || j.Status == ScrapeJobStatus.Running)
             .OrderBy(j => j.CreatedAt)
-            .Select(j => j.Id)
             .ToListAsync(ct);
 
         if (orphaned.Count == 0) return;
@@ -68,10 +68,53 @@ public class ScrapeJobWorker : BackgroundService
             .Where(j => j.Status == ScrapeJobStatus.Running)
             .ExecuteUpdateAsync(s => s.SetProperty(j => j.Status, ScrapeJobStatus.Queued), ct);
 
-        foreach (var id in orphaned)
+        foreach (var job in orphaned)
         {
-            _queue.TryEnqueue(id);
+            if (await IsParentPausedAsync(db, job, ct))
+                continue;
+
+            if (await IsJobReadyToRunAsync(db, job, ct))
+                _queue.TryEnqueue(job.Id);
         }
+    }
+
+    private static async Task<bool> IsParentPausedAsync(AppDbContext db, ScrapeJob job, CancellationToken ct)
+    {
+        if (job.ParentJobId is not int parentId)
+            return false;
+
+        var parentStatus = await db.ScrapeJobs
+            .AsNoTracking()
+            .Where(j => j.Id == parentId)
+            .Select(j => j.Status)
+            .FirstOrDefaultAsync(ct);
+
+        return parentStatus == ScrapeJobStatus.Paused;
+    }
+
+    private static async Task<bool> IsJobReadyToRunAsync(AppDbContext db, ScrapeJob job, CancellationToken ct)
+    {
+        if (job.DependsOnJobId is not int depId)
+            return true;
+
+        var dep = await db.ScrapeJobs
+            .AsNoTracking()
+            .Where(j => j.Id == depId)
+            .Select(j => j.Status)
+            .FirstOrDefaultAsync(ct);
+
+        return dep == ScrapeJobStatus.Succeeded;
+    }
+
+    private async Task EnqueueDependentJobsAsync(AppDbContext db, int completedJobId, CancellationToken ct)
+    {
+        var dependentIds = await db.ScrapeJobs
+            .Where(j => j.DependsOnJobId == completedJobId && j.Status == ScrapeJobStatus.Queued)
+            .Select(j => j.Id)
+            .ToListAsync(ct);
+
+        foreach (var id in dependentIds)
+            _queue.TryEnqueue(id);
     }
 
     private async Task RunJobAsync(int jobId, CancellationToken ct)
@@ -92,6 +135,20 @@ public class ScrapeJobWorker : BackgroundService
             return;
         }
 
+        if (!await IsJobReadyToRunAsync(db, job, ct))
+        {
+            _logger.LogInformation(
+                "ScrapeJob {JobId} waiting on dependency {DepId}",
+                jobId, job.DependsOnJobId);
+            return;
+        }
+
+        if (await IsParentPausedAsync(db, job, ct))
+        {
+            _logger.LogInformation("ScrapeJob {JobId} skipped — parent backfill is paused", jobId);
+            return;
+        }
+
         job.Status = ScrapeJobStatus.Running;
         job.StartedAt = DateTime.UtcNow;
         db.ScrapeEvents.Add(NewEvent(job, ScrapeEventType.JobStarted, new { startedAt = job.StartedAt }));
@@ -104,13 +161,20 @@ public class ScrapeJobWorker : BackgroundService
         {
             var result = await ExecuteScrapeAsync(scope.ServiceProvider, job, ct);
 
-            job.Status = result.Success ? ScrapeJobStatus.Succeeded : ScrapeJobStatus.Failed;
-            job.RecordsProcessed = result.RecordsProcessed;
-            job.RecordsFailed = result.RecordsFailed;
-            job.Error = result.Success ? null : result.Message;
-            if (result.Errors.Count > 0)
+            if (job.Type == ScrapeJobType.Backfill)
             {
-                job.Error = string.Join("; ", result.Errors);
+                job.Status = ScrapeJobStatus.Running;
+                job.RecordsProcessed = result.RecordsProcessed;
+                job.Error = result.Success ? null : result.Message;
+            }
+            else
+            {
+                job.Status = result.Success ? ScrapeJobStatus.Succeeded : ScrapeJobStatus.Failed;
+                job.RecordsProcessed = result.RecordsProcessed;
+                job.RecordsFailed = result.RecordsFailed;
+                job.Error = result.Success ? null : result.Message;
+                if (result.Errors.Count > 0)
+                    job.Error = string.Join("; ", result.Errors);
             }
         }
         catch (Exception ex)
@@ -121,6 +185,16 @@ public class ScrapeJobWorker : BackgroundService
         }
 
         job.CompletedAt = DateTime.UtcNow;
+
+        if (job.Type == ScrapeJobType.Backfill && job.Status == ScrapeJobStatus.Running)
+        {
+            await db.SaveChangesAsync(ct);
+            _logger.LogInformation(
+                "Backfill job {JobId} fan-out complete — {ChildCount} child jobs, parent stays Running",
+                jobId, job.RecordsProcessed);
+            return;
+        }
+
         db.ScrapeEvents.Add(NewEvent(
             job,
             job.Status == ScrapeJobStatus.Succeeded ? ScrapeEventType.JobCompleted : ScrapeEventType.JobFailed,
@@ -133,6 +207,14 @@ public class ScrapeJobWorker : BackgroundService
                 completedAt = job.CompletedAt,
             }));
         await db.SaveChangesAsync(ct);
+
+        await BackfillOrchestrator.TryCompleteParentAsync(db, job, ct);
+
+        if (job.Status == ScrapeJobStatus.Succeeded)
+        {
+            await EnqueueDependentJobsAsync(db, jobId, ct);
+            await RunPostScrapeQualityAsync(scope.ServiceProvider, job, ct);
+        }
 
         _logger.LogInformation("ScrapeJob {JobId} finished: {Status} ({Processed} processed, {Failed} failed)",
             jobId, job.Status, job.RecordsProcessed, job.RecordsFailed);
@@ -156,8 +238,53 @@ public class ScrapeJobWorker : BackgroundService
             ScrapeJobType.Games => await RunGamesAsync(services, job),
             ScrapeJobType.Stats => await RunStatsAsync(services, job),
             ScrapeJobType.All => await RunAllAsync(services, job),
+            ScrapeJobType.Backfill => await RunBackfillAsync(services, job, ct),
+            ScrapeJobType.OddsPoll => await RunOddsPollAsync(services, job, ct),
             _ => ScrapeResult.Failed($"Unknown job type: {job.Type}"),
         };
+    }
+
+    private static async Task<ScrapeResult> RunBackfillAsync(
+        IServiceProvider services, ScrapeJob job, CancellationToken ct)
+    {
+        if (job.Season is null)
+            return ScrapeResult.Failed("Start season is required for backfill (use Season field)");
+
+        var endSeason = job.Week ?? job.Season.Value;
+        var orchestrator = services.GetRequiredService<BackfillOrchestrator>();
+        var queue = services.GetRequiredService<IJobQueue>();
+
+        var childIds = await orchestrator.FanOutAsync(job, job.Season.Value, endSeason, ct);
+        foreach (var childId in childIds.InitialEnqueueIds)
+            queue.TryEnqueue(childId);
+
+        return ScrapeResult.Succeeded(childIds.AllChildIds.Count, $"Enqueued {childIds.InitialEnqueueIds.Count} games jobs ({childIds.AllChildIds.Count} total child jobs)");
+    }
+
+    private static async Task<ScrapeResult> RunOddsPollAsync(
+        IServiceProvider services, ScrapeJob job, CancellationToken ct)
+    {
+        var poll = services.GetRequiredService<IOddsPollService>();
+        return await poll.PollAsync(job.Season, ct);
+    }
+
+    private static async Task RunPostScrapeQualityAsync(
+        IServiceProvider services, ScrapeJob job, CancellationToken ct)
+    {
+        if (job.Type is not (ScrapeJobType.Games or ScrapeJobType.Stats or ScrapeJobType.All or ScrapeJobType.OddsPoll))
+            return;
+
+        var coverage = services.GetRequiredService<SeasonCoverageService>();
+        var quality = services.GetRequiredService<QualityRulesEngine>();
+        var repair = services.GetRequiredService<RepairJobEnqueuer>();
+        var queue = services.GetRequiredService<IJobQueue>();
+
+        await coverage.RefreshAsync(job.Season, job.SeasonType, ct);
+        await quality.RunAsync(job.Season, job.SeasonType, job.Week, ct);
+
+        var repairJobIds = await repair.EnqueueRepairsForOpenFindingsAsync(10, job.RequestedBy, ct);
+        foreach (var id in repairJobIds)
+            queue.TryEnqueue(id);
     }
 
     private static async Task<ScrapeResult> RunTeamsAsync(IServiceProvider services)
@@ -178,9 +305,11 @@ public class ScrapeJobWorker : BackgroundService
         if (job.Season is null)
             return ScrapeResult.Failed("Season is required for games scrape");
 
+        var seasonType = job.SeasonType ?? NflSeasonType.Regular;
+
         return job.Week is not null
-            ? await scraper.ScrapeGamesAsync(job.Season.Value, job.Week.Value)
-            : await scraper.ScrapeGamesAsync(job.Season.Value);
+            ? await scraper.ScrapeGamesAsync(job.Season.Value, job.Week.Value, seasonType)
+            : await scraper.ScrapeGamesAsync(job.Season.Value, seasonType);
     }
 
     private static async Task<ScrapeResult> RunStatsAsync(IServiceProvider services, ScrapeJob job)
@@ -189,7 +318,8 @@ public class ScrapeJobWorker : BackgroundService
         if (job.Season is null || job.Week is null)
             return ScrapeResult.Failed("Season and week are required for stats scrape");
 
-        return await scraper.ScrapePlayerStatsAsync(job.Season.Value, job.Week.Value);
+        var seasonType = job.SeasonType ?? NflSeasonType.Regular;
+        return await scraper.ScrapePlayerStatsAsync(job.Season.Value, job.Week.Value, seasonType);
     }
 
     private static async Task<ScrapeResult> RunAllAsync(IServiceProvider services, ScrapeJob job)

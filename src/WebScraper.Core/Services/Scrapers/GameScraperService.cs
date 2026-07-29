@@ -10,6 +10,7 @@ public class GameScraperService : BaseScraperService, IGameScraperService
 {
     private readonly IGameRepository _gameRepository;
     private readonly ITeamRepository _teamRepository;
+    private readonly ITeamSeasonRepository _teamSeasonRepository;
 
     public GameScraperService(
         HttpClient httpClient,
@@ -17,15 +18,20 @@ public class GameScraperService : BaseScraperService, IGameScraperService
         IOptions<ScraperSettings> settings,
         RateLimiterService rateLimiter,
         IGameRepository gameRepository,
-        ITeamRepository teamRepository)
+        ITeamRepository teamRepository,
+        ITeamSeasonRepository teamSeasonRepository)
         : base(httpClient, logger, settings, rateLimiter)
     {
         _gameRepository = gameRepository;
         _teamRepository = teamRepository;
+        _teamSeasonRepository = teamSeasonRepository;
     }
 
-    public async Task<ScrapeResult> ScrapeGamesAsync(int season)
+    public async Task<ScrapeResult> ScrapeGamesAsync(int season, NflSeasonType seasonType = NflSeasonType.Regular)
     {
+        if (seasonType != NflSeasonType.Regular)
+            return ScrapeResult.Succeeded(0, $"PFR only supports regular season (requested {seasonType})");
+
         _logger.LogInformation("Starting games scrape for season {Season}", season);
 
         var url = $"https://www.pro-football-reference.com/years/{season}/games.htm";
@@ -58,8 +64,11 @@ public class GameScraperService : BaseScraperService, IGameScraperService
         return ScrapeResult.Succeeded(count, $"{count} games processed for season {season}");
     }
 
-    public async Task<ScrapeResult> ScrapeGamesAsync(int season, int week)
+    public async Task<ScrapeResult> ScrapeGamesAsync(int season, int week, NflSeasonType seasonType = NflSeasonType.Regular)
     {
+        if (seasonType != NflSeasonType.Regular)
+            return ScrapeResult.Succeeded(0, $"PFR only supports regular season (requested {seasonType})");
+
         _logger.LogInformation("Starting games scrape for season {Season} week {Week}", season, week);
 
         // PFR puts all weeks on one page, so we fetch the full season and filter
@@ -148,20 +157,20 @@ public class GameScraperService : BaseScraperService, IGameScraperService
             var location = locationCell != null ? HtmlEntity.DeEntitize(locationCell.InnerText).Trim() : "";
             bool winnerIsAway = location == "@";
 
-            int homeTeamId, awayTeamId;
+            int homeTeamSeasonId, awayTeamSeasonId;
             int? homeScore, awayScore;
 
             if (winnerIsAway)
             {
-                homeTeamId = loserTeam.Id;
-                awayTeamId = winnerTeam.Id;
+                homeTeamSeasonId = (await _teamSeasonRepository.EnsureFromTeamAsync(loserTeam, season)).Id;
+                awayTeamSeasonId = (await _teamSeasonRepository.EnsureFromTeamAsync(winnerTeam, season)).Id;
                 homeScore = loserScore;
                 awayScore = winnerScore;
             }
             else
             {
-                homeTeamId = winnerTeam.Id;
-                awayTeamId = loserTeam.Id;
+                homeTeamSeasonId = (await _teamSeasonRepository.EnsureFromTeamAsync(winnerTeam, season)).Id;
+                awayTeamSeasonId = (await _teamSeasonRepository.EnsureFromTeamAsync(loserTeam, season)).Id;
                 homeScore = winnerScore;
                 awayScore = loserScore;
             }
@@ -169,10 +178,11 @@ public class GameScraperService : BaseScraperService, IGameScraperService
             return new Game
             {
                 Season = season,
+                SeasonType = NflSeasonType.Regular,
                 Week = week,
                 GameDate = gameDate,
-                HomeTeamId = homeTeamId,
-                AwayTeamId = awayTeamId,
+                HomeTeamSeasonId = homeTeamSeasonId,
+                AwayTeamSeasonId = awayTeamSeasonId,
                 HomeScore = homeScore,
                 AwayScore = awayScore
             };

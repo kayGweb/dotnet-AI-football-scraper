@@ -8,6 +8,7 @@ using WebScraper.Data.Repositories;
 using WebScraper.Extensions;
 using WebScraper.Models;
 using WebScraper.Services;
+using WebScraper.Services.Backup;
 using WebScraper.Services.Scrapers;
 
 // Configure Serilog from appsettings.json
@@ -242,9 +243,19 @@ static async Task<int> RunCommandAsync(IHost host, string[] args, ConsoleDisplay
             return 0;
 
         case "push":
+        {
             var configuration = host.Services.GetRequiredService<IConfiguration>();
-            await HandlePushToServerAsync(services, configuration, display);
+            var resume = args.Any(a => a.Equals("--resume", StringComparison.OrdinalIgnoreCase));
+            var reset = args.Any(a => a.Equals("--reset", StringComparison.OrdinalIgnoreCase));
+            await HandlePushToServerAsync(services, configuration, display, resume, reset);
             return 0;
+        }
+
+        case "backup":
+        {
+            await HandleBackupAsync(services, display);
+            return 0;
+        }
 
         default:
             display.PrintError($"Unknown command: '{command}'");
@@ -375,8 +386,8 @@ static async Task<int> RunListCommandAsync(string[] args, IServiceProvider servi
             var tgsRepo = services.GetRequiredService<ITeamGameStatsRepository>();
             foreach (var game in tgsGames)
             {
-                var homeAbbr = game.HomeTeam?.Abbreviation ?? "???";
-                var awayAbbr = game.AwayTeam?.Abbreviation ?? "???";
+                var homeAbbr = game.HomeTeamSeason?.Abbreviation ?? "???";
+                var awayAbbr = game.AwayTeamSeason?.Abbreviation ?? "???";
                 display.PrintInfo($"{awayAbbr} @ {homeAbbr} — Week {game.Week}");
                 var tgsStats = await tgsRepo.GetByGameAsync(game.Id);
                 display.PrintTeamGameStatsTable(tgsStats);
@@ -394,8 +405,8 @@ static async Task<int> RunListCommandAsync(string[] args, IServiceProvider servi
             var injRepo = services.GetRequiredService<IInjuryRepository>();
             foreach (var game in injGames)
             {
-                var homeAbbr = game.HomeTeam?.Abbreviation ?? "???";
-                var awayAbbr = game.AwayTeam?.Abbreviation ?? "???";
+                var homeAbbr = game.HomeTeamSeason?.Abbreviation ?? "???";
+                var awayAbbr = game.AwayTeamSeason?.Abbreviation ?? "???";
                 var gameInjuries = await injRepo.GetByGameAsync(game.Id);
                 var injList = gameInjuries.ToList();
                 if (injList.Count > 0)
@@ -749,8 +760,8 @@ static async Task HandleViewMenuAsync(IServiceProvider services, ConsoleDisplayS
             var tgsRepo = services.GetRequiredService<ITeamGameStatsRepository>();
             foreach (var game in tgsGames)
             {
-                var homeAbbr = game.HomeTeam?.Abbreviation ?? "???";
-                var awayAbbr = game.AwayTeam?.Abbreviation ?? "???";
+                var homeAbbr = game.HomeTeamSeason?.Abbreviation ?? "???";
+                var awayAbbr = game.AwayTeamSeason?.Abbreviation ?? "???";
                 display.PrintInfo($"{awayAbbr} @ {homeAbbr} — Week {game.Week}");
                 var tgsStats = await tgsRepo.GetByGameAsync(game.Id);
                 display.PrintTeamGameStatsTable(tgsStats);
@@ -767,8 +778,8 @@ static async Task HandleViewMenuAsync(IServiceProvider services, ConsoleDisplayS
             var injRepo = services.GetRequiredService<IInjuryRepository>();
             foreach (var game in injGames)
             {
-                var homeAbbr = game.HomeTeam?.Abbreviation ?? "???";
-                var awayAbbr = game.AwayTeam?.Abbreviation ?? "???";
+                var homeAbbr = game.HomeTeamSeason?.Abbreviation ?? "???";
+                var awayAbbr = game.AwayTeamSeason?.Abbreviation ?? "???";
                 var gameInjuries = await injRepo.GetByGameAsync(game.Id);
                 var injList = gameInjuries.ToList();
                 if (injList.Count > 0)
@@ -816,7 +827,12 @@ static string? HandleChangeSource(ConsoleDisplayService display, string currentS
 
 // --- Push to server ---
 
-static async Task HandlePushToServerAsync(IServiceProvider services, IConfiguration configuration, ConsoleDisplayService display)
+static async Task HandlePushToServerAsync(
+    IServiceProvider services,
+    IConfiguration configuration,
+    ConsoleDisplayService display,
+    bool resume = false,
+    bool reset = false)
 {
     // Look for PostgreSQL connection string: DATABASE_URL env var, then ConnectionStrings:PostgreSQL in config
     var postgresConnString = Environment.GetEnvironmentVariable("DATABASE_URL");
@@ -846,9 +862,31 @@ static async Task HandlePushToServerAsync(IServiceProvider services, IConfigurat
     }
 
     var localDb = services.GetRequiredService<AppDbContext>();
-    var pushService = new DatabasePushService();
-    var result = await pushService.PushToServerAsync(localDb, postgresConnString, display);
+    var pushService = services.GetRequiredService<DatabasePushService>();
+    var result = await pushService.PushToServerAsync(
+        localDb,
+        postgresConnString,
+        display,
+        new PushOptions { Resume = resume, Reset = reset });
     display.PrintScrapeResult("Push", result);
+}
+
+static Task HandleBackupAsync(IServiceProvider services, ConsoleDisplayService display)
+{
+    var backupService = services.GetRequiredService<SqliteBackupService>();
+    try
+    {
+        var result = backupService.CreateBackup();
+        display.PrintSuccess($"Backup created: {result.FileName} ({result.SizeBytes:N0} bytes)");
+        if (result.PrunedCount > 0)
+            display.PrintInfo($"Pruned {result.PrunedCount} old backup(s).");
+    }
+    catch (Exception ex)
+    {
+        display.PrintError($"Backup failed: {ex.Message}");
+    }
+
+    return Task.CompletedTask;
 }
 
 // --- Input helpers ---
@@ -965,7 +1003,8 @@ static void PrintUsage()
           games    --season <year> --week <n> Scrape games for a specific week
           stats    --season <year> --week <n> Scrape player stats for a week
           all      --season <year>           Run full pipeline (teams, players, games)
-          push                               Push local SQLite data to remote PostgreSQL
+          push [--resume] [--reset]            Push local SQLite to PostgreSQL (batched, resumable)
+          backup                               Copy SQLite database to data/backups/
 
         View Commands:
           list teams                         Show all teams in the database
@@ -1010,5 +1049,7 @@ static void PrintUsage()
           dotnet run -- list injuries --season 2025 --week 1
           dotnet run -- status
           dotnet run -- push
+          dotnet run -- push --resume
+          dotnet run -- push --reset
         """);
 }

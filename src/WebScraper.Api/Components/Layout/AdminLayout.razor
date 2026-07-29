@@ -33,6 +33,12 @@
                         Icon="@Icons.Material.Filled.Work">Jobs</MudNavLink>
             <MudNavLink Href="/admin/scrapes/new" Match="NavLinkMatch.All"
                         Icon="@Icons.Material.Filled.PlayArrow">New Scrape</MudNavLink>
+            <MudNavLink Href="/admin/backfill" Match="NavLinkMatch.Prefix"
+                        Icon="@Icons.Material.Filled.History">Backfill</MudNavLink>
+            <MudNavLink Href="/admin/coverage" Match="NavLinkMatch.Prefix"
+                        Icon="@Icons.Material.Filled.GridOn">Coverage</MudNavLink>
+            <MudNavLink Href="/admin/quality" Match="NavLinkMatch.Prefix"
+                        Icon="@Icons.Material.Filled.FactCheck">Data Quality</MudNavLink>
 
             <AuthorizeView Roles="Admin">
                 <MudDivider Class="my-2" />
@@ -40,6 +46,8 @@
                     <MudNavLink Href="/admin/api-keys" Icon="@Icons.Material.Filled.Key">API Keys</MudNavLink>
                     <MudNavLink Href="/admin/users" Icon="@Icons.Material.Filled.People">Users</MudNavLink>
                     <MudNavLink Href="/admin/deleted-items" Icon="@Icons.Material.Filled.DeleteSweep">Deleted Items</MudNavLink>
+                    <MudNavLink Href="/admin/corrections" Icon="@Icons.Material.Filled.Rule">Corrections</MudNavLink>
+                    <MudNavLink Href="/admin/push" Icon="@Icons.Material.Filled.CloudUpload">Push to Server</MudNavLink>
                 </MudNavGroup>
             </AuthorizeView>
 

@@ -213,6 +213,199 @@ namespace WebScraper.Migrations
                     b.ToTable("ApiQueryLogs");
                 });
 
+            modelBuilder.Entity("WebScraper.Models.DataCorrection", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("EntityId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Field")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("NewValue")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("OldValue")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ProposedBy")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Rationale")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ResolvedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ResolvedBy")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Status", "CreatedAt");
+
+                    b.HasIndex("EntityType", "EntityId", "Field", "Status");
+
+                    b.ToTable("DataCorrections");
+                });
+
+            modelBuilder.Entity("WebScraper.Models.DataQualityFinding", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("EntityId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Payload")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("RepairJobId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("ResolvedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("RuleType")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("Season")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("SeasonType")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Severity")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("Week")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Status", "Severity");
+
+                    b.HasIndex("RuleType", "EntityType", "EntityId");
+
+                    b.ToTable("DataQualityFindings");
+                });
+
+            modelBuilder.Entity("WebScraper.Models.DatabasePushSession", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("CurrentStage")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("LastError")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("StageOffset")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("StartedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("TotalRecordsPushed")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("DatabasePushSessions");
+                });
+
+            modelBuilder.Entity("WebScraper.Models.Franchise", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("CanonicalAbbreviation")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DataSource")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DataSourceFetchedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DataSourceRecordId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeleteReason")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DisplayName")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("CanonicalAbbreviation")
+                        .IsUnique();
+
+                    b.ToTable("Franchises");
+                });
+
             modelBuilder.Entity("WebScraper.Models.Game", b =>
                 {
                     b.Property<int>("Id")
@@ -240,8 +433,11 @@ namespace WebScraper.Migrations
                     b.Property<int?>("AwayScore")
                         .HasColumnType("INTEGER");
 
-                    b.Property<int>("AwayTeamId")
+                    b.Property<int>("AwayTeamSeasonId")
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("BroadcastNetworks")
+                        .HasColumnType("TEXT");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
@@ -291,7 +487,7 @@ namespace WebScraper.Migrations
                     b.Property<int?>("HomeScore")
                         .HasColumnType("INTEGER");
 
-                    b.Property<int>("HomeTeamId")
+                    b.Property<int>("HomeTeamSeasonId")
                         .HasColumnType("INTEGER");
 
                     b.Property<bool?>("HomeWinner")
@@ -306,6 +502,9 @@ namespace WebScraper.Migrations
                     b.Property<int>("Season")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int>("SeasonType")
+                        .HasColumnType("INTEGER");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("TEXT");
 
@@ -317,13 +516,285 @@ namespace WebScraper.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("AwayTeamId");
+                    b.HasIndex("AwayTeamSeasonId");
 
-                    b.HasIndex("HomeTeamId");
+                    b.HasIndex("HomeTeamSeasonId");
 
                     b.HasIndex("VenueId");
 
+                    b.HasIndex("Season", "SeasonType", "Week", "HomeTeamSeasonId", "AwayTeamSeasonId")
+                        .IsUnique();
+
                     b.ToTable("Games");
+                });
+
+            modelBuilder.Entity("WebScraper.Models.GameDrive", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DataSource")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DataSourceFetchedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DataSourceRecordId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeleteReason")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DisplayResult")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("EndPeriod")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("EspnDriveId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("GameId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsScore")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("OffensivePlays")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Result")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("StartPeriod")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("TeamSeasonId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("TimeElapsed")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Yards")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TeamSeasonId");
+
+                    b.HasIndex("GameId", "EspnDriveId")
+                        .IsUnique();
+
+                    b.ToTable("GameDrives");
+                });
+
+            modelBuilder.Entity("WebScraper.Models.GameOdds", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("AwayMoneyline")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CapturedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DataSource")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DataSourceFetchedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DataSourceRecordId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeleteReason")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Details")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("GameId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("HomeMoneyline")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double?>("OverUnder")
+                        .HasColumnType("REAL");
+
+                    b.Property<int>("SnapshotType")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Sportsbook")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<double?>("Spread")
+                        .HasColumnType("REAL");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GameId", "Sportsbook", "SnapshotType", "CapturedAt")
+                        .IsUnique();
+
+                    b.ToTable("GameOdds");
+                });
+
+            modelBuilder.Entity("WebScraper.Models.GameOfficial", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DataSource")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DataSourceFetchedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DataSourceRecordId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeleteReason")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("GameId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Position")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GameId");
+
+                    b.ToTable("GameOfficials");
+                });
+
+            modelBuilder.Entity("WebScraper.Models.GameWeather", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Condition")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DataSource")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DataSourceFetchedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DataSourceRecordId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeleteReason")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("GameId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("HighTemperatureF")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("HumidityPercent")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("TemperatureF")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("WindDirection")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int?>("WindSpeedMph")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GameId")
+                        .IsUnique();
+
+                    b.ToTable("GameWeathers");
                 });
 
             modelBuilder.Entity("WebScraper.Models.Injury", b =>
@@ -469,6 +940,10 @@ namespace WebScraper.Migrations
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("EspnId")
+                        .IsUnique()
+                        .HasFilter("\"EspnId\" IS NOT NULL");
 
                     b.HasIndex("TeamId");
 
@@ -679,6 +1154,137 @@ namespace WebScraper.Migrations
                     b.ToTable("PlayerGameStats");
                 });
 
+            modelBuilder.Entity("WebScraper.Models.PlayerTeamSeason", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DataSource")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DataSourceFetchedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DataSourceRecordId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeleteReason")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("PlayerId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Season")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("TeamSeasonId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TeamSeasonId");
+
+                    b.HasIndex("PlayerId", "TeamSeasonId")
+                        .IsUnique();
+
+                    b.ToTable("PlayerTeamSeasons");
+                });
+
+            modelBuilder.Entity("WebScraper.Models.ScoringPlay", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("AwayScore")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Clock")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DataSource")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DataSourceFetchedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DataSourceRecordId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeleteReason")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("EspnPlayId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("GameId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("HomeScore")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Period")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("PlayType")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ScoringType")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Sequence")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("TeamSeasonId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TeamSeasonId");
+
+                    b.HasIndex("GameId", "EspnPlayId")
+                        .IsUnique();
+
+                    b.ToTable("ScoringPlays");
+                });
+
             modelBuilder.Entity("WebScraper.Models.ScrapeEvent", b =>
                 {
                     b.Property<long>("Id")
@@ -717,8 +1323,14 @@ namespace WebScraper.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("TEXT");
 
+                    b.Property<int?>("DependsOnJobId")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Error")
                         .HasColumnType("TEXT");
+
+                    b.Property<int?>("ParentJobId")
+                        .HasColumnType("INTEGER");
 
                     b.Property<int>("RecordsFailed")
                         .HasColumnType("INTEGER");
@@ -730,6 +1342,9 @@ namespace WebScraper.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<int?>("Season")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("SeasonType")
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("Source")
@@ -750,9 +1365,65 @@ namespace WebScraper.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("DependsOnJobId");
+
+                    b.HasIndex("ParentJobId");
+
                     b.HasIndex("Status", "CreatedAt");
 
                     b.ToTable("ScrapeJobs");
+                });
+
+            modelBuilder.Entity("WebScraper.Models.SeasonCoverage", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("ActualGames")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("ExpectedGames")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("GamesWithInjuries")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("GamesWithOdds")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("GamesWithPlayerStats")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("GamesWithTeamStats")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime?>("LastVerifiedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("PlayerCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Season")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("SeasonType")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Week")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Season");
+
+                    b.HasIndex("Season", "SeasonType", "Week")
+                        .IsUnique();
+
+                    b.ToTable("SeasonCoverages");
                 });
 
             modelBuilder.Entity("WebScraper.Models.Team", b =>
@@ -910,7 +1581,7 @@ namespace WebScraper.Migrations
                     b.Property<int>("SacksAgainst")
                         .HasColumnType("INTEGER");
 
-                    b.Property<int>("TeamId")
+                    b.Property<int>("TeamSeasonId")
                         .HasColumnType("INTEGER");
 
                     b.Property<int>("ThirdDownAttempts")
@@ -939,12 +1610,79 @@ namespace WebScraper.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("TeamId");
+                    b.HasIndex("TeamSeasonId");
 
-                    b.HasIndex("GameId", "TeamId")
+                    b.HasIndex("GameId", "TeamSeasonId")
                         .IsUnique();
 
                     b.ToTable("TeamGameStats");
+                });
+
+            modelBuilder.Entity("WebScraper.Models.TeamSeason", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Abbreviation")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("City")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Conference")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DataSource")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DataSourceFetchedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DataSourceRecordId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeleteReason")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Division")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("FranchiseId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Season")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("FranchiseId", "Season")
+                        .IsUnique();
+
+                    b.ToTable("TeamSeasons");
                 });
 
             modelBuilder.Entity("WebScraper.Models.Venue", b =>
@@ -1031,15 +1769,15 @@ namespace WebScraper.Migrations
 
             modelBuilder.Entity("WebScraper.Models.Game", b =>
                 {
-                    b.HasOne("WebScraper.Models.Team", "AwayTeam")
+                    b.HasOne("WebScraper.Models.TeamSeason", "AwayTeamSeason")
                         .WithMany("AwayGames")
-                        .HasForeignKey("AwayTeamId")
+                        .HasForeignKey("AwayTeamSeasonId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("WebScraper.Models.Team", "HomeTeam")
+                    b.HasOne("WebScraper.Models.TeamSeason", "HomeTeamSeason")
                         .WithMany("HomeGames")
-                        .HasForeignKey("HomeTeamId")
+                        .HasForeignKey("HomeTeamSeasonId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
@@ -1047,11 +1785,61 @@ namespace WebScraper.Migrations
                         .WithMany("Games")
                         .HasForeignKey("VenueId");
 
-                    b.Navigation("AwayTeam");
+                    b.Navigation("AwayTeamSeason");
 
-                    b.Navigation("HomeTeam");
+                    b.Navigation("HomeTeamSeason");
 
                     b.Navigation("Venue");
+                });
+
+            modelBuilder.Entity("WebScraper.Models.GameDrive", b =>
+                {
+                    b.HasOne("WebScraper.Models.Game", "Game")
+                        .WithMany("Drives")
+                        .HasForeignKey("GameId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("WebScraper.Models.TeamSeason", "TeamSeason")
+                        .WithMany()
+                        .HasForeignKey("TeamSeasonId");
+
+                    b.Navigation("Game");
+
+                    b.Navigation("TeamSeason");
+                });
+
+            modelBuilder.Entity("WebScraper.Models.GameOdds", b =>
+                {
+                    b.HasOne("WebScraper.Models.Game", "Game")
+                        .WithMany("Odds")
+                        .HasForeignKey("GameId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Game");
+                });
+
+            modelBuilder.Entity("WebScraper.Models.GameOfficial", b =>
+                {
+                    b.HasOne("WebScraper.Models.Game", "Game")
+                        .WithMany("Officials")
+                        .HasForeignKey("GameId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Game");
+                });
+
+            modelBuilder.Entity("WebScraper.Models.GameWeather", b =>
+                {
+                    b.HasOne("WebScraper.Models.Game", "Game")
+                        .WithOne("Weather")
+                        .HasForeignKey("WebScraper.Models.GameWeather", "GameId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Game");
                 });
 
             modelBuilder.Entity("WebScraper.Models.Injury", b =>
@@ -1099,6 +1887,42 @@ namespace WebScraper.Migrations
                     b.Navigation("Player");
                 });
 
+            modelBuilder.Entity("WebScraper.Models.PlayerTeamSeason", b =>
+                {
+                    b.HasOne("WebScraper.Models.Player", "Player")
+                        .WithMany()
+                        .HasForeignKey("PlayerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("WebScraper.Models.TeamSeason", "TeamSeason")
+                        .WithMany("PlayerRosterEntries")
+                        .HasForeignKey("TeamSeasonId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Player");
+
+                    b.Navigation("TeamSeason");
+                });
+
+            modelBuilder.Entity("WebScraper.Models.ScoringPlay", b =>
+                {
+                    b.HasOne("WebScraper.Models.Game", "Game")
+                        .WithMany("ScoringPlays")
+                        .HasForeignKey("GameId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("WebScraper.Models.TeamSeason", "TeamSeason")
+                        .WithMany()
+                        .HasForeignKey("TeamSeasonId");
+
+                    b.Navigation("Game");
+
+                    b.Navigation("TeamSeason");
+                });
+
             modelBuilder.Entity("WebScraper.Models.TeamGameStats", b =>
                 {
                     b.HasOne("WebScraper.Models.Game", "Game")
@@ -1107,26 +1931,52 @@ namespace WebScraper.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("WebScraper.Models.Team", "Team")
+                    b.HasOne("WebScraper.Models.TeamSeason", "TeamSeason")
                         .WithMany("TeamStats")
-                        .HasForeignKey("TeamId")
+                        .HasForeignKey("TeamSeasonId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("Game");
 
-                    b.Navigation("Team");
+                    b.Navigation("TeamSeason");
+                });
+
+            modelBuilder.Entity("WebScraper.Models.TeamSeason", b =>
+                {
+                    b.HasOne("WebScraper.Models.Franchise", "Franchise")
+                        .WithMany("TeamSeasons")
+                        .HasForeignKey("FranchiseId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Franchise");
+                });
+
+            modelBuilder.Entity("WebScraper.Models.Franchise", b =>
+                {
+                    b.Navigation("TeamSeasons");
                 });
 
             modelBuilder.Entity("WebScraper.Models.Game", b =>
                 {
                     b.Navigation("ApiLinks");
 
+                    b.Navigation("Drives");
+
                     b.Navigation("Injuries");
+
+                    b.Navigation("Odds");
+
+                    b.Navigation("Officials");
 
                     b.Navigation("PlayerStats");
 
+                    b.Navigation("ScoringPlays");
+
                     b.Navigation("TeamStats");
+
+                    b.Navigation("Weather");
                 });
 
             modelBuilder.Entity("WebScraper.Models.Player", b =>
@@ -1140,11 +1990,16 @@ namespace WebScraper.Migrations
                 {
                     b.Navigation("ApiLinks");
 
+                    b.Navigation("Players");
+                });
+
+            modelBuilder.Entity("WebScraper.Models.TeamSeason", b =>
+                {
                     b.Navigation("AwayGames");
 
                     b.Navigation("HomeGames");
 
-                    b.Navigation("Players");
+                    b.Navigation("PlayerRosterEntries");
 
                     b.Navigation("TeamStats");
                 });

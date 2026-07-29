@@ -22,6 +22,34 @@ as tools callable by Claude Code / Claude Desktop / any MCP client.
 | `nfl_get_venue` | `GET /api/v1/venues/{id}` | Single venue |
 | `nfl_get_status` | `GET /api/v1/status` | DB row counts + freshness |
 
+### Operate tools (`operate` scope)
+
+| Tool | Endpoint | Purpose |
+|------|----------|---------|
+| `nfl_trigger_scrape` | `POST /api/v1/scrape/{type}` | Start scrape/backfill job |
+| `nfl_get_job` | `GET /api/v1/jobs/{id}` | Job status + errors |
+| `nfl_list_jobs` | `GET /api/v1/jobs` | List jobs (optional status filter) |
+| `nfl_get_coverage` | `GET /api/v1/coverage` | Expected vs actual per week |
+| `nfl_find_gaps` | `GET /api/v1/gaps` | Ranked missing/suspect data |
+| `nfl_retry_job` | `POST /api/v1/jobs/{id}/retry` | Re-queue a job |
+
+### Introspect tools (`read` scope)
+
+| Tool | Endpoint | Purpose |
+|------|----------|---------|
+| `nfl_describe_schema` | `GET /api/v1/schema` | Entity catalog + columns |
+| `nfl_get_data_dictionary` | `GET /api/v1/schema/dictionary` | Stat meanings + rules |
+| `nfl_query_stats` | `POST /api/v1/query/stats` | Parameterized aggregation |
+
+### Propose tools (`admin` scope)
+
+| Tool | Endpoint | Purpose |
+|------|----------|---------|
+| `nfl_propose_correction` | `POST /api/v1/corrections` | Propose field fix for approval |
+| `nfl_list_corrections` | `GET /api/v1/corrections` | List correction proposals |
+
+See `skills/nfl-db/SKILL.md` for agent behavior rules.
+
 ## Configuration
 
 Two environment variables drive the server:

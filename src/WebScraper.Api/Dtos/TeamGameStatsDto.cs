@@ -4,7 +4,7 @@ public class TeamGameStatsDto
 {
     public int Id { get; set; }
     public int GameId { get; set; }
-    public int TeamId { get; set; }
+    public int TeamSeasonId { get; set; }
     public string TeamAbbreviation { get; set; } = string.Empty;
 
     public int FirstDowns { get; set; }

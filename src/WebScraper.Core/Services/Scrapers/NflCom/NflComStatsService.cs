@@ -10,6 +10,7 @@ public class NflComStatsService : BaseApiService, IStatsScraperService
     private readonly IPlayerRepository _playerRepository;
     private readonly IGameRepository _gameRepository;
     private readonly ITeamRepository _teamRepository;
+    private readonly ITeamSeasonRepository _teamSeasonRepository;
 
     public NflComStatsService(
         HttpClient httpClient,
@@ -19,16 +20,18 @@ public class NflComStatsService : BaseApiService, IStatsScraperService
         IStatsRepository statsRepository,
         IPlayerRepository playerRepository,
         IGameRepository gameRepository,
-        ITeamRepository teamRepository)
+        ITeamRepository teamRepository,
+        ITeamSeasonRepository teamSeasonRepository)
         : base(httpClient, logger, providerSettings, rateLimiter)
     {
         _statsRepository = statsRepository;
         _playerRepository = playerRepository;
         _gameRepository = gameRepository;
         _teamRepository = teamRepository;
+        _teamSeasonRepository = teamSeasonRepository;
     }
 
-    public async Task<ScrapeResult> ScrapePlayerStatsAsync(int season, int week)
+    public async Task<ScrapeResult> ScrapePlayerStatsAsync(int season, int week, NflSeasonType seasonType = NflSeasonType.Regular)
     {
         _logger.LogInformation("Starting player stats scrape for season {Season} week {Week} from NFL.com API",
             season, week);
@@ -57,20 +60,20 @@ public class NflComStatsService : BaseApiService, IStatsScraperService
 
     private async Task<int> ScrapeGameStatsAsync(Game game, int season, int week)
     {
-        var homeTeam = game.HomeTeam ?? await _teamRepository.GetByIdAsync(game.HomeTeamId);
-        if (homeTeam == null)
+        var homeTeamSeason = game.HomeTeamSeason ?? await _teamSeasonRepository.GetByIdAsync(game.HomeTeamSeasonId);
+        if (homeTeamSeason == null)
         {
-            _logger.LogWarning("Home team not found for game {GameId}", game.Id);
+            _logger.LogWarning("Home team season not found for game {GameId}", game.Id);
             return 0;
         }
 
-        var gameDetailId = NflComGameService.GetGameDetailId(season, week, homeTeam.Abbreviation);
+        var gameDetailId = NflComGameService.GetGameDetailId(season, week, homeTeamSeason.Abbreviation);
         if (gameDetailId == null)
         {
             _logger.LogWarning(
                 "No NFL.com gameDetailId found for game {GameId} (season {Season}, week {Week}, home {HomeAbbr}). " +
                 "Scrape games first to populate game detail IDs.",
-                game.Id, season, week, homeTeam.Abbreviation);
+                game.Id, season, week, homeTeamSeason.Abbreviation);
             return 0;
         }
 

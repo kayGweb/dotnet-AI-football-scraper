@@ -52,21 +52,30 @@ public static class EntityMappings
         Meta = player.ToMeta(),
     };
 
+    public static TeamSummaryDto ToSummary(this TeamSeason teamSeason) => new()
+    {
+        Id = teamSeason.Id,
+        Name = teamSeason.Name,
+        Abbreviation = teamSeason.Abbreviation,
+    };
+
     public static GameDto ToDto(this Game game) => new()
     {
         Id = game.Id,
         Season = game.Season,
+        SeasonType = game.SeasonType.ToString(),
         Week = game.Week,
         GameDate = game.GameDate,
         GameStatus = game.GameStatus,
         EspnEventId = game.EspnEventId,
-        HomeTeam = game.HomeTeam?.ToSummary() ?? new TeamSummaryDto { Id = game.HomeTeamId },
-        AwayTeam = game.AwayTeam?.ToSummary() ?? new TeamSummaryDto { Id = game.AwayTeamId },
+        HomeTeam = game.HomeTeamSeason?.ToSummary() ?? new TeamSummaryDto { Id = game.HomeTeamSeasonId },
+        AwayTeam = game.AwayTeamSeason?.ToSummary() ?? new TeamSummaryDto { Id = game.AwayTeamSeasonId },
         HomeScore = game.HomeScore,
         AwayScore = game.AwayScore,
         HomeWinner = game.HomeWinner,
         Attendance = game.Attendance,
         NeutralSite = game.NeutralSite,
+        BroadcastNetworks = game.BroadcastNetworks,
         Venue = game.Venue?.ToSummary(),
         QuarterScores = HasQuarterScores(game) ? new QuarterScoresDto
         {
@@ -203,8 +212,8 @@ public static class EntityMappings
     {
         Id = stats.Id,
         GameId = stats.GameId,
-        TeamId = stats.TeamId,
-        TeamAbbreviation = stats.Team?.Abbreviation ?? string.Empty,
+        TeamSeasonId = stats.TeamSeasonId,
+        TeamAbbreviation = stats.TeamSeason?.Abbreviation ?? string.Empty,
         FirstDowns = stats.FirstDowns,
         FirstDownsPassing = stats.FirstDownsPassing,
         FirstDownsRushing = stats.FirstDownsRushing,
@@ -251,6 +260,80 @@ public static class EntityMappings
         ReturnDate = injury.ReturnDate,
         ReportDate = injury.ReportDate,
         Meta = injury.ToMeta(),
+    };
+
+    public static GameDriveDto ToDto(this GameDrive drive) => new()
+    {
+        Id = drive.Id,
+        GameId = drive.GameId,
+        EspnDriveId = drive.EspnDriveId,
+        Sequence = drive.Sequence,
+        TeamAbbreviation = drive.TeamSeason?.Abbreviation,
+        Description = drive.Description,
+        StartPeriod = drive.StartPeriod,
+        EndPeriod = drive.EndPeriod,
+        TimeElapsed = drive.TimeElapsed,
+        Yards = drive.Yards,
+        OffensivePlays = drive.OffensivePlays,
+        IsScore = drive.IsScore,
+        Result = drive.Result,
+        DisplayResult = drive.DisplayResult,
+        Meta = drive.ToMeta(),
+    };
+
+    public static ScoringPlayDto ToDto(this ScoringPlay play) => new()
+    {
+        Id = play.Id,
+        GameId = play.GameId,
+        EspnPlayId = play.EspnPlayId,
+        Sequence = play.Sequence,
+        TeamAbbreviation = play.TeamSeason?.Abbreviation,
+        Period = play.Period,
+        Clock = play.Clock,
+        PlayType = play.PlayType,
+        Description = play.Description,
+        HomeScore = play.HomeScore,
+        AwayScore = play.AwayScore,
+        ScoringType = play.ScoringType,
+        Meta = play.ToMeta(),
+    };
+
+    public static GameWeatherDto ToDto(this GameWeather weather) => new()
+    {
+        Id = weather.Id,
+        GameId = weather.GameId,
+        TemperatureF = weather.TemperatureF,
+        HighTemperatureF = weather.HighTemperatureF,
+        Condition = weather.Condition,
+        WindSpeedMph = weather.WindSpeedMph,
+        WindDirection = weather.WindDirection,
+        HumidityPercent = weather.HumidityPercent,
+        Meta = weather.ToMeta(),
+    };
+
+    public static GameOfficialDto ToDto(this GameOfficial official) => new()
+    {
+        Id = official.Id,
+        GameId = official.GameId,
+        Name = official.Name,
+        Position = official.Position,
+        SortOrder = official.SortOrder,
+        Meta = official.ToMeta(),
+    };
+
+    public static GameOddsDto ToDto(this GameOdds odds) => new()
+    {
+        Id = odds.Id,
+        GameId = odds.GameId,
+        Sportsbook = odds.Sportsbook,
+        Spread = odds.Spread,
+        OverUnder = odds.OverUnder,
+        HomeMoneyline = odds.HomeMoneyline,
+        AwayMoneyline = odds.AwayMoneyline,
+        SnapshotType = odds.SnapshotType.ToString(),
+        CapturedAt = odds.CapturedAt,
+        Details = odds.Details,
+        Meta = odds.ToMeta(),
     };
 
     private static bool HasQuarterScores(Game game) =>

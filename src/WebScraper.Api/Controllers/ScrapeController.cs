@@ -5,9 +5,9 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 using WebScraper.Api.Auth;
 using WebScraper.Api.Dtos.Admin;
+using WebScraper.Models;
 using WebScraper.Api.Services;
 using WebScraper.Data;
-using WebScraper.Models;
 
 namespace WebScraper.Api.Controllers;
 
@@ -17,7 +17,7 @@ namespace WebScraper.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/v1/scrape")]
-[Authorize(Policy = AuthorizationPolicies.RequireOperator)]
+[Authorize(Policy = AuthorizationPolicies.RequireOperate)]
 [Produces("application/json")]
 public class ScrapeController : ControllerBase
 {
@@ -65,7 +65,7 @@ public class ScrapeController : ControllerBase
                 statusCode: StatusCodes.Status400BadRequest);
         }
 
-        return await EnqueueJob(ScrapeJobType.Games, request.Season, request.Week);
+        return await EnqueueJob(ScrapeJobType.Games, request.Season, request.Week, request.SeasonType);
     }
 
     /// <summary>Scrape player stats for a specific season and week.</summary>
@@ -82,7 +82,7 @@ public class ScrapeController : ControllerBase
                 statusCode: StatusCodes.Status400BadRequest);
         }
 
-        return await EnqueueJob(ScrapeJobType.Stats, request.Season, request.Week);
+        return await EnqueueJob(ScrapeJobType.Stats, request.Season, request.Week, request.SeasonType);
     }
 
     /// <summary>Run the full scrape pipeline (teams, players, games, optionally stats).</summary>
@@ -99,16 +99,52 @@ public class ScrapeController : ControllerBase
                 statusCode: StatusCodes.Status400BadRequest);
         }
 
-        return await EnqueueJob(ScrapeJobType.All, request.Season, request.Week);
+        return await EnqueueJob(ScrapeJobType.All, request.Season, request.Week, request.SeasonType);
     }
 
-    private async Task<IActionResult> EnqueueJob(ScrapeJobType type, int? season = null, int? week = null)
+    /// <summary>
+    /// Start a multi-season backfill. Season = start year; EndSeason (or Week) = end year.
+    /// Fans out into child games+stats jobs per week and season type.
+    /// </summary>
+    [HttpPost("backfill")]
+    [ProducesResponseType(typeof(ScrapeJobDto), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> ScrapeBackfill([FromBody] CreateScrapeJobRequest request)
+    {
+        if (request.Season is null)
+        {
+            return Problem(
+                title: "Season is required",
+                detail: "Provide start season (e.g. 2006) in the request body. Use endSeason for the end year.",
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
+        var endSeason = request.EndSeason ?? request.Week ?? request.Season;
+        return await EnqueueJob(ScrapeJobType.Backfill, request.Season, endSeason);
+    }
+
+    /// <summary>
+    /// Poll ESPN pickcenter for upcoming/recent games and store opening/current/closing odds snapshots.
+    /// </summary>
+    [HttpPost("odds-poll")]
+    [ProducesResponseType(typeof(ScrapeJobDto), StatusCodes.Status202Accepted)]
+    public async Task<IActionResult> ScrapeOddsPoll([FromBody] CreateScrapeJobRequest? request)
+    {
+        return await EnqueueJob(ScrapeJobType.OddsPoll, request?.Season);
+    }
+
+    private async Task<IActionResult> EnqueueJob(
+        ScrapeJobType type,
+        int? season = null,
+        int? week = null,
+        NflSeasonType? seasonType = null)
     {
         var job = new ScrapeJob
         {
             Type = type,
             Source = _scraperSettings.DataProvider,
             Season = season,
+            SeasonType = seasonType,
             Week = week,
             Status = ScrapeJobStatus.Queued,
             CreatedAt = DateTime.UtcNow,
@@ -128,6 +164,7 @@ public class ScrapeController : ControllerBase
                 type = job.Type.ToString(),
                 source = job.Source,
                 season = job.Season,
+                seasonType = job.SeasonType?.ToString(),
                 week = job.Week,
                 requestedBy = job.RequestedBy,
             }),

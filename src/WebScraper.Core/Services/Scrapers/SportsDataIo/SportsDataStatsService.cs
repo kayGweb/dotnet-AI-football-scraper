@@ -25,7 +25,7 @@ public class SportsDataStatsService : BaseApiService, IStatsScraperService
         _gameRepository = gameRepository;
     }
 
-    public async Task<ScrapeResult> ScrapePlayerStatsAsync(int season, int week)
+    public async Task<ScrapeResult> ScrapePlayerStatsAsync(int season, int week, NflSeasonType seasonType = NflSeasonType.Regular)
     {
         _logger.LogInformation("Starting player stats scrape for season {Season} week {Week} from SportsData.io API",
             season, week);
@@ -93,8 +93,8 @@ public class SportsDataStatsService : BaseApiService, IStatsScraperService
         if (string.IsNullOrEmpty(teamAbbr)) return null;
 
         return games.FirstOrDefault(g =>
-            (g.HomeTeam?.Abbreviation?.Equals(teamAbbr, StringComparison.OrdinalIgnoreCase) ?? false)
-            || (g.AwayTeam?.Abbreviation?.Equals(teamAbbr, StringComparison.OrdinalIgnoreCase) ?? false));
+            (g.HomeTeamSeason?.Abbreviation?.Equals(teamAbbr, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (g.AwayTeamSeason?.Abbreviation?.Equals(teamAbbr, StringComparison.OrdinalIgnoreCase) ?? false));
     }
 
     private static PlayerGameStats MapToStats(SportsDataPlayerStatsDto dto, int playerId, int gameId)

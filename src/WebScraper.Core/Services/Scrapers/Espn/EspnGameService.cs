@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using WebScraper.Data.Repositories;
 using WebScraper.Models;
+using WebScraper.Services.Coverage;
 
 namespace WebScraper.Services.Scrapers.Espn;
 
@@ -8,12 +9,13 @@ public class EspnGameService : BaseApiService, IGameScraperService
 {
     private readonly IGameRepository _gameRepository;
     private readonly ITeamRepository _teamRepository;
+    private readonly ITeamSeasonRepository _teamSeasonRepository;
+    private readonly IFranchiseRepository _franchiseRepository;
     private readonly IVenueRepository _venueRepository;
     private readonly IApiLinkRepository _apiLinkRepository;
 
-    // Key: "season:week:homeTeamAbbr", Value: ESPN event ID
+    // Key: "season:seasonType:week:homeTeamAbbr", Value: ESPN event ID
     private static readonly Dictionary<string, string> EventIdLookup = new();
-    // Tracks which season:week combos have been fetched from the API
     private static readonly HashSet<string> PopulatedWeeks = new();
 
     public EspnGameService(
@@ -23,55 +25,69 @@ public class EspnGameService : BaseApiService, IGameScraperService
         RateLimiterService rateLimiter,
         IGameRepository gameRepository,
         ITeamRepository teamRepository,
+        ITeamSeasonRepository teamSeasonRepository,
+        IFranchiseRepository franchiseRepository,
         IVenueRepository venueRepository,
         IApiLinkRepository apiLinkRepository)
         : base(httpClient, logger, providerSettings, rateLimiter)
     {
         _gameRepository = gameRepository;
         _teamRepository = teamRepository;
+        _teamSeasonRepository = teamSeasonRepository;
+        _franchiseRepository = franchiseRepository;
         _venueRepository = venueRepository;
         _apiLinkRepository = apiLinkRepository;
     }
 
-    public async Task<ScrapeResult> ScrapeGamesAsync(int season)
+    public async Task<ScrapeResult> ScrapeGamesAsync(int season, NflSeasonType seasonType = NflSeasonType.Regular)
     {
-        _logger.LogInformation("Starting games scrape for season {Season} from ESPN API", season);
+        _logger.LogInformation(
+            "Starting games scrape for season {Season} type {SeasonType} from ESPN API",
+            season, seasonType);
 
-        int totalCount = 0;
-        for (int week = 1; week <= 18; week++)
-        {
-            var count = await ScrapeWeekAsync(season, week);
-            totalCount += count;
-        }
+        var totalCount = 0;
+        var weeks = NflSeasonSchedule.GetScoreboardWeeks(seasonType, season);
+        for (var week = 1; week <= weeks; week++)
+            totalCount += await ScrapeWeekAsync(season, week, seasonType);
 
-        _logger.LogInformation("Games scrape complete for season {Season}. {Count} games processed", season, totalCount);
-        return ScrapeResult.Succeeded(totalCount, $"{totalCount} games processed for season {season} from ESPN API");
+        _logger.LogInformation(
+            "Games scrape complete for season {Season} type {SeasonType}. {Count} games processed",
+            season, seasonType, totalCount);
+        return ScrapeResult.Succeeded(totalCount,
+            $"{totalCount} games processed for season {season} ({seasonType}) from ESPN API");
     }
 
-    public async Task<ScrapeResult> ScrapeGamesAsync(int season, int week)
+    public async Task<ScrapeResult> ScrapeGamesAsync(int season, int week, NflSeasonType seasonType = NflSeasonType.Regular)
     {
-        _logger.LogInformation("Starting games scrape for season {Season} week {Week} from ESPN API", season, week);
+        _logger.LogInformation(
+            "Starting games scrape for season {Season} week {Week} type {SeasonType} from ESPN API",
+            season, week, seasonType);
 
-        var count = await ScrapeWeekAsync(season, week);
+        var count = await ScrapeWeekAsync(season, week, seasonType);
 
-        _logger.LogInformation("Games scrape complete for season {Season} week {Week}. {Count} games processed", season, week, count);
-        return ScrapeResult.Succeeded(count, $"{count} games processed for season {season} week {week} from ESPN API");
+        _logger.LogInformation(
+            "Games scrape complete for season {Season} week {Week} type {SeasonType}. {Count} games processed",
+            season, week, seasonType, count);
+        return ScrapeResult.Succeeded(count,
+            $"{count} games processed for season {season} week {week} ({seasonType}) from ESPN API");
     }
 
-    private async Task<int> ScrapeWeekAsync(int season, int week)
+    private async Task<int> ScrapeWeekAsync(int season, int week, NflSeasonType seasonType)
     {
-        var url = $"/scoreboard?dates={season}&week={week}&seasontype=2";
+        var url = $"/scoreboard?dates={season}&week={week}&seasontype={(int)seasonType}";
         var response = await FetchJsonAsync<EspnScoreboardResponse>(url);
         if (response == null)
         {
-            _logger.LogWarning("Failed to fetch scoreboard for season {Season} week {Week} from ESPN API", season, week);
+            _logger.LogWarning(
+                "Failed to fetch scoreboard for season {Season} week {Week} type {SeasonType}",
+                season, week, seasonType);
             return 0;
         }
 
-        int count = 0;
+        var count = 0;
         foreach (var espnEvent in response.Events)
         {
-            var game = await MapToGameAsync(espnEvent, season, week);
+            var game = await MapToGameAsync(espnEvent, season, week, seasonType);
             if (game != null)
             {
                 await _gameRepository.UpsertAsync(game);
@@ -79,11 +95,12 @@ public class EspnGameService : BaseApiService, IGameScraperService
             }
         }
 
-        PopulatedWeeks.Add($"{season}:{week}");
+        PopulatedWeeks.Add(WeekKey(season, seasonType, week));
         return count;
     }
 
-    private async Task<Game?> MapToGameAsync(EspnEvent espnEvent, int season, int week)
+    private async Task<Game?> MapToGameAsync(
+        EspnEvent espnEvent, int season, int week, NflSeasonType seasonType)
     {
         try
         {
@@ -100,29 +117,24 @@ public class EspnGameService : BaseApiService, IGameScraperService
             var homeAbbr = EspnMappings.ToNflAbbreviation(homeCompetitor.Team.Id, homeCompetitor.Team.Abbreviation);
             var awayAbbr = EspnMappings.ToNflAbbreviation(awayCompetitor.Team.Id, awayCompetitor.Team.Abbreviation);
 
-            var homeTeam = await _teamRepository.GetByAbbreviationAsync(homeAbbr);
-            var awayTeam = await _teamRepository.GetByAbbreviationAsync(awayAbbr);
+            var homeTeamSeason = await EnsureTeamSeasonAsync(homeCompetitor, homeAbbr, season);
+            var awayTeamSeason = await EnsureTeamSeasonAsync(awayCompetitor, awayAbbr, season);
 
-            if (homeTeam == null || awayTeam == null)
+            if (homeTeamSeason == null || awayTeamSeason == null)
             {
-                _logger.LogDebug("Could not find teams: home={HomeAbbr}, away={AwayAbbr}", homeAbbr, awayAbbr);
+                _logger.LogDebug("Could not resolve team seasons: home={HomeAbbr}, away={AwayAbbr}", homeAbbr, awayAbbr);
                 return null;
             }
 
             DateTime gameDate = DateTime.MinValue;
             if (!string.IsNullOrEmpty(espnEvent.Date))
-            {
                 DateTime.TryParse(espnEvent.Date, out gameDate);
-            }
 
             int? homeScore = int.TryParse(homeCompetitor.Score, out var hs) ? hs : null;
             int? awayScore = int.TryParse(awayCompetitor.Score, out var aws) ? aws : null;
 
-            // Store event ID for stats scraping
-            var lookupKey = $"{season}:{week}:{homeAbbr}";
-            EventIdLookup[lookupKey] = espnEvent.Id;
+            EventIdLookup[EventLookupKey(season, seasonType, week, homeAbbr)] = espnEvent.Id;
 
-            // Upsert venue if present
             int? venueId = null;
             if (competition.Venue != null && !string.IsNullOrEmpty(competition.Venue.Id))
             {
@@ -141,20 +153,18 @@ public class EspnGameService : BaseApiService, IGameScraperService
                 venueId = saved?.Id;
             }
 
-            // Parse quarter scores from linescores
-            int?[] homeQuarters = ParseLinescores(homeCompetitor.Linescores);
-            int?[] awayQuarters = ParseLinescores(awayCompetitor.Linescores);
-
-            // Game status
-            string? gameStatus = competition.Status?.Type?.Name;
+            var homeQuarters = ParseLinescores(homeCompetitor.Linescores);
+            var awayQuarters = ParseLinescores(awayCompetitor.Linescores);
+            var gameStatus = competition.Status?.Type?.Name;
 
             var game = new Game
             {
                 Season = season,
+                SeasonType = seasonType,
                 Week = week,
                 GameDate = gameDate,
-                HomeTeamId = homeTeam.Id,
-                AwayTeamId = awayTeam.Id,
+                HomeTeamSeasonId = homeTeamSeason.Id,
+                AwayTeamSeasonId = awayTeamSeason.Id,
                 HomeScore = homeScore,
                 AwayScore = awayScore,
                 VenueId = venueId,
@@ -172,13 +182,13 @@ public class EspnGameService : BaseApiService, IGameScraperService
                 AwayQ2 = awayQuarters[1],
                 AwayQ3 = awayQuarters[2],
                 AwayQ4 = awayQuarters[3],
-                AwayOT = awayQuarters[4]
+                AwayOT = awayQuarters[4],
+                BroadcastNetworks = FormatScoreboardBroadcasts(competition.Broadcasts)
             };
 
-            // Store scoreboard API link
             await StoreApiLinkAsync(
                 $"https://site.api.espn.com/apis/site/v2/sports/football/nfl/summary?event={espnEvent.Id}",
-                "summary", "boxscore", season, week, espnEvent.Id, null, homeTeam.Id);
+                "summary", "boxscore", season, week, espnEvent.Id, null, homeTeamSeason.Id);
 
             return game;
         }
@@ -189,22 +199,58 @@ public class EspnGameService : BaseApiService, IGameScraperService
         }
     }
 
+    private async Task<TeamSeason?> EnsureTeamSeasonAsync(
+        EspnCompetitor competitor, string abbreviation, int season)
+    {
+        var team = await _teamRepository.GetByAbbreviationAsync(abbreviation);
+        if (team != null)
+            return await _teamSeasonRepository.EnsureFromTeamAsync(team, season);
+
+        var (conference, division) = EspnMappings.GetDivision(abbreviation);
+        var franchise = await _franchiseRepository.GetOrCreateAsync(
+            abbreviation, competitor.Team.Abbreviation);
+
+        return await _teamSeasonRepository.UpsertAsync(new TeamSeason
+        {
+            FranchiseId = franchise.Id,
+            Season = season,
+            Name = competitor.Team.Abbreviation,
+            Abbreviation = abbreviation,
+            City = string.Empty,
+            Conference = conference,
+            Division = division,
+        });
+    }
+
     private static int?[] ParseLinescores(List<EspnLinescore>? linescores)
     {
-        var result = new int?[5]; // Q1, Q2, Q3, Q4, OT
+        var result = new int?[5];
         if (linescores == null) return result;
 
-        for (int i = 0; i < linescores.Count && i < 5; i++)
-        {
+        for (var i = 0; i < linescores.Count && i < 5; i++)
             result[i] = (int)linescores[i].Value;
-        }
+
         return result;
+    }
+
+    internal static string? FormatScoreboardBroadcasts(List<EspnScoreboardBroadcast>? broadcasts)
+    {
+        if (broadcasts == null || broadcasts.Count == 0)
+            return null;
+
+        var names = broadcasts
+            .SelectMany(b => b.Names ?? [])
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return names.Count > 0 ? string.Join(", ", names) : null;
     }
 
     private async Task StoreApiLinkAsync(
         string url, string endpointType, string relationType,
         int season, int week, string espnEventId,
-        int? gameId, int? teamId)
+        int? gameId, int? teamSeasonId)
     {
         try
         {
@@ -217,7 +263,7 @@ public class EspnGameService : BaseApiService, IGameScraperService
                 Week = week,
                 EspnEventId = espnEventId,
                 GameId = gameId,
-                TeamId = teamId,
+                TeamId = teamSeasonId,
                 DiscoveredAt = DateTime.UtcNow,
                 LastAccessedAt = DateTime.UtcNow
             };
@@ -229,54 +275,38 @@ public class EspnGameService : BaseApiService, IGameScraperService
         }
     }
 
-    /// <summary>
-    /// Gets the ESPN event ID for a given season, week, and home team abbreviation.
-    /// Used by EspnStatsService to fetch box scores.
-    /// </summary>
-    internal static string? GetEventId(int season, int week, string homeTeamAbbr)
+    internal static string? GetEventId(int season, int week, string homeTeamAbbr, NflSeasonType seasonType = NflSeasonType.Regular)
     {
-        var key = $"{season}:{week}:{homeTeamAbbr}";
-        return EventIdLookup.GetValueOrDefault(key);
+        return EventIdLookup.GetValueOrDefault(EventLookupKey(season, seasonType, week, homeTeamAbbr));
     }
 
-    /// <summary>
-    /// Clears all cached event IDs and populated-week markers. Used by tests.
-    /// </summary>
     internal static void ClearEventIdCache()
     {
         EventIdLookup.Clear();
         PopulatedWeeks.Clear();
     }
 
-    /// <summary>
-    /// Returns true if event IDs have already been populated for this season/week
-    /// (either via game scraping or an explicit <see cref="PopulateEventIdsAsync"/> call).
-    /// </summary>
-    internal static bool HasEventIdsForWeek(int season, int week)
-    {
-        return PopulatedWeeks.Contains($"{season}:{week}");
-    }
+    internal static bool HasEventIdsForWeek(int season, int week, NflSeasonType seasonType = NflSeasonType.Regular)
+        => PopulatedWeeks.Contains(WeekKey(season, seasonType, week));
 
-    /// <summary>
-    /// Fetches the ESPN scoreboard for the given season/week and populates the
-    /// in-memory event ID cache. Does not write to the database — used by
-    /// <see cref="EspnStatsService"/> when the cache is cold.
-    /// </summary>
     internal static async Task PopulateEventIdsAsync(
         HttpClient httpClient,
         ILogger logger,
         RateLimiterService rateLimiter,
         int season,
-        int week)
+        int week,
+        NflSeasonType seasonType = NflSeasonType.Regular)
     {
-        var weekKey = $"{season}:{week}";
+        var weekKey = WeekKey(season, seasonType, week);
         if (PopulatedWeeks.Contains(weekKey))
             return;
 
         await rateLimiter.WaitAsync();
 
-        var url = $"scoreboard?dates={season}&week={week}&seasontype=2";
-        logger.LogInformation("Fetching ESPN scoreboard to populate event IDs for season {Season} week {Week}", season, week);
+        var url = $"scoreboard?dates={season}&week={week}&seasontype={(int)seasonType}";
+        logger.LogInformation(
+            "Fetching ESPN scoreboard to populate event IDs for season {Season} week {Week} type {SeasonType}",
+            season, week, seasonType);
 
         try
         {
@@ -289,11 +319,13 @@ public class EspnGameService : BaseApiService, IGameScraperService
 
             if (scoreboard == null)
             {
-                logger.LogWarning("Failed to deserialize ESPN scoreboard for season {Season} week {Week}", season, week);
+                logger.LogWarning(
+                    "Failed to deserialize ESPN scoreboard for season {Season} week {Week} type {SeasonType}",
+                    season, week, seasonType);
                 return;
             }
 
-            int count = 0;
+            var count = 0;
             foreach (var espnEvent in scoreboard.Events)
             {
                 var competition = espnEvent.Competitions.FirstOrDefault();
@@ -304,17 +336,26 @@ public class EspnGameService : BaseApiService, IGameScraperService
                 if (homeCompetitor == null) continue;
 
                 var homeAbbr = EspnMappings.ToNflAbbreviation(homeCompetitor.Team.Id, homeCompetitor.Team.Abbreviation);
-                var lookupKey = $"{season}:{week}:{homeAbbr}";
-                EventIdLookup[lookupKey] = espnEvent.Id;
+                EventIdLookup[EventLookupKey(season, seasonType, week, homeAbbr)] = espnEvent.Id;
                 count++;
             }
 
             PopulatedWeeks.Add(weekKey);
-            logger.LogInformation("Populated {Count} ESPN event IDs for season {Season} week {Week}", count, season, week);
+            logger.LogInformation(
+                "Populated {Count} ESPN event IDs for season {Season} week {Week} type {SeasonType}",
+                count, season, week, seasonType);
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Failed to fetch ESPN scoreboard for event ID population (season {Season} week {Week})", season, week);
+            logger.LogWarning(ex,
+                "Failed to fetch ESPN scoreboard for event ID population (season {Season} week {Week} type {SeasonType})",
+                season, week, seasonType);
         }
     }
+
+    private static string WeekKey(int season, NflSeasonType seasonType, int week)
+        => $"{season}:{(int)seasonType}:{week}";
+
+    private static string EventLookupKey(int season, NflSeasonType seasonType, int week, string homeAbbr)
+        => $"{season}:{(int)seasonType}:{week}:{homeAbbr}";
 }

@@ -114,6 +114,7 @@ public class EspnPlayerService : BaseApiService, IPlayerScraperService
 
         return new Player
         {
+            EspnId = athlete.Id,
             Name = athlete.DisplayName,
             TeamId = teamId,
             Position = athlete.Position?.Abbreviation ?? "",

@@ -39,8 +39,8 @@ public class GamesController : ControllerBase
     {
         var query = _db.Games
             .AsNoTracking()
-            .Include(g => g.HomeTeam)
-            .Include(g => g.AwayTeam)
+            .Include(g => g.HomeTeamSeason)
+            .Include(g => g.AwayTeamSeason)
             .Include(g => g.Venue)
             .AsQueryable();
 
@@ -54,7 +54,8 @@ public class GamesController : ControllerBase
         }
         if (teamId.HasValue)
         {
-            query = query.Where(g => g.HomeTeamId == teamId.Value || g.AwayTeamId == teamId.Value);
+            query = query.Where(g =>
+                g.HomeTeamSeasonId == teamId.Value || g.AwayTeamSeasonId == teamId.Value);
         }
 
         var totalCount = await query.CountAsync(cancellationToken);
@@ -80,8 +81,8 @@ public class GamesController : ControllerBase
     {
         var game = await _db.Games
             .AsNoTracking()
-            .Include(g => g.HomeTeam)
-            .Include(g => g.AwayTeam)
+            .Include(g => g.HomeTeamSeason)
+            .Include(g => g.AwayTeamSeason)
             .Include(g => g.Venue)
             .FirstOrDefaultAsync(g => g.Id == id, cancellationToken);
         if (game is null)
@@ -111,7 +112,7 @@ public class GamesController : ControllerBase
 
         var rows = await _db.TeamGameStats
             .AsNoTracking()
-            .Include(s => s.Team)
+            .Include(s => s.TeamSeason)
             .Where(s => s.GameId == id)
             .ToListAsync(cancellationToken);
 
@@ -166,5 +167,133 @@ public class GamesController : ControllerBase
             .ToListAsync(cancellationToken);
 
         return Ok(rows.Select(i => i.ToDto()).ToList());
+    }
+
+    /// <summary>List drives for a given game, in sequence order.</summary>
+    [HttpGet("{id:int}/drives")]
+    [ProducesResponseType(typeof(IReadOnlyList<GameDriveDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IReadOnlyList<GameDriveDto>>> GetDrivesForGame(int id, CancellationToken cancellationToken)
+    {
+        var gameExists = await _db.Games.AnyAsync(g => g.Id == id, cancellationToken);
+        if (!gameExists)
+        {
+            return Problem(
+                title: "Game not found",
+                detail: $"No game exists with id {id}.",
+                statusCode: StatusCodes.Status404NotFound);
+        }
+
+        var rows = await _db.GameDrives
+            .AsNoTracking()
+            .Include(d => d.TeamSeason)
+            .Where(d => d.GameId == id)
+            .OrderBy(d => d.Sequence)
+            .ToListAsync(cancellationToken);
+
+        return Ok(rows.Select(d => d.ToDto()).ToList());
+    }
+
+    /// <summary>List scoring plays for a given game, in sequence order.</summary>
+    [HttpGet("{id:int}/scoring-plays")]
+    [ProducesResponseType(typeof(IReadOnlyList<ScoringPlayDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IReadOnlyList<ScoringPlayDto>>> GetScoringPlaysForGame(int id, CancellationToken cancellationToken)
+    {
+        var gameExists = await _db.Games.AnyAsync(g => g.Id == id, cancellationToken);
+        if (!gameExists)
+        {
+            return Problem(
+                title: "Game not found",
+                detail: $"No game exists with id {id}.",
+                statusCode: StatusCodes.Status404NotFound);
+        }
+
+        var rows = await _db.ScoringPlays
+            .AsNoTracking()
+            .Include(p => p.TeamSeason)
+            .Where(p => p.GameId == id)
+            .OrderBy(p => p.Sequence)
+            .ToListAsync(cancellationToken);
+
+        return Ok(rows.Select(p => p.ToDto()).ToList());
+    }
+
+    /// <summary>Get weather conditions for a given game.</summary>
+    [HttpGet("{id:int}/weather")]
+    [ProducesResponseType(typeof(GameWeatherDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<GameWeatherDto>> GetWeatherForGame(int id, CancellationToken cancellationToken)
+    {
+        var weather = await _db.GameWeathers
+            .AsNoTracking()
+            .FirstOrDefaultAsync(w => w.GameId == id, cancellationToken);
+
+        if (weather is null)
+        {
+            var gameExists = await _db.Games.AnyAsync(g => g.Id == id, cancellationToken);
+            if (!gameExists)
+            {
+                return Problem(
+                    title: "Game not found",
+                    detail: $"No game exists with id {id}.",
+                    statusCode: StatusCodes.Status404NotFound);
+            }
+
+            return Problem(
+                title: "Weather not found",
+                detail: $"No weather data exists for game {id}.",
+                statusCode: StatusCodes.Status404NotFound);
+        }
+
+        return Ok(weather.ToDto());
+    }
+
+    /// <summary>List officials for a given game.</summary>
+    [HttpGet("{id:int}/officials")]
+    [ProducesResponseType(typeof(IReadOnlyList<GameOfficialDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IReadOnlyList<GameOfficialDto>>> GetOfficialsForGame(int id, CancellationToken cancellationToken)
+    {
+        var gameExists = await _db.Games.AnyAsync(g => g.Id == id, cancellationToken);
+        if (!gameExists)
+        {
+            return Problem(
+                title: "Game not found",
+                detail: $"No game exists with id {id}.",
+                statusCode: StatusCodes.Status404NotFound);
+        }
+
+        var rows = await _db.GameOfficials
+            .AsNoTracking()
+            .Where(o => o.GameId == id)
+            .OrderBy(o => o.SortOrder)
+            .ToListAsync(cancellationToken);
+
+        return Ok(rows.Select(o => o.ToDto()).ToList());
+    }
+
+    /// <summary>List betting odds snapshots for a given game.</summary>
+    [HttpGet("{id:int}/odds")]
+    [ProducesResponseType(typeof(IReadOnlyList<GameOddsDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IReadOnlyList<GameOddsDto>>> GetOddsForGame(int id, CancellationToken cancellationToken)
+    {
+        var gameExists = await _db.Games.AnyAsync(g => g.Id == id, cancellationToken);
+        if (!gameExists)
+        {
+            return Problem(
+                title: "Game not found",
+                detail: $"No game exists with id {id}.",
+                statusCode: StatusCodes.Status404NotFound);
+        }
+
+        var rows = await _db.GameOdds
+            .AsNoTracking()
+            .Where(o => o.GameId == id)
+            .OrderByDescending(o => o.CapturedAt)
+            .ToListAsync(cancellationToken);
+
+        return Ok(rows.Select(o => o.ToDto()).ToList());
     }
 }

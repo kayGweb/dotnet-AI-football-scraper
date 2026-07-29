@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using Microsoft.Extensions.Logging;
 
 namespace WebScraper.Mcp;
@@ -80,6 +81,21 @@ public class NflApiClient
     public Task<string> GetGameInjuriesAsync(int id, CancellationToken ct)
         => GetAsync($"api/v1/games/{id}/injuries", ct);
 
+    public Task<string> GetGameDrivesAsync(int id, CancellationToken ct)
+        => GetAsync($"api/v1/games/{id}/drives", ct);
+
+    public Task<string> GetGameScoringPlaysAsync(int id, CancellationToken ct)
+        => GetAsync($"api/v1/games/{id}/scoring-plays", ct);
+
+    public Task<string> GetGameWeatherAsync(int id, CancellationToken ct)
+        => GetAsync($"api/v1/games/{id}/weather", ct);
+
+    public Task<string> GetGameOfficialsAsync(int id, CancellationToken ct)
+        => GetAsync($"api/v1/games/{id}/officials", ct);
+
+    public Task<string> GetGameOddsAsync(int id, CancellationToken ct)
+        => GetAsync($"api/v1/games/{id}/odds", ct);
+
     // ---- Venues ----
 
     public Task<string> ListVenuesAsync(string? state, bool? isIndoor, int page, int pageSize, CancellationToken ct)
@@ -97,7 +113,107 @@ public class NflApiClient
     public Task<string> GetStatusAsync(CancellationToken ct)
         => GetAsync("api/v1/status", ct);
 
+    // ---- Operate ----
+
+    public Task<string> TriggerScrapeAsync(string type, int? season, int? week, string? seasonType, int? endSeason, CancellationToken ct)
+    {
+        var isBackfill = type.Equals("backfill", StringComparison.OrdinalIgnoreCase);
+        var body = JsonSerializer.Serialize(new
+        {
+            season,
+            week = isBackfill ? null : week,
+            seasonType,
+            endSeason = isBackfill ? (endSeason ?? week ?? season) : null,
+        });
+        return PostAsync($"api/v1/scrape/{type.ToLowerInvariant()}", body, ct);
+    }
+
+    public Task<string> ListJobsAsync(string? status, int page, int pageSize, CancellationToken ct)
+        => GetAsync(BuildQuery("api/v1/jobs",
+            ("status", status),
+            ("page", page.ToString()),
+            ("pageSize", pageSize.ToString())), ct);
+
+    public Task<string> GetJobAsync(int jobId, CancellationToken ct)
+        => GetAsync($"api/v1/jobs/{jobId}", ct);
+
+    public Task<string> RetryJobAsync(int jobId, CancellationToken ct)
+        => PostAsync($"api/v1/jobs/{jobId}/retry", "{}", ct);
+
+    public Task<string> GetBackfillProgressAsync(int jobId, CancellationToken ct)
+        => GetAsync($"api/v1/backfill/{jobId}/progress", ct);
+
+    public Task<string> PauseBackfillAsync(int jobId, CancellationToken ct)
+        => PostAsync($"api/v1/backfill/{jobId}/pause", "{}", ct);
+
+    public Task<string> ResumeBackfillAsync(int jobId, CancellationToken ct)
+        => PostAsync($"api/v1/backfill/{jobId}/resume", "{}", ct);
+
+    public Task<string> GetPushStatusAsync(CancellationToken ct)
+        => GetAsync("api/v1/push/status", ct);
+
+    public Task<string> TriggerPushAsync(bool resume, bool reset, CancellationToken ct)
+        => PostAsync($"api/v1/push?resume={resume.ToString().ToLowerInvariant()}&reset={reset.ToString().ToLowerInvariant()}", "{}", ct);
+
+    public Task<string> CreateBackupAsync(CancellationToken ct)
+        => PostAsync("api/v1/backup", "{}", ct);
+
+    public Task<string> ListBackupsAsync(CancellationToken ct)
+        => GetAsync("api/v1/backup", ct);
+
+    public Task<string> GetCoverageAsync(int? season, string? seasonType, CancellationToken ct)
+        => GetAsync(BuildQuery("api/v1/coverage",
+            ("season", season?.ToString()),
+            ("seasonType", seasonType)), ct);
+
+    public Task<string> FindGapsAsync(int limit, CancellationToken ct)
+        => GetAsync(BuildQuery("api/v1/gaps", ("limit", limit.ToString())), ct);
+
+    // ---- Introspect ----
+
+    public Task<string> DescribeSchemaAsync(string? entity, CancellationToken ct)
+        => GetAsync(BuildQuery("api/v1/schema", ("entity", entity)), ct);
+
+    public Task<string> GetDataDictionaryAsync(CancellationToken ct)
+        => GetAsync("api/v1/schema/dictionary", ct);
+
+    public Task<string> QueryStatsAsync(string requestJson, CancellationToken ct)
+        => PostAsync("api/v1/query/stats", requestJson, ct);
+
+    // ---- Propose ----
+
+    public Task<string> ProposeCorrectionAsync(string bodyJson, CancellationToken ct)
+        => PostAsync("api/v1/corrections", bodyJson, ct);
+
+    public Task<string> ListCorrectionsAsync(string? status, CancellationToken ct)
+        => GetAsync(BuildQuery("api/v1/corrections", ("status", status)), ct);
+
     // ---- Internal helpers ----
+
+    private async Task<string> PostAsync(string path, string jsonBody, CancellationToken ct)
+    {
+        try
+        {
+            using var content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
+            using var response = await _http.PostAsync(path, content, ct);
+            var body = await response.Content.ReadAsStringAsync(ct);
+
+            if (response.IsSuccessStatusCode)
+                return body;
+
+            return ErrorEnvelope((int)response.StatusCode, ReasonFor(response.StatusCode), path, body);
+        }
+        catch (TaskCanceledException ex) when (!ct.IsCancellationRequested)
+        {
+            _logger.LogWarning(ex, "NFL API POST timed out: {Path}", path);
+            return ErrorEnvelope(0, "Request timed out", path, ex.Message);
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning(ex, "NFL API POST failed: {Path}", path);
+            return ErrorEnvelope(0, "Network error reaching NFL API", path, ex.Message);
+        }
+    }
 
     private async Task<string> GetAsync(string path, CancellationToken ct)
     {

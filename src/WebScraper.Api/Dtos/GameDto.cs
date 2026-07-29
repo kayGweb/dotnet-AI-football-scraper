@@ -4,6 +4,7 @@ public class GameDto
 {
     public int Id { get; set; }
     public int Season { get; set; }
+    public string SeasonType { get; set; } = "Regular";
     public int Week { get; set; }
     public DateTime GameDate { get; set; }
     public string? GameStatus { get; set; }
@@ -17,6 +18,7 @@ public class GameDto
 
     public int? Attendance { get; set; }
     public bool NeutralSite { get; set; }
+    public string? BroadcastNetworks { get; set; }
     public VenueSummaryDto? Venue { get; set; }
 
     public QuarterScoresDto? QuarterScores { get; set; }

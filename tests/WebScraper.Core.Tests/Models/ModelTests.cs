@@ -16,8 +16,6 @@ public class ModelTests
         Assert.Equal(string.Empty, team.Conference);
         Assert.Equal(string.Empty, team.Division);
         Assert.Empty(team.Players);
-        Assert.Empty(team.HomeGames);
-        Assert.Empty(team.AwayGames);
     }
 
     [Fact]

@@ -33,6 +33,7 @@ public static class DataProviderFactory
                 AddApiHttpClient<IPlayerScraperService, EspnPlayerService>(services, settings, espnSettings);
                 AddApiHttpClient<IGameScraperService, EspnGameService>(services, settings, espnSettings);
                 AddApiHttpClient<IStatsScraperService, EspnStatsService>(services, settings, espnSettings);
+                AddApiHttpClient<IOddsPollService, EspnOddsPollService>(services, settings, espnSettings);
                 break;
 
             case "sportsdataio":
@@ -64,6 +65,9 @@ public static class DataProviderFactory
                     $"Unsupported data provider: '{settings.DataProvider}'. " +
                     "Supported: ProFootballReference, Espn, SportsDataIo, MySportsFeeds, NflCom");
         }
+
+        if (!services.Any(d => d.ServiceType == typeof(IOddsPollService)))
+            services.AddSingleton<IOddsPollService, NoOpOddsPollService>();
     }
 
     internal static void AddScraperHttpClient<TInterface, TImplementation>(
