@@ -5,6 +5,7 @@ using WebScraper.Data;
 using WebScraper.Data.Repositories;
 using WebScraper.Models;
 using WebScraper.Services;
+using WebScraper.Services.Agent;
 using WebScraper.Services.Coverage;
 
 namespace WebScraper.Extensions;
@@ -73,6 +74,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<SeasonCoverageService>();
         services.AddScoped<QualityRulesEngine>();
         services.AddScoped<RepairJobEnqueuer>();
+        services.AddScoped<QueryStatsService>();
+        services.AddScoped<DataCorrectionService>();
+        services.AddScoped<GapFinderService>();
 
         // Register scraper services via provider factory (driven by DataProvider config)
         DataProviderFactory.RegisterScrapers(services, scraperSettings);

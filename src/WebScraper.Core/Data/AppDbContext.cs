@@ -52,6 +52,9 @@ public class AppDbContext : DbContext
     /// <summary>Data quality findings from post-scrape rules. Phase B.</summary>
     public DbSet<DataQualityFinding> DataQualityFindings => Set<DataQualityFinding>();
 
+    /// <summary>Agent-proposed field corrections awaiting approval. Phase C.</summary>
+    public DbSet<DataCorrection> DataCorrections => Set<DataCorrection>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         // Game has two FKs to TeamSeason — must use Restrict to avoid cascade cycles
@@ -208,6 +211,12 @@ public class AppDbContext : DbContext
 
         modelBuilder.Entity<DataQualityFinding>()
             .HasIndex(f => new { f.RuleType, f.EntityType, f.EntityId });
+
+        modelBuilder.Entity<DataCorrection>()
+            .HasIndex(c => new { c.Status, c.CreatedAt });
+
+        modelBuilder.Entity<DataCorrection>()
+            .HasIndex(c => new { c.EntityType, c.EntityId, c.Field, c.Status });
 
         // Venue unique index on EspnId
         modelBuilder.Entity<Venue>()

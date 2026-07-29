@@ -10,7 +10,7 @@ namespace WebScraper.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/coverage")]
-[Authorize(Policy = AuthorizationPolicies.RequireViewer)]
+[Authorize(Policy = AuthorizationPolicies.RequireOperateScope)]
 [Produces("application/json")]
 public class CoverageController : ControllerBase
 {
@@ -45,7 +45,7 @@ public class CoverageController : ControllerBase
 
     /// <summary>Recompute coverage, run quality rules, and optionally enqueue repairs.</summary>
     [HttpPost("refresh")]
-    [Authorize(Policy = AuthorizationPolicies.RequireOperator)]
+    [Authorize(Policy = AuthorizationPolicies.RequireOperate)]
     [ProducesResponseType(typeof(CoverageRefreshResultDto), StatusCodes.Status200OK)]
     public async Task<ActionResult<CoverageRefreshResultDto>> Refresh(
         [FromQuery] int? season,

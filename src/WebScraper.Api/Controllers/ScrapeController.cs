@@ -17,7 +17,7 @@ namespace WebScraper.Api.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/v1/scrape")]
-[Authorize(Policy = AuthorizationPolicies.RequireOperator)]
+[Authorize(Policy = AuthorizationPolicies.RequireOperate)]
 [Produces("application/json")]
 public class ScrapeController : ControllerBase
 {

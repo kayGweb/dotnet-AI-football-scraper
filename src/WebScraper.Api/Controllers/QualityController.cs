@@ -9,7 +9,7 @@ namespace WebScraper.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/quality")]
-[Authorize(Policy = AuthorizationPolicies.RequireViewer)]
+[Authorize(Policy = AuthorizationPolicies.RequireOperateScope)]
 [Produces("application/json")]
 public class QualityController : ControllerBase
 {
@@ -54,7 +54,7 @@ public class QualityController : ControllerBase
 
     /// <summary>Run quality rules scan.</summary>
     [HttpPost("scan")]
-    [Authorize(Policy = AuthorizationPolicies.RequireOperator)]
+    [Authorize(Policy = AuthorizationPolicies.RequireOperate)]
     [ProducesResponseType(typeof(int), StatusCodes.Status200OK)]
     public async Task<ActionResult<int>> Scan(
         [FromQuery] int? season,
@@ -68,7 +68,7 @@ public class QualityController : ControllerBase
 
     /// <summary>Enqueue a repair scrape job for one finding.</summary>
     [HttpPost("findings/{id:long}/repair")]
-    [Authorize(Policy = AuthorizationPolicies.RequireOperator)]
+    [Authorize(Policy = AuthorizationPolicies.RequireOperate)]
     [ProducesResponseType(typeof(int), StatusCodes.Status202Accepted)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> RepairFinding(long id, CancellationToken cancellationToken)
@@ -83,7 +83,7 @@ public class QualityController : ControllerBase
 
     /// <summary>Enqueue repair jobs for all actionable open findings.</summary>
     [HttpPost("repairs")]
-    [Authorize(Policy = AuthorizationPolicies.RequireOperator)]
+    [Authorize(Policy = AuthorizationPolicies.RequireOperate)]
     [ProducesResponseType(typeof(int), StatusCodes.Status202Accepted)]
     public async Task<IActionResult> EnqueueRepairs(
         [FromQuery] int limit = 50,
