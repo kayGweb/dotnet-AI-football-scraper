@@ -1229,7 +1229,7 @@ Main Menu
 - [x] **M1 Phase 10:** CLAUDE.md updated with full M1 documentation
 - [x] **M2 Phase 1:** `WebScraper.Mcp.csproj` — console app with the official `ModelContextProtocol` SDK + `Microsoft.Extensions.Hosting` + `Microsoft.Extensions.Http`; added to solution
 - [x] **M2 Phase 2:** `NflApiClient` — typed `HttpClient` wrapper that calls every M1 endpoint and returns the raw JSON body; errors (401/404/network) wrapped in a small `{"error":true,...}` envelope so Claude sees actionable feedback
-- [x] **M2 Phase 3:** Tool classes — `TeamTools`, `PlayerTools`, `GameTools`, `VenueTools`, `StatusTools` (14 read tools; expanded to 36 total in Blocks 3–7)
+- [x] **M2 Phase 3:** Tool classes — `TeamTools`, `PlayerTools`, `GameTools`, `VenueTools`, `StatusTools` (14 read tools; expanded to 44 total in Blocks 3–7)
 - [x] **M2 Phase 4:** `Program.cs` — Generic Host, env-var config (`NFL_API_URL`, `NFL_API_KEY`), `AddMcpServer().WithStdioServerTransport().WithToolsFromAssembly()`, logging to stderr only (stdout reserved for MCP protocol frames)
 - [x] **M2 Phase 5:** README documenting tool list, Claude Code / Claude Desktop wiring, and the stdout-is-protocol guardrail
 - [x] **M3 chunk (a) Phase 1:** Identity infrastructure — `AppUser : IdentityUser`, `AuthDbContext : IdentityDbContext<AppUser>` (separate context, `__AuthMigrationsHistory` table, `Auth_*` table prefix), shared DB connection with domain `AppDbContext`. NuGet: `Microsoft.AspNetCore.Identity.EntityFrameworkCore 8.0.11` + `Microsoft.AspNetCore.Authentication.JwtBearer 8.0.11`
@@ -1370,11 +1370,18 @@ Phase C from `AGENT_PLATFORM_PLAN.md` §2–3 and §7 Phase C. Migration: `Block
 - `POST /api/v1/corrections`, `GET /api/v1/corrections`, approve/reject (Admin JWT)
 - `/admin/corrections` — approval queue UI
 
-**MCP tools** (Blocks 3–7; 36 total — see `src/WebScraper.Mcp/README.md`)
+**MCP tools** (Blocks 3–7; 44 total — see `src/WebScraper.Mcp/README.md`)
 - Read (19): teams, players, games (+drives/scoring/weather/officials/odds), venues, status
-- Operate (12): `nfl_trigger_scrape`, jobs, coverage, gaps, retry, backfill progress/pause/resume, push status/trigger, backup
+- Operate (10): `nfl_trigger_scrape`, jobs, coverage, gaps, retry, push status/trigger, backup/list backups
+- Backfill (5): `nfl_estimate_backfill`, `nfl_start_backfill`, progress, pause, resume
+- Quality (5): `nfl_get_quality_findings`, `nfl_scan_quality`, `nfl_repair_finding`, `nfl_enqueue_repairs`, `nfl_refresh_coverage`
 - Introspect (3): `nfl_describe_schema`, `nfl_get_data_dictionary`, `nfl_query_stats`
 - Propose (2): `nfl_propose_correction`, `nfl_list_corrections`
+
+Correction *approval* (`POST /api/v1/corrections/{id}/approve|reject`) is deliberately **not**
+exposed to MCP — agents propose, humans approve. Prefer `nfl_start_backfill` over
+`nfl_trigger_scrape(type=backfill)`: the generic path skips season-range validation and cannot
+take a pre-backfill backup.
 
 **Skill**
 - `skills/nfl-db/SKILL.md` — entity resolution, coverage awareness, runbooks, mutation etiquette
@@ -1434,7 +1441,7 @@ Phase B deliverable from `AGENT_PLATFORM_PLAN.md` §7 Phase E item 1. Migration:
 - `/admin/push` — stage progress, Start/Resume/Reset
 - `/admin/coverage` — Heat Map tab (regular season season × week grid)
 
-**MCP tools added** (36 total across all tiers)
+**MCP tools added** (44 total across all tiers)
 - Backfill: `nfl_get_backfill_progress`, `nfl_pause_backfill`, `nfl_resume_backfill`
 - Publish: `nfl_get_push_status`, `nfl_trigger_push`, `nfl_backup_database`
 

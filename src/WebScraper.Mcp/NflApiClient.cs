@@ -140,6 +140,17 @@ public class NflApiClient
     public Task<string> RetryJobAsync(int jobId, CancellationToken ct)
         => PostAsync($"api/v1/jobs/{jobId}/retry", "{}", ct);
 
+    public Task<string> EstimateBackfillAsync(int startSeason, int endSeason, CancellationToken ct)
+        => GetAsync(BuildQuery("api/v1/backfill/estimate",
+            ("startSeason", startSeason.ToString()),
+            ("endSeason", endSeason.ToString())), ct);
+
+    public Task<string> StartBackfillAsync(int startSeason, int endSeason, bool backupFirst, CancellationToken ct)
+    {
+        var body = JsonSerializer.Serialize(new { startSeason, endSeason, backupFirst });
+        return PostAsync("api/v1/backfill", body, ct);
+    }
+
     public Task<string> GetBackfillProgressAsync(int jobId, CancellationToken ct)
         => GetAsync($"api/v1/backfill/{jobId}/progress", ct);
 
@@ -168,6 +179,29 @@ public class NflApiClient
 
     public Task<string> FindGapsAsync(int limit, CancellationToken ct)
         => GetAsync(BuildQuery("api/v1/gaps", ("limit", limit.ToString())), ct);
+
+    public Task<string> RefreshCoverageAsync(int? season, string? seasonType, bool enqueueRepairs, CancellationToken ct)
+        => PostAsync(BuildQuery("api/v1/coverage/refresh",
+            ("season", season?.ToString()),
+            ("seasonType", seasonType),
+            ("enqueueRepairs", enqueueRepairs.ToString().ToLowerInvariant())), "{}", ct);
+
+    // ---- Quality ----
+
+    public Task<string> GetQualityFindingsAsync(int limit, CancellationToken ct)
+        => GetAsync(BuildQuery("api/v1/quality/findings", ("limit", limit.ToString())), ct);
+
+    public Task<string> ScanQualityAsync(int? season, string? seasonType, int? week, CancellationToken ct)
+        => PostAsync(BuildQuery("api/v1/quality/scan",
+            ("season", season?.ToString()),
+            ("seasonType", seasonType),
+            ("week", week?.ToString())), "{}", ct);
+
+    public Task<string> RepairFindingAsync(long findingId, CancellationToken ct)
+        => PostAsync($"api/v1/quality/findings/{findingId}/repair", "{}", ct);
+
+    public Task<string> EnqueueRepairsAsync(int limit, CancellationToken ct)
+        => PostAsync(BuildQuery("api/v1/quality/repairs", ("limit", limit.ToString())), "{}", ct);
 
     // ---- Introspect ----
 

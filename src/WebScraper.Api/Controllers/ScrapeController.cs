@@ -120,6 +120,17 @@ public class ScrapeController : ControllerBase
         }
 
         var endSeason = request.EndSeason ?? request.Week ?? request.Season;
+
+        // BackfillPlanner throws on a reversed range, which would surface as a Failed job
+        // rather than a validation error. Reject it here so the caller gets a 400 instead.
+        if (endSeason < request.Season)
+        {
+            return Problem(
+                title: "Invalid season range",
+                detail: $"endSeason ({endSeason}) must be greater than or equal to season ({request.Season}).",
+                statusCode: StatusCodes.Status400BadRequest);
+        }
+
         return await EnqueueJob(ScrapeJobType.Backfill, request.Season, endSeason);
     }
 

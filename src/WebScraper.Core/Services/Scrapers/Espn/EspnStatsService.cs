@@ -181,6 +181,12 @@ public class EspnStatsService : BaseApiService, IStatsScraperService
                     ParseCategory(category, game.Id, playerStats, parser);
             }
 
+            // Resolve the current-team FK once per box score half rather than once per
+            // athlete — the lookup returns the same team for every athlete on this side.
+            int? currentTeamId = teamSeason != null
+                ? (await _teamRepository.GetByAbbreviationAsync(teamSeason.Abbreviation))?.Id
+                : null;
+
             foreach (var (_, parsed) in playerStats)
             {
                 if (string.IsNullOrEmpty(parsed.Athlete.Id))
@@ -190,9 +196,7 @@ public class EspnStatsService : BaseApiService, IStatsScraperService
                 {
                     EspnId = parsed.Athlete.Id,
                     Name = parsed.Athlete.DisplayName,
-                    TeamId = teamSeason != null
-                        ? (await _teamRepository.GetByAbbreviationAsync(teamSeason.Abbreviation))?.Id
-                        : null,
+                    TeamId = currentTeamId,
                 });
 
                 if (teamSeason != null)
@@ -393,8 +397,11 @@ public class EspnStatsService : BaseApiService, IStatsScraperService
             {
                 if (string.IsNullOrEmpty(entry.Athlete.Id)) continue;
 
-                // Try to match the player in our database
-                var player = await _playerRepository.GetByNameAsync(entry.Athlete.DisplayName);
+                // Resolve on the ESPN athlete ID first — name matching is team-agnostic
+                // and collapses same-name players onto one row. Fall back to name only
+                // for rows scraped before EspnId was populated.
+                var player = await _playerRepository.GetByEspnIdAsync(entry.Athlete.Id)
+                    ?? await _playerRepository.GetByNameAsync(entry.Athlete.DisplayName);
 
                 DateTime reportDate = DateTime.UtcNow;
                 if (!string.IsNullOrEmpty(entry.Date))

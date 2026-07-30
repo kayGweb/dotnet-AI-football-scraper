@@ -60,6 +60,29 @@ public static class OperateTools
         CancellationToken cancellationToken = default)
         => client.RetryJobAsync(jobId, cancellationToken);
 
+    [McpServerTool(Name = "nfl_estimate_backfill"), Description(
+        "Estimate API calls and wall-clock time for a season range before committing to it. " +
+        "Read-only — does not enqueue anything. Call this before nfl_start_backfill.")]
+    public static Task<string> EstimateBackfill(
+        NflApiClient client,
+        [Description("First season to load, e.g. 2006.")] int startSeason = 2006,
+        [Description("Last season to load, e.g. 2025.")] int endSeason = 2025,
+        CancellationToken cancellationToken = default)
+        => client.EstimateBackfillAsync(startSeason, endSeason, cancellationToken);
+
+    [McpServerTool(Name = "nfl_start_backfill"), Description(
+        "Start a multi-season backfill. Preferred over nfl_trigger_scrape(type=backfill): this path " +
+        "validates the season range and can take a SQLite backup first. Seasons load newest-first. " +
+        "Returns the parent job id — track it with nfl_get_backfill_progress. Requires operate scope.")]
+    public static Task<string> StartBackfill(
+        NflApiClient client,
+        [Description("First season to load, e.g. 2006.")] int startSeason,
+        [Description("Last season to load, e.g. 2025.")] int endSeason,
+        [Description("Back up the SQLite database before starting. Recommended for multi-season runs.")]
+        bool backupFirst = true,
+        CancellationToken cancellationToken = default)
+        => client.StartBackfillAsync(startSeason, endSeason, backupFirst, cancellationToken);
+
     [McpServerTool(Name = "nfl_get_backfill_progress"), Description(
         "Get aggregate progress for a backfill parent job (child counts, percent complete, ETA).")]
     public static Task<string> GetBackfillProgress(
@@ -103,4 +126,12 @@ public static class OperateTools
         NflApiClient client,
         CancellationToken cancellationToken = default)
         => client.CreateBackupAsync(cancellationToken);
+
+    [McpServerTool(Name = "nfl_list_backups"), Description(
+        "List existing SQLite backups with sizes and timestamps. Check this before starting a " +
+        "long backfill to confirm a recent backup exists.")]
+    public static Task<string> ListBackups(
+        NflApiClient client,
+        CancellationToken cancellationToken = default)
+        => client.ListBackupsAsync(cancellationToken);
 }

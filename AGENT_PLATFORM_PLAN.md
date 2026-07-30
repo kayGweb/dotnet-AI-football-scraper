@@ -74,6 +74,44 @@ missing** — roughly 250 games including the ones people actually ask about.
 **Fix:** parameterize season type; add it to `ScrapeJob` so jobs are addressable
 as (season, seasonType, week).
 
+### 1.2b Player resolution is team-agnostic and fails silently — BLOCKER (worse than first assessed)
+
+Verified in `EspnStatsService`. The stats pipeline:
+
+1. Accumulates parsed stats into `Dictionary<string, PlayerGameStats>` **keyed on
+   player display name** (line 125, threaded through `ParseCategory` at line 422).
+2. Resolves each name via `_playerRepository.GetByNameAsync(playerName)` (line 151),
+   which is `FirstOrDefaultAsync(p => p.Name == name)` — **exact string match,
+   ignoring team entirely**.
+3. On a miss: `LogDebug(...)` then `continue` (lines 153–156) — **the stat line is
+   silently discarded at Debug level**.
+
+Three consequences:
+
+- **A historical stats scrape will report success having stored nothing.** Players
+  from 2006 aren't in the DB (§1.3), so every line is dropped, `count` stays 0, and
+  the job completes as `Succeeded` with `RecordsProcessed = 0`. At default log
+  levels there is no visible warning. **The backfill would appear to work and
+  produce an empty stats table.** Quality rules (§4.2) are the only thing that
+  would catch this — which is why they must exist *before* Phase E, not after.
+- **It corrupts current data too.** Because lookup is name-only, and §1.1's
+  `Name + TeamId` upsert creates one row per team a player has played for, stats
+  attach to whichever duplicate `FirstOrDefaultAsync` happens to return. Two
+  same-name players collapse into one. This is live today, not a historical-only
+  concern.
+- **The ESPN athlete ID is already available and thrown away.**
+  `EspnStatAthleteInfo.Id` is populated in the DTO but discarded because the
+  dictionary is keyed on name.
+
+**Fix (larger than originally scoped):** rekey the accumulator from name to ESPN
+athlete ID. This touches `ParseCategory` and all ten category parsers, so it is a
+refactor of the stats parse layer rather than a one-line lookup change. Raise the
+unresolved-player log from Debug to Warning and surface the count in
+`ScrapeResult.RecordsFailed` so a silent zero becomes impossible.
+
+Injury parsing (line 348) has the same name-lookup pattern and the same fix, and it
+already has `entry.Athlete.Id` in hand.
+
 ### 1.3 Rosters can only be fetched for *today* — ARCHITECTURAL
 `EspnPlayerService` calls `/teams/{espnId}/roster`, which returns the **current**
 roster. There is no `?season=` on that endpoint. You cannot retrieve the 2006
@@ -81,8 +119,9 @@ Falcons roster this way — running the players scraper 20 times gets you the 20
 roster 20 times.
 
 **Fix:** historical players must be *discovered from box scores*. The stats scraper
-already sees every athlete ID in `/summary`. Add a player-upsert path there so
-scraping stats for 2006 creates the 2006 players as a side effect. Roster scraping
+already receives every athlete ID in `/summary` (`EspnStatAthleteInfo.Id`). Add a
+player-upsert path there so scraping stats for 2006 creates the 2006 players as a
+side effect — this depends on the §1.2b rekey landing first. Roster scraping
 becomes a current-season enrichment step (height/weight/college), not the source
 of player rows.
 
@@ -263,7 +302,7 @@ Assessed against what ESPN and PFR actually expose.
 | **Drives** | ESPN `/summary` → `drives` | Scoring context, red-zone analysis |
 | **Scoring plays** | ESPN `/summary` → `scoringPlays` | "How did they score?" — very common question |
 | **Weather** | ESPN `/summary` → `gameInfo.weather` | Game-day conditions, already in a DTO you parse |
-| **Officials / referee crew** | ESPN `/summary` → `gameInfo.officials` | Penalty-tendency analysis |
+| **Officials / referee crew** | ESPN `/summary` → `gameInfo.officials` | **DTO already exists and parses** (`EspnOfficial`, `EspnGameInfo.Officials`) — nothing reads it. Needs only an entity + persistence, no parse work |
 | **Betting odds** | ESPN `/summary` → `pickcenter` | **DECIDED: in scope.** First-class entity — see §5.1 |
 | **Broadcast + kickoff time** | ESPN scoreboard `competitions.broadcasts` | "Gameday" completeness |
 | **Player headshots / team logos** | ESPN CDN | Already scoped in UpdatePlan_v1 W2 |
@@ -357,12 +396,18 @@ answer is *"is my data any good?"* Additions:
 
 ### Phase A — Identity & schema (Aug 2026, ~3 weeks)
 Blocks everything. Do not start the backfill before this lands.
+0. **Fixture-based tests for `EspnStatsService`** — it currently has none (§8b.5)
+   and steps 2/4 refactor it. Do this first so the refactor has a safety net.
 1. `Franchise` + `TeamSeason`; migrate `Game` FKs; backfill from existing rows.
-2. Rekey `Player` on `EspnId`; add `PlayerTeamSeason`; dedupe existing rows.
-3. Parameterize `seasonType` through scrapers, `ScrapeJob`, and the API.
-4. Player-upsert-from-boxscore path in `EspnStatsService`.
-5. Era-aware league structure table (expected game counts).
-6. Migrations + backfill scripts for existing data.
+   Start from the existing `NflTeams.cs` canonical table (§8b.6) and add era-awareness.
+2. **Rekey the stats parse layer from player name to ESPN athlete ID** (§1.2b) —
+   `ParseCategory` + all 10 category parsers + injury parsing. Raise unresolved-player
+   logging to Warning and count it into `ScrapeResult.RecordsFailed`.
+3. Rekey `Player` upsert on `EspnId`; add `PlayerTeamSeason`; dedupe existing rows.
+4. Parameterize `seasonType` through scrapers, `ScrapeJob`, and the API.
+5. Player-upsert-from-boxscore path in `EspnStatsService` (depends on step 2).
+6. Era-aware league structure table (expected game counts).
+7. Migrations + backfill scripts for existing data.
 
 ### Phase B — Orchestration & coverage (Sep 2026, ~3 weeks)
 1. `Backfill` job type with fan-out, dependency ordering, resume.
@@ -507,6 +552,75 @@ forward means a second pass over every game.
 - **Make `DatabasePushService` incremental and resumable in Phase B.** With the
   backfill running locally, push is now the only delivery path for ~5,400 games of
   data, and it's currently an all-or-nothing full-table upsert (§7 Phase E).
+
+## 8b. Verification pass (2026-07-29) — HISTORICAL
+
+> **Superseded.** This section audited the codebase *before* Blocks 0–7 were implemented.
+> Blocks 0–7 are now merged: the §1 blockers are fixed (player identity on `EspnId`,
+> boxscore player discovery, `seasonType` parameterized, `Franchise`/`TeamSeason`,
+> backfill orchestration), and §5 Tier 1 data is stored. Kept for provenance — read
+> §1–§7 as the plan of record, not this section, for current state.
+>
+> A second audit against the *implemented* code (2026-07-30) found and fixed: injury
+> resolution still matching on name, an N+1 team lookup in the stats loop, the
+> `QualityController` not exposed to MCP, the backfill start path missing range
+> validation and pre-backfill backup, and three controllers gated on an API-key-only
+> policy that locked out JWT callers.
+
+Every claim in §1 and §5 was checked against the code. Results:
+
+### Confirmed as written
+| Claim | Evidence |
+|---|---|
+| Player upsert keyed on `Name + TeamId` | `PlayerRepository.UpsertAsync` |
+| Team upsert keyed on `Abbreviation` only | `TeamRepository.UpsertAsync` → `GetByAbbreviationAsync` |
+| `seasontype=2` hardcoded | `EspnGameService.cs:63` and `:278` |
+| Roster endpoint is current-only | `EspnPlayerService.cs:70` — `/teams/{id}/roster`, no season param |
+| No backfill orchestration | `ScrapeJobType` = Teams/Players/Games/Stats/All only |
+| MCP is read-only | 14 tools, all `nfl_list_*` / `nfl_get_*` |
+| No Skill in repo | no `SKILL.md` anywhere |
+| `Venue` is minimal | no capacity, surface type, lat/long, opened/closed year |
+| Migrations all present | 6 in Core + `InitialIdentity` in Api |
+
+### Corrections to the plan
+1. **§1.2b added** — player resolution is name-only and drops silently. Materially
+   worse than the original §1.3 framing, and the fix is a parse-layer refactor
+   rather than an added upsert path. **This is now the highest-priority fix in
+   Phase A.**
+2. **Officials are cheaper than stated** — the DTO exists and already parses; only
+   the entity and persistence are missing. Moved from "parse and store" to
+   "store only."
+3. **Weather, odds, drives, scoring plays, and broadcast have no DTOs.** Confirmed
+   absent from `EspnDtos.cs`. These are genuinely parse-and-store, as §5 says — the
+   fields are in the HTTP response, not in our object model.
+4. **`DatabasePushService` is worse than "all-or-nothing"** — it calls
+   `.ToListAsync()` on every table (`localStats` at line 300) and builds in-memory
+   `playerIdMap`/`gameIdMap` dictionaries. At 20 seasons that's ~270k stat rows
+   with ~40 columns materialized at once, plus no resume. Reinforces moving
+   incremental push into Phase B.
+
+### New findings not previously in the plan
+5. **`EspnStatsService` has zero test coverage.** `tests/.../Scrapers/Espn/` holds
+   tests for Mappings, TeamService, and GameService only. The most complex scraper
+   in the codebase — 10 stat categories, ~40 columns, plus team stats, venues,
+   injuries, and API links — is untested, and the entire backfill depends on it.
+   **Add fixture-based tests for it in Phase A**, before the parse-layer refactor,
+   so the refactor has a safety net. This is the cheapest risk reduction available.
+6. **`NflTeams.cs` already exists** — a canonical static table of all 32
+   abbreviations with conference and division, explicitly intended as the single
+   source of truth for provider mappings. It's the right starting point for the
+   `Franchise`/`TeamSeason` work in Phase A, but note it encodes only the *current*
+   era and is exactly what needs era-awareness added.
+7. **Migration filename is misleading** (cosmetic, no action required):
+   `20260531231235_ScrapeEventsTable.cs` actually creates the **ScrapeJobs** table;
+   `20260604005928_AddScrapeEventsTable.cs` creates ScrapeEvents. Both tables are
+   created correctly and there is no conflict — only the name is wrong.
+
+### Not verifiable in this environment
+No .NET SDK, so nothing was compiled or executed. Everything above is static
+reading. Runtime behavior of the ESPN provider against live endpoints — especially
+`pickcenter` availability per season (§5.1) — remains unverified and should be
+spot-checked before Phase D is scheduled.
 
 ## 9. Environment note
 This container has no .NET SDK (`dotnet: command not found`), so nothing here has

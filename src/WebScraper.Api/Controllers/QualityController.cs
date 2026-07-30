@@ -9,7 +9,7 @@ namespace WebScraper.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/quality")]
-[Authorize(Policy = AuthorizationPolicies.RequireOperateScope)]
+[Authorize(Policy = AuthorizationPolicies.RequireOperate)]
 [Produces("application/json")]
 public class QualityController : ControllerBase
 {
