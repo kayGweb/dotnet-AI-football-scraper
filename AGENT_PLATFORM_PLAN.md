@@ -553,7 +553,19 @@ forward means a second pass over every game.
   backfill running locally, push is now the only delivery path for ~5,400 games of
   data, and it's currently an all-or-nothing full-table upsert (§7 Phase E).
 
-## 8b. Verification pass (2026-07-29)
+## 8b. Verification pass (2026-07-29) — HISTORICAL
+
+> **Superseded.** This section audited the codebase *before* Blocks 0–7 were implemented.
+> Blocks 0–7 are now merged: the §1 blockers are fixed (player identity on `EspnId`,
+> boxscore player discovery, `seasonType` parameterized, `Franchise`/`TeamSeason`,
+> backfill orchestration), and §5 Tier 1 data is stored. Kept for provenance — read
+> §1–§7 as the plan of record, not this section, for current state.
+>
+> A second audit against the *implemented* code (2026-07-30) found and fixed: injury
+> resolution still matching on name, an N+1 team lookup in the stats loop, the
+> `QualityController` not exposed to MCP, the backfill start path missing range
+> validation and pre-backfill backup, and three controllers gated on an API-key-only
+> policy that locked out JWT callers.
 
 Every claim in §1 and §5 was checked against the code. Results:
 

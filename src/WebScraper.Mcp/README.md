@@ -37,9 +37,27 @@ as tools callable by Claude Code / Claude Desktop / any MCP client.
 | `nfl_get_coverage` | `GET /api/v1/coverage` | Expected vs actual per week |
 | `nfl_find_gaps` | `GET /api/v1/gaps` | Ranked missing/suspect data |
 | `nfl_retry_job` | `POST /api/v1/jobs/{id}/retry` | Re-queue a job |
+| `nfl_estimate_backfill` | `GET /api/v1/backfill/estimate` | API-call + wall-clock estimate for a season range |
+| `nfl_start_backfill` | `POST /api/v1/backfill` | Start a backfill (validates range, optional backup) |
 | `nfl_get_backfill_progress` | `GET /api/v1/backfill/{id}/progress` | Backfill child counts + ETA |
 | `nfl_pause_backfill` | `POST /api/v1/backfill/{id}/pause` | Pause a running backfill |
 | `nfl_resume_backfill` | `POST /api/v1/backfill/{id}/resume` | Resume a paused backfill |
+
+Prefer `nfl_start_backfill` over `nfl_trigger_scrape(type=backfill)` — the generic scrape
+path skips season-range validation and cannot take a pre-backfill backup.
+
+### Quality tools (`operate` scope)
+
+Coverage snapshots and quality findings are produced automatically after every scrape job.
+These tools let an agent read the findings and clear them; repairs are idempotent re-scrapes.
+
+| Tool | Endpoint | Purpose |
+|------|----------|---------|
+| `nfl_get_quality_findings` | `GET /api/v1/quality/findings` | Open findings with severity + entity |
+| `nfl_scan_quality` | `POST /api/v1/quality/scan` | Run the rules engine, return finding count |
+| `nfl_repair_finding` | `POST /api/v1/quality/findings/{id}/repair` | Enqueue a repair for one finding |
+| `nfl_enqueue_repairs` | `POST /api/v1/quality/repairs` | Enqueue repairs for all actionable findings |
+| `nfl_refresh_coverage` | `POST /api/v1/coverage/refresh` | Recompute coverage + re-run rules |
 
 ### Publish tools (`admin` scope)
 

@@ -7,7 +7,7 @@ namespace WebScraper.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/gaps")]
-[Authorize(Policy = AuthorizationPolicies.RequireOperateScope)]
+[Authorize(Policy = AuthorizationPolicies.RequireOperate)]
 [Produces("application/json")]
 public class GapsController : ControllerBase
 {

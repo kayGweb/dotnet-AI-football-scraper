@@ -10,7 +10,7 @@ namespace WebScraper.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/coverage")]
-[Authorize(Policy = AuthorizationPolicies.RequireOperateScope)]
+[Authorize(Policy = AuthorizationPolicies.RequireOperate)]
 [Produces("application/json")]
 public class CoverageController : ControllerBase
 {
