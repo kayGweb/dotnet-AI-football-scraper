@@ -11,6 +11,14 @@ public static class NflSeasonSchedule
     public const int TwentyYearBackfillStartSeason = 2006;
     public const int TwentyYearBackfillEndSeason = 2025;
 
+    /// <summary>
+    /// The NFL season a calendar date belongs to. Seasons are named for the year they
+    /// kick off in, so January–February dates (playoffs, Super Bowl) belong to the
+    /// previous year's season.
+    /// </summary>
+    public static int GetCurrentSeason(DateTime utcNow) =>
+        utcNow.Month <= 2 ? utcNow.Year - 1 : utcNow.Year;
+
     public static int GetRegularSeasonGameCount(int season) =>
         season >= 2021 ? 272 : 256;
 

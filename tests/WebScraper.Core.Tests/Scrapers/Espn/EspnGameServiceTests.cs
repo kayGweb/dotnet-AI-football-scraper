@@ -273,6 +273,89 @@ public class EspnGameServiceTests
         Assert.False(EspnGameService.HasEventIdsForWeek(2025, 1));
     }
 
+    private static readonly string ScheduledGameScoreboardJson = """
+    {
+        "events": [
+            {
+                "id": "401772900",
+                "date": "2025-09-12T00:20Z",
+                "competitions": [
+                    {
+                        "status": { "type": { "name": "STATUS_SCHEDULED", "state": "pre", "completed": false } },
+                        "competitors": [
+                            {
+                                "homeAway": "home",
+                                "team": { "id": "12", "abbreviation": "KC" },
+                                "score": "0",
+                                "winner": false
+                            },
+                            {
+                                "homeAway": "away",
+                                "team": { "id": "2", "abbreviation": "BUF" },
+                                "score": "0",
+                                "winner": false
+                            }
+                        ]
+                    }
+                ]
+            }
+        ]
+    }
+    """;
+
+    [Fact]
+    public async Task ScrapeGamesAsync_ScheduledGame_StoresNullScoresAndWinner()
+    {
+        var handler = new FakeHttpHandler(ScheduledGameScoreboardJson);
+        var (service, gameRepo, teamRepo, teamSeasonRepo, _) = CreateService(handler);
+        SetupTeamLookup(teamRepo, teamSeasonRepo);
+
+        Game? capturedGame = null;
+        gameRepo.Setup(r => r.UpsertAsync(It.IsAny<Game>()))
+            .Callback<Game>(g => capturedGame = g)
+            .Returns(Task.CompletedTask);
+
+        var result = await service.ScrapeGamesAsync(2025, 2);
+
+        Assert.True(result.Success);
+        Assert.NotNull(capturedGame);
+        Assert.Null(capturedGame.HomeScore);
+        Assert.Null(capturedGame.AwayScore);
+        Assert.Null(capturedGame.HomeWinner);
+        Assert.Equal("STATUS_SCHEDULED", capturedGame.GameStatus);
+        Assert.Equal("401772900", capturedGame.EspnEventId);
+    }
+
+    [Fact]
+    public void ParseKickoffUtc_ParsesEspnDateAsUtc()
+    {
+        var kickoff = EspnGameService.ParseKickoffUtc("2025-09-12T00:20Z");
+
+        Assert.Equal(DateTimeKind.Utc, kickoff.Kind);
+        Assert.Equal(new DateTime(2025, 9, 12, 0, 20, 0, DateTimeKind.Utc), kickoff);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("not-a-date")]
+    public void ParseKickoffUtc_InvalidInput_ReturnsMinValue(string? input)
+    {
+        Assert.Equal(DateTime.MinValue, EspnGameService.ParseKickoffUtc(input));
+    }
+
+    [Theory]
+    [InlineData("STATUS_SCHEDULED", "pre", true)]
+    [InlineData("STATUS_IN_PROGRESS", "in", false)]
+    [InlineData("STATUS_FINAL", "post", false)]
+    [InlineData("STATUS_POSTPONED", "post", false)]
+    public void IsNotStarted_UsesEspnStatusState(string name, string state, bool expected)
+    {
+        var status = new EspnStatus { Type = new EspnStatusType { Name = name, State = state } };
+
+        Assert.Equal(expected, EspnGameService.IsNotStarted(status));
+    }
+
     private class FakeHttpHandler : HttpMessageHandler
     {
         private readonly string _responseBody;

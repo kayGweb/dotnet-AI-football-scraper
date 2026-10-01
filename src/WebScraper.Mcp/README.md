@@ -13,7 +13,9 @@ as tools callable by Claude Code / Claude Desktop / any MCP client.
 | `nfl_list_players` | `GET /api/v1/players` | Players (paged, filters: team, position) |
 | `nfl_get_player` | `GET /api/v1/players/{id}` | Single player |
 | `nfl_get_player_stats` | `GET /api/v1/players/{id}/stats` | Player game stats (optional season/week) |
-| `nfl_list_games` | `GET /api/v1/games` | Games (paged, filters: season/week/team) |
+| `nfl_list_games` | `GET /api/v1/games` | Games (paged, filters: season/seasonType/week/team) |
+| `nfl_get_schedule` | `GET /api/v1/schedule` | Season schedule by kickoff (defaults to current season; filters: seasonType/week/team abbr) |
+| `nfl_get_upcoming_games` | `GET /api/v1/schedule/upcoming` | Games kicking off in the next N days (default 7) |
 | `nfl_get_game` | `GET /api/v1/games/{id}` | Single game with venue + quarter scores |
 | `nfl_get_game_team_stats` | `GET /api/v1/games/{id}/team-stats` | Team aggregates for a game |
 | `nfl_get_game_player_stats` | `GET /api/v1/games/{id}/player-stats` | All player stat lines for a game |

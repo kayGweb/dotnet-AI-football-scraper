@@ -60,10 +60,11 @@ public class NflApiClient
     // ---- Games ----
 
     public Task<string> ListGamesAsync(
-        int? season, int? week, int? teamId,
+        int? season, string? seasonType, int? week, int? teamId,
         int page, int pageSize, CancellationToken ct)
         => GetAsync(BuildQuery("api/v1/games",
             ("season", season?.ToString()),
+            ("seasonType", seasonType),
             ("week", week?.ToString()),
             ("teamId", teamId?.ToString()),
             ("page", page.ToString()),
@@ -95,6 +96,21 @@ public class NflApiClient
 
     public Task<string> GetGameOddsAsync(int id, CancellationToken ct)
         => GetAsync($"api/v1/games/{id}/odds", ct);
+
+    // ---- Schedule ----
+
+    public Task<string> GetScheduleAsync(
+        int? season, string? seasonType, int? week, string? team, CancellationToken ct)
+        => GetAsync(BuildQuery("api/v1/schedule",
+            ("season", season?.ToString()),
+            ("seasonType", seasonType),
+            ("week", week?.ToString()),
+            ("team", team)), ct);
+
+    public Task<string> GetUpcomingGamesAsync(int days, string? team, CancellationToken ct)
+        => GetAsync(BuildQuery("api/v1/schedule/upcoming",
+            ("days", days.ToString()),
+            ("team", team)), ct);
 
     // ---- Venues ----
 

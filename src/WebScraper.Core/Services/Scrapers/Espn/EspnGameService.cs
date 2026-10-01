@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.Logging;
 using WebScraper.Data.Repositories;
 using WebScraper.Models;
@@ -126,12 +127,14 @@ public class EspnGameService : BaseApiService, IGameScraperService
                 return null;
             }
 
-            DateTime gameDate = DateTime.MinValue;
-            if (!string.IsNullOrEmpty(espnEvent.Date))
-                DateTime.TryParse(espnEvent.Date, out gameDate);
+            var gameDate = ParseKickoffUtc(espnEvent.Date);
 
-            int? homeScore = int.TryParse(homeCompetitor.Score, out var hs) ? hs : null;
-            int? awayScore = int.TryParse(awayCompetitor.Score, out var aws) ? aws : null;
+            // ESPN reports "0" scores for games that haven't kicked off. Storing those
+            // would make an unplayed game look like a 0-0 final (and trip the
+            // missing-stats quality rule), so scheduled games keep null scores.
+            var notStarted = IsNotStarted(competition.Status);
+            int? homeScore = !notStarted && int.TryParse(homeCompetitor.Score, out var hs) ? hs : null;
+            int? awayScore = !notStarted && int.TryParse(awayCompetitor.Score, out var aws) ? aws : null;
 
             EventIdLookup[EventLookupKey(season, seasonType, week, homeAbbr)] = espnEvent.Id;
 
@@ -172,7 +175,7 @@ public class EspnGameService : BaseApiService, IGameScraperService
                 NeutralSite = competition.NeutralSite,
                 EspnEventId = espnEvent.Id,
                 GameStatus = gameStatus,
-                HomeWinner = homeCompetitor.Winner,
+                HomeWinner = notStarted ? null : homeCompetitor.Winner,
                 HomeQ1 = homeQuarters[0],
                 HomeQ2 = homeQuarters[1],
                 HomeQ3 = homeQuarters[2],
@@ -221,6 +224,25 @@ public class EspnGameService : BaseApiService, IGameScraperService
             Division = division,
         });
     }
+
+    /// <summary>
+    /// ESPN event dates are ISO-8601 UTC (e.g. "2026-09-11T00:20Z"). Parse them as UTC
+    /// so stored kickoff times don't shift with the host's local time zone.
+    /// </summary>
+    internal static DateTime ParseKickoffUtc(string? date)
+    {
+        if (string.IsNullOrEmpty(date))
+            return DateTime.MinValue;
+
+        return DateTime.TryParse(date, CultureInfo.InvariantCulture,
+            DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal, out var parsed)
+            ? parsed
+            : DateTime.MinValue;
+    }
+
+    internal static bool IsNotStarted(EspnStatus? status)
+        => string.Equals(status?.Type?.State, "pre", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(status?.Type?.Name, "STATUS_SCHEDULED", StringComparison.OrdinalIgnoreCase);
 
     private static int?[] ParseLinescores(List<EspnLinescore>? linescores)
     {

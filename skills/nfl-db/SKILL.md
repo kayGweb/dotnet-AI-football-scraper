@@ -29,10 +29,17 @@ Version: 1.0.0
 | Publish | `nfl_get_push_status`, `nfl_trigger_push`, `nfl_backup_database` | `admin` |
 | Propose | `nfl_propose_correction`, `nfl_list_corrections` | `admin` |
 
-Read tier in full: `nfl_list_teams`, `nfl_list_players`, `nfl_list_games`, `nfl_list_venues`,
+Read tier in full: `nfl_list_teams`, `nfl_list_players`, `nfl_list_games`, `nfl_get_schedule`,
+`nfl_get_upcoming_games`, `nfl_list_venues`,
 `nfl_get_team`, `nfl_get_team_by_abbreviation`, `nfl_get_player`, `nfl_get_player_stats`,
 `nfl_get_game`, `nfl_get_game_team_stats`, `nfl_get_game_player_stats`, `nfl_get_game_injuries`,
 `nfl_get_venue`, `nfl_get_status`.
+
+**Schedule questions** ("when do the Chiefs play next?", "what's on this week?"): use
+`nfl_get_upcoming_games` or `nfl_get_schedule` — both default to the current season and accept a
+team abbreviation. Kickoff times are UTC. Unplayed games have null scores and
+`gameStatus = STATUS_SCHEDULED`; never report a null score as 0-0. The API refreshes the current
+season's schedule every 12h; if it looks stale, `nfl_trigger_scrape(type=games, season=<year>)`.
 
 **Starting a backfill:** prefer `nfl_start_backfill` over `nfl_trigger_scrape(type=backfill)`.
 It validates the season range and can take a SQLite backup first; the generic scrape path does
