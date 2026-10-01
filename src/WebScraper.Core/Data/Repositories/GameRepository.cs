@@ -81,7 +81,17 @@ public class GameRepository : IGameRepository
 
     public async Task UpsertAsync(Game game)
     {
-        var existing = await _context.Games
+        // Prefer the provider's event ID: a postponed/rescheduled game keeps its ESPN
+        // event ID but can move to a different week, which the natural key would miss
+        // (leaving a stale duplicate behind).
+        Game? existing = null;
+        if (!string.IsNullOrEmpty(game.EspnEventId))
+        {
+            existing = await _context.Games
+                .FirstOrDefaultAsync(g => g.EspnEventId == game.EspnEventId);
+        }
+
+        existing ??= await _context.Games
             .FirstOrDefaultAsync(g =>
                 g.Season == game.Season &&
                 g.SeasonType == game.SeasonType &&
@@ -91,6 +101,7 @@ public class GameRepository : IGameRepository
 
         if (existing != null)
         {
+            existing.Week = game.Week;
             existing.GameDate = game.GameDate;
             existing.HomeScore = game.HomeScore;
             existing.AwayScore = game.AwayScore;

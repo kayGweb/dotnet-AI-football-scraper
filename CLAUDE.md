@@ -143,6 +143,7 @@ src/
 │   │   ├── TeamsController.cs          # GET /api/v1/teams (paged + ?conference=), /{id}, /by-abbreviation/{abbr}
 │   │   ├── PlayersController.cs        # GET /api/v1/players (paged + filters), /{id}, /{id}/stats
 │   │   ├── GamesController.cs          # GET /api/v1/games (paged + filters), /{id}, /{id}/team-stats, /player-stats, /injuries
+│   │   ├── ScheduleController.cs       # GET /api/v1/schedule (current season by kickoff), /schedule/upcoming
 │   │   ├── VenuesController.cs         # GET /api/v1/venues (paged + filters), /{id}
 │   │   ├── StatusController.cs         # GET /api/v1/status — record counts + latest update timestamp
 │   │   ├── AuthController.cs           # M3: POST /api/v1/auth/login, GET /me (any role), POST /users + GET /users (Admin)
@@ -563,7 +564,9 @@ All endpoints are under `/api/v1/` and require `X-Api-Key` (read scope). List en
 | GET | `/api/v1/players` | Paged player list, optional `?teamId=`, `?teamAbbreviation=`, `?position=` |
 | GET | `/api/v1/players/{id}` | Single player (includes team abbreviation) |
 | GET | `/api/v1/players/{id}/stats` | All game stats for a player, optional `?season=`, `?week=` |
-| GET | `/api/v1/games` | Paged game list, optional `?season=`, `?week=`, `?teamId=` (home or away) |
+| GET | `/api/v1/games` | Paged game list, optional `?season=`, `?seasonType=`, `?week=`, `?teamId=` (home or away) |
+| GET | `/api/v1/schedule` | Unpaged season schedule ordered by kickoff; defaults to current NFL season + Regular; optional `?season=`, `?seasonType=`, `?week=`, `?team=<abbr>` |
+| GET | `/api/v1/schedule/upcoming` | Games kicking off in the next `?days=` (default 7, max 60) plus the last 4h (live games); optional `?team=<abbr>` |
 | GET | `/api/v1/games/{id}` | Single game with teams, venue, quarter scores |
 | GET | `/api/v1/games/{id}/team-stats` | Team-level aggregates for a game (home + away) |
 | GET | `/api/v1/games/{id}/player-stats` | All player stats lines for a game |
@@ -648,7 +651,9 @@ so Claude sees the full `Meta` lineage envelope and pagination metadata.
 | `nfl_list_players` | `GET /api/v1/players` | Paged, filters: `teamId`/`teamAbbreviation`/`position` |
 | `nfl_get_player` | `GET /api/v1/players/{id}` | Includes team abbreviation |
 | `nfl_get_player_stats` | `GET /api/v1/players/{id}/stats` | Optional `season` / `week` |
-| `nfl_list_games` | `GET /api/v1/games` | Paged, filters: `season`/`week`/`teamId` |
+| `nfl_list_games` | `GET /api/v1/games` | Paged, filters: `season`/`seasonType`/`week`/`teamId` |
+| `nfl_get_schedule` | `GET /api/v1/schedule` | Season schedule by kickoff, defaults to current season |
+| `nfl_get_upcoming_games` | `GET /api/v1/schedule/upcoming` | Next N days of games |
 | `nfl_get_game` | `GET /api/v1/games/{id}` | Includes teams, venue, quarter scores |
 | `nfl_get_game_team_stats` | `GET /api/v1/games/{id}/team-stats` | Home + away aggregates |
 | `nfl_get_game_player_stats` | `GET /api/v1/games/{id}/player-stats` | Every stat line for a game |
@@ -1447,6 +1452,21 @@ Phase B deliverable from `AGENT_PLATFORM_PLAN.md` §7 Phase E item 1. Migration:
 
 **Skill runbooks added**
 - 20-year Hermes backfill workflow, publish to PostgreSQL, backup before backfill
+
+### Schedule (post-Block 7)
+The schedule is the `Games` table: ESPN's scoreboard returns scheduled games as well as finals, so a
+full-season games scrape loads every week of the schedule.
+- `EspnGameService` stores scheduled games (`status.type.state == "pre"`) with **null** scores and
+  `HomeWinner` (ESPN reports `"0"`, which previously looked like a 0-0 final and tripped the
+  missing-stats quality rule). Kickoff times are parsed as UTC.
+- `GameRepository.UpsertAsync` matches on `EspnEventId` first so a postponed/rescheduled game moves
+  weeks in place instead of leaving a duplicate.
+- `ScheduleRefreshScheduler` (API hosted service) enqueues a full-season Games job for the current
+  season every `ScheduleRefresh:IntervalHours` (default 12; postseason added Jan–Feb). Skips if a
+  full-season games job is already queued/running or succeeded within the interval.
+- `NflSeasonSchedule.GetCurrentSeason(utcNow)` — Jan/Feb belong to the previous season.
+- API: `GET /api/v1/schedule`, `GET /api/v1/schedule/upcoming`; `?seasonType=` on `/api/v1/games`.
+- MCP: `nfl_get_schedule`, `nfl_get_upcoming_games` (46 tools total).
 
 ### Remaining (post-Blocks 0–7)
 - [ ] **Phase E execution** — run 2006–2025 backfill on local Hermes agent (ops, not code)

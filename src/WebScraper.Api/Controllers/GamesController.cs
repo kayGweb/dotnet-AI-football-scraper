@@ -6,6 +6,7 @@ using WebScraper.Api.Dtos;
 using WebScraper.Api.Mapping;
 using WebScraper.Api.Pagination;
 using WebScraper.Data;
+using WebScraper.Models;
 
 namespace WebScraper.Api.Controllers;
 
@@ -27,11 +28,12 @@ public class GamesController : ControllerBase
         _db = db;
     }
 
-    /// <summary>List games filtered by season, week, or team.</summary>
+    /// <summary>List games filtered by season, season type, week, or team.</summary>
     [HttpGet]
     [ProducesResponseType(typeof(PagedResult<GameDto>), StatusCodes.Status200OK)]
     public async Task<ActionResult<PagedResult<GameDto>>> GetGames(
         [FromQuery] int? season,
+        [FromQuery] NflSeasonType? seasonType,
         [FromQuery] int? week,
         [FromQuery] int? teamId,
         [FromQuery] PaginationQuery pagination,
@@ -48,6 +50,10 @@ public class GamesController : ControllerBase
         {
             query = query.Where(g => g.Season == season.Value);
         }
+        if (seasonType.HasValue)
+        {
+            query = query.Where(g => g.SeasonType == seasonType.Value);
+        }
         if (week.HasValue)
         {
             query = query.Where(g => g.Week == week.Value);
@@ -61,6 +67,7 @@ public class GamesController : ControllerBase
         var totalCount = await query.CountAsync(cancellationToken);
         var items = await query
             .OrderBy(g => g.Season)
+            .ThenBy(g => g.SeasonType)
             .ThenBy(g => g.Week)
             .ThenBy(g => g.GameDate)
             .Skip(pagination.Skip)

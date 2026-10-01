@@ -52,6 +52,9 @@ public static class ApiServiceCollectionExtensions
         // --- Scheduled odds polling (§5.1) ---
         services.AddHostedService<OddsPollScheduler>();
 
+        // --- Scheduled refresh of the current season's schedule/scores ---
+        services.AddHostedService<ScheduleRefreshScheduler>();
+
         // --- SignalR hub + outbox relay (M3 chunk c) ---
         services.AddSignalR();
         services.AddHostedService<ScrapeEventRelay>();

@@ -228,6 +228,10 @@ public class EspnStatusType
 
     [JsonPropertyName("completed")]
     public bool Completed { get; set; }
+
+    /// <summary>"pre" (scheduled), "in" (live), or "post" (final/postponed/canceled).</summary>
+    [JsonPropertyName("state")]
+    public string? State { get; set; }
 }
 
 // --- Venue ---

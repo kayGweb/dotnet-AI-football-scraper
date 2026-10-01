@@ -56,4 +56,15 @@ public class NflSeasonScheduleTests
 
         Assert.InRange(calls, 400, 700);
     }
+
+    [Theory]
+    [InlineData(2026, 10, 1, 2026)]
+    [InlineData(2026, 3, 1, 2026)]
+    [InlineData(2027, 1, 15, 2026)]
+    [InlineData(2027, 2, 9, 2026)]
+    public void GetCurrentSeason_JanuaryAndFebruaryBelongToPreviousSeason(
+        int year, int month, int day, int expectedSeason)
+    {
+        Assert.Equal(expectedSeason, NflSeasonSchedule.GetCurrentSeason(new DateTime(year, month, day)));
+    }
 }

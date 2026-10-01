@@ -7,18 +7,42 @@ namespace WebScraper.Mcp.Tools;
 public static class GameTools
 {
     [McpServerTool(Name = "nfl_list_games"), Description(
-        "List NFL games with optional filters for season, week, and team. The " +
-        "teamId filter matches either home or away. Returns a paged result with " +
+        "List NFL games with optional filters for season, season type, week, and team. " +
+        "The teamId filter matches either home or away. Returns a paged result with " +
         "home/away teams, scores, venue, and quarter scores.")]
     public static Task<string> ListGames(
         NflApiClient client,
         [Description("Filter to a single NFL season, e.g. 2025.")] int? season = null,
+        [Description("Filter to Preseason, Regular, or Postseason.")] string? seasonType = null,
         [Description("Filter to a single week, 1–22.")] int? week = null,
         [Description("Filter to games involving this team (home OR away).")] int? teamId = null,
         [Description("Page number, 1-based. Defaults to 1.")] int page = 1,
         [Description("Items per page, 1–200. Defaults to 25.")] int pageSize = 25,
         CancellationToken cancellationToken = default)
-        => client.ListGamesAsync(season, week, teamId, page, pageSize, cancellationToken);
+        => client.ListGamesAsync(season, seasonType, week, teamId, page, pageSize, cancellationToken);
+
+    [McpServerTool(Name = "nfl_get_schedule"), Description(
+        "Get the NFL schedule for a season, ordered by kickoff (UTC). Defaults to the " +
+        "current NFL season's regular season. Unplayed games have null scores; " +
+        "gameStatus distinguishes scheduled, in-progress, and final games. Unpaged.")]
+    public static Task<string> GetSchedule(
+        NflApiClient client,
+        [Description("NFL season year, e.g. 2026. Omit for the current season.")] int? season = null,
+        [Description("Preseason, Regular (default), or Postseason.")] string? seasonType = null,
+        [Description("Optional week filter.")] int? week = null,
+        [Description("Optional NFL team abbreviation, e.g. KC — matches home or away.")] string? team = null,
+        CancellationToken cancellationToken = default)
+        => client.GetScheduleAsync(season, seasonType, week, team, cancellationToken);
+
+    [McpServerTool(Name = "nfl_get_upcoming_games"), Description(
+        "Get games kicking off in the next N days (plus games that started in the last " +
+        "few hours, so live games are included), ordered by kickoff (UTC).")]
+    public static Task<string> GetUpcomingGames(
+        NflApiClient client,
+        [Description("Look-ahead window in days, 1–60. Defaults to 7.")] int days = 7,
+        [Description("Optional NFL team abbreviation, e.g. KC — matches home or away.")] string? team = null,
+        CancellationToken cancellationToken = default)
+        => client.GetUpcomingGamesAsync(days, team, cancellationToken);
 
     [McpServerTool(Name = "nfl_get_game"), Description(
         "Get a single game with teams, venue, quarter scores, and ESPN metadata.")]

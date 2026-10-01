@@ -104,4 +104,55 @@ public class GameRepositoryTests : IDisposable
         Assert.Equal(24, result[0].HomeScore);
         Assert.Equal(20, result[0].AwayScore);
     }
+
+    [Fact]
+    public async Task UpsertAsync_SameEspnEventInDifferentWeek_UpdatesExistingGame()
+    {
+        var (home, away, _, _) = await RepositoryTestHelpers.SeedTeamSeasonsAsync(_context);
+        await _gameRepo.UpsertAsync(new Game
+        {
+            Season = 2025, Week = 5, GameDate = new DateTime(2025, 10, 5, 17, 0, 0, DateTimeKind.Utc),
+            HomeTeamSeasonId = home.Id, AwayTeamSeasonId = away.Id,
+            EspnEventId = "401772999", GameStatus = "STATUS_POSTPONED"
+        });
+
+        // Rescheduled into week 18 — same ESPN event, different natural key.
+        await _gameRepo.UpsertAsync(new Game
+        {
+            Season = 2025, Week = 18, GameDate = new DateTime(2026, 1, 4, 18, 0, 0, DateTimeKind.Utc),
+            HomeTeamSeasonId = home.Id, AwayTeamSeasonId = away.Id,
+            EspnEventId = "401772999", GameStatus = "STATUS_SCHEDULED"
+        });
+
+        var games = (await _gameRepo.GetBySeasonAsync(2025)).ToList();
+        var game = Assert.Single(games);
+        Assert.Equal(18, game.Week);
+        Assert.Equal("STATUS_SCHEDULED", game.GameStatus);
+        Assert.Equal(new DateTime(2026, 1, 4, 18, 0, 0), game.GameDate);
+    }
+
+    [Fact]
+    public async Task UpsertAsync_ScheduledThenFinal_FillsInScores()
+    {
+        var (home, away, _, _) = await RepositoryTestHelpers.SeedTeamSeasonsAsync(_context);
+        await _gameRepo.UpsertAsync(new Game
+        {
+            Season = 2025, Week = 6, GameDate = new DateTime(2025, 10, 12, 17, 0, 0, DateTimeKind.Utc),
+            HomeTeamSeasonId = home.Id, AwayTeamSeasonId = away.Id,
+            EspnEventId = "401773000", GameStatus = "STATUS_SCHEDULED"
+        });
+
+        await _gameRepo.UpsertAsync(new Game
+        {
+            Season = 2025, Week = 6, GameDate = new DateTime(2025, 10, 12, 17, 0, 0, DateTimeKind.Utc),
+            HomeTeamSeasonId = home.Id, AwayTeamSeasonId = away.Id,
+            EspnEventId = "401773000", GameStatus = "STATUS_FINAL",
+            HomeScore = 31, AwayScore = 17, HomeWinner = true
+        });
+
+        var game = Assert.Single(await _gameRepo.GetBySeasonAsync(2025));
+        Assert.Equal(31, game.HomeScore);
+        Assert.Equal(17, game.AwayScore);
+        Assert.Equal("STATUS_FINAL", game.GameStatus);
+    }
 }
