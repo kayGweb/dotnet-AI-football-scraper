@@ -88,6 +88,8 @@ CHATBOT:  C1 ─► C2
 
 Parallel lanes to start today: S1a, S2, S5, C1, C3a.
 
+**Done on scraper integration branch `claude/happy-albattani-46aq85` (do not re-dispatch):** S1a (#46), S2 (#47), S1b (#49), S5 (#48). **Next scraper cards when fixtures exist:** S1c, then S1d, then S3 and S4.
+
 ---
 
 ### S1a. ApiSports DTOs and mappings (scraper)

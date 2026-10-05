@@ -3,6 +3,20 @@
 **Status:** v2, 2026-10-05 (supersedes v1 of 2026-10-04)
 **Repos:** `dotnet-AI-football-scraper` (ApiSports provider, Droplet deployment), `nextjs-ai-football-chatbot` (direct api-sports provider for schedule/scores, shared-database bridge for stats and injuries, SportsRadar kept as a fallback)
 
+### Scraper progress on `claude/happy-albattani-46aq85` (integration branch)
+
+| Card | Status | Notes |
+|------|--------|--------|
+| **S1a** | Done (#46) | `ApiSportsDtos`, `ApiSportsMappings`, fixture tests |
+| **S2** | Done (#47) | Migration `ApiSportsProvider`, `InjuryReports`, identity indexes, upsert paths, push stage, `PlayerMissingExternalId` rule |
+| **S1b** | Done (#49) | `ApiSportsTeamService`, `ApiSportsGameService`, factory wiring; player/stats **stubs** until S1c |
+| **S5** | Done (#48) | `Dockerfile`, `deploy/*` — production Droplet cutover is still ops |
+| **S1c** | Not started | Blocked on fixtures `game-player-stats.json`, `game-team-stats.json` |
+| **S1d** | Not started | Blocked on `injuries-team.json`; `teams.json` for remaining six team ids |
+| **S3** / **S4** | Not started | After S1d (schedulers, relay poll guard, injuries API/MCP) |
+
+Task cards and agent rules: `API_SPORTS_TASK_DISPATCH.md`. Chatbot **C1–C5** live in the chatbot repo.
+
 ## What changed from v1
 
 Three answers changed the shape of the plan:
@@ -260,9 +274,9 @@ Also confirm the Pro per-minute cap from the dashboard and that `coverage.injuri
 
 **Week 1, chatbot C1 + C2.** Provider interface, api-sports provider, source-agnostic sync, re-key script, tests. Deploy with `NFL_DATA_SOURCE=sportsradar` first (identical behavior), then set `API_SPORTS_KEY` and `NFL_DATA_SOURCE=api-sports`, run the re-key dry run then `--apply`, trigger `sync-schedule` and `sync-scores` once by hand, verify with the runbook SQL (272 games, finals per week, 32 standings rows). **This alone unblocks the pick'em season.**
 
-**Week 1, scraper S1 + S2 + S6.** Provider, migration, tests. Run a 2026 games scrape locally into SQLite and confirm 272 games (not 544) after merging with the ESPN rows.
+**Week 1, scraper S1 + S2 + S6.** Provider, migration, tests. Run a 2026 games scrape locally into SQLite and confirm 272 games (not 544) after merging with the ESPN rows. *(On the integration branch: S1a, S2, and S1b are merged; S6 tests cover mappings/DTOs/team/game services — stats/injury service tests land with S1c/S1d.)*
 
-**Week 2, scraper S3 + S4 + S5.** Schedulers, relay poll guard, injuries endpoint, Dockerfile, Droplet, Caddy, Neon env, first boot, admin login. Trigger a `Stats` job for the weeks already played and an `Injuries` job; confirm rows in Neon.
+**Week 2, scraper S3 + S4 + S5.** Schedulers, relay poll guard, injuries endpoint, Dockerfile, Droplet, Caddy, Neon env, first boot, admin login. Trigger a `Stats` job for the weeks already played and an `Injuries` job; confirm rows in Neon. *(S5 deploy **artifacts** are merged; S3/S4 and Droplet **provisioning** remain.)*
 
 **Week 2, chatbot C3 + C4 + C5.** Bridge schema, `tablesFilter`, migration 0026, Tuesday stats cron, injuries from the bridge, live tools, prompts, docs. Run `pnpm db:bridge-stats` for weeks 1 through the current week. Ask the bot "compare Mahomes and Allen this season" and get 2026 numbers.
 

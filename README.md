@@ -1,6 +1,8 @@
 # NFL Web Scraper
 
-A .NET 8 agent-managed NFL data platform that scrapes football data from multiple sources and exposes it through a REST API, a Blazor Server admin dashboard, and an MCP server for Claude integration. Supports five pluggable data providers — switch between HTML scraping and REST API sources via configuration. Includes a standalone CLI mode and an interactive menu-driven REPL.
+A .NET 8 agent-managed NFL data platform that scrapes football data from multiple sources and exposes it through a REST API, a Blazor Server admin dashboard, and an MCP server for Claude integration. Supports six pluggable data providers — switch between HTML scraping and REST API sources via configuration. Includes a standalone CLI mode and an interactive menu-driven REPL.
+
+For the in-progress **api-sports.io** feed migration (scraper provider, Droplet deploy, chatbot bridge), see `API_SPORTS_MIGRATION_PLAN.md` and `API_SPORTS_TASK_DISPATCH.md`.
 
 **Data collected:** teams, franchises, team-seasons, player rosters (keyed on `EspnId`), game schedules/scores (preseason/regular/postseason), quarter scores, venues, attendance, broadcast networks, per-game player stats (10 categories), team-level aggregates, injuries, drives, scoring plays, weather, officials, betting odds (opening/current/closing), and discovered API links.
 
@@ -12,7 +14,7 @@ A .NET 8 agent-managed NFL data platform that scrapes football data from multipl
 |-----------|---------|-------------|
 | **REST API** | `WebScraper.Api` | Read-only endpoints + admin write endpoints (JWT/API key auth) |
 | **Admin Dashboard** | `WebScraper.Api` | Blazor Server UI at `/admin/*` (MudBlazor dark theme) |
-| **MCP Server** | `WebScraper.Mcp` | 36 Claude-callable tools over the API (stdio transport) |
+| **MCP Server** | `WebScraper.Mcp` | 46 Claude-callable tools over the API (stdio transport) |
 | **CLI** | `WebScraper.Cli` | Command-line scraper + interactive REPL |
 | **Core Library** | `WebScraper.Core` | Shared models, DbContext, repositories, scrapers |
 
@@ -25,6 +27,9 @@ A .NET 8 agent-managed NFL data platform that scrapes football data from multipl
 | SportsData.io | `SportsDataIo` | API key header | Requires free/paid API key |
 | MySportsFeeds | `MySportsFeeds` | HTTP Basic | Requires API key |
 | NFL.com | `NflCom` | None | Undocumented JSON endpoints |
+| API-Sports | `ApiSports` | `x-apisports-key` header | Teams + games implemented; player/stats stubs until migration S1c (see plan) |
+
+Production Droplet deployment (Docker + Caddy, Neon via env file): **`deploy/README.md`**.
 
 ## Prerequisites
 
@@ -484,7 +489,9 @@ Supported: `Sqlite` (default), `PostgreSQL`, `SqlServer`.
 }
 ```
 
-Supported: `ProFootballReference`, `Espn`, `SportsDataIo`, `MySportsFeeds`, `NflCom`.
+Supported: `ProFootballReference`, `Espn`, `SportsDataIo`, `MySportsFeeds`, `NflCom`, `ApiSports`.
+
+The API host (`src/WebScraper.Api/appsettings.json`) defaults to `ApiSports`; the CLI defaults to `Espn`. Set `ScraperSettings:Providers:ApiSports:ApiKey` in `appsettings.Local.json` (see `API_SPORTS_MIGRATION_PLAN.md` §5).
 
 ### API Authentication (appsettings.Local.json)
 
@@ -590,14 +597,14 @@ All domain entities support soft delete and data lineage tracking (`IAuditableEn
 ## Testing
 
 ```bash
-dotnet test                                    # Run all 284 tests
+dotnet test                                    # Run all 385 tests
 dotnet test --verbosity normal                 # Verbose output
 dotnet test tests/WebScraper.Core.Tests        # Core tests only
 ```
 
 ## Agent Integration (MCP + Skill)
 
-The MCP server exposes **36 tools** prefixed `nfl_*` across four tiers:
+The MCP server exposes **46 tools** prefixed `nfl_*` (read, operate, quality, publish, introspect, propose). See `src/WebScraper.Mcp/README.md` for the catalog. Summary tiers:
 
 | Tier | Examples | API key scope |
 |------|----------|---------------|
@@ -625,9 +632,11 @@ src/
 │   ├── Hubs/                   # SignalR hub for real-time scrape events
 │   ├── Middleware/             # Query logging, rate limiting
 │   └── Services/               # Job queue, event relay, odds scheduler, API key mgmt
-└── WebScraper.Mcp/             # MCP server: 36 Claude-callable tools
+└── WebScraper.Mcp/             # MCP server: 46 Claude-callable tools
+deploy/                         # Docker Compose + Caddy (S5); see deploy/README.md
+Dockerfile                      # Multi-stage image for WebScraper.Api
 tests/
-└── WebScraper.Core.Tests/      # 284 xUnit tests
+└── WebScraper.Core.Tests/      # 385 xUnit tests
 ```
 
 ## License
