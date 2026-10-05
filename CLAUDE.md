@@ -320,12 +320,13 @@ Static helper that maps the `DataProvider` config string to the correct set of D
 ## Database Schema
 Twelve tables with the following relationships:
 - **Teams** — 32 NFL teams (id, name, abbreviation, city, conference, division)
-- **Players** — FK to Teams via `TeamId` (nullable for free agents); `EspnId` for ESPN athlete matching
-- **Games** — Two FKs to Teams: `HomeTeamId`, `AwayTeamId` (both use `DeleteBehavior.Restrict`); optional FK to `Venues`; includes quarter scores (HomeQ1-Q4, HomeOT, AwayQ1-Q4, AwayOT), `EspnEventId`, `GameStatus`, `HomeWinner`, `Attendance`, `NeutralSite`
+- **Players** — FK to Teams via `TeamId` (nullable for free agents); `EspnId` for ESPN athlete matching; index on `(DataSource, DataSourceRecordId)` for api-sports identity
+- **Games** — Two FKs to TeamSeason (`HomeTeamSeasonId`, `AwayTeamSeasonId`); optional FK to `Venues`; includes quarter scores, `EspnEventId`, `GameStatus`, `HomeWinner`, `Attendance`, `NeutralSite`; index on `(DataSource, DataSourceRecordId)` for cross-provider upsert
 - **PlayerGameStats** — Composite FKs to `Players` and `Games`; ~40 stat columns across 10 categories: passing (C/A, yards, TD, INT, QBR, sacks), rushing (attempts, yards, TD, long), receiving (rec, yards, TD, targets, long, YPR), fumbles, defensive (tackles, sacks, TFL, PD, QBH), interceptions (caught, yards, TD), kick returns, punt returns, kicking (FG, XP, points), punting (punts, yards, avg, TB, inside20)
 - **Venues** — Stadium info (EspnId UK, name, city, state, country, IsGrass, IsIndoor)
 - **TeamGameStats** — Team-level per-game aggregates (FKs to Games+Teams, UK on GameId+TeamId); first downs, yards, efficiency, red zone, turnovers, penalties, possession time
 - **Injuries** — Player injury reports per game (FKs to Games+Players, UK on GameId+EspnAthleteId); status, injury type, body location, return date
+- **InjuryReports** — Provider injury snapshots (FK `TeamSeasonId`, optional `PlayerId`, UK on `ExternalPlayerId`+`SnapshotAt`, index on `TeamSeasonId`); `PlayerName`, `Position`, `Status`, `Description`, `ReportedAt`, `SnapshotAt`
 - **ApiLinks** — Discovered ESPN API endpoints (UK on Url); endpoint type, relation, season/week, ESPN event ID, timestamps
 - **ApiQueryLogs** (M0) — Observability log of every public API consumer request: `Id` (long PK), `Timestamp`, `ApiKeyId`, `ApiKeyName`, `Method`, `Path`, `QueryString`, `StatusCode`, `DurationMs`, `ResponseBytes`, `UserAgent`, `CorrelationId`. Indexes on `Timestamp` and on `(ApiKeyId, Timestamp)` for dashboard queries. Populated asynchronously by `ApiQueryLoggingMiddleware` via a background `Channel<T>` writer in the M1 Web API — the hot path never blocks on the DB.
 - **ApiKeys** (M3a) — DB-backed API keys: `KeyId` (unique opaque ID), `HashedKey` (SHA-256 hex), `Name`, `Scopes` (comma-separated), `CreatedBy`, `LastUsedAt`, `ExpiresAt` + IAuditableEntity + ISoftDeletable. Auth handler checks this table first, falls back to config.

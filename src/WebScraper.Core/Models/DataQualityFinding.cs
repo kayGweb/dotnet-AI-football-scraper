@@ -40,7 +40,7 @@ public enum DataQualityRuleType
     GameMissingPlayerStats,
     QuarterScoresMismatch,
     GameMissingTeamStats,
-    PlayerMissingEspnId,
+    PlayerMissingExternalId,
     ImplausiblePassingYards,
     VenueMissingLocation,
     WeekGameCountMismatch,
