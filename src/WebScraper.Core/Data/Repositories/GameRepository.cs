@@ -91,6 +91,16 @@ public class GameRepository : IGameRepository
                 .FirstOrDefaultAsync(g => g.EspnEventId == game.EspnEventId);
         }
 
+        if (existing == null &&
+            !string.IsNullOrEmpty(game.DataSource) &&
+            !string.IsNullOrEmpty(game.DataSourceRecordId))
+        {
+            existing = await _context.Games
+                .FirstOrDefaultAsync(g =>
+                    g.DataSource == game.DataSource &&
+                    g.DataSourceRecordId == game.DataSourceRecordId);
+        }
+
         existing ??= await _context.Games
             .FirstOrDefaultAsync(g =>
                 g.Season == game.Season &&
@@ -123,6 +133,12 @@ public class GameRepository : IGameRepository
             existing.AwayOT = game.AwayOT ?? existing.AwayOT;
             if (!string.IsNullOrEmpty(game.BroadcastNetworks))
                 existing.BroadcastNetworks = game.BroadcastNetworks;
+            if (!string.IsNullOrEmpty(game.DataSource))
+                existing.DataSource = game.DataSource;
+            if (game.DataSourceFetchedAt.HasValue)
+                existing.DataSourceFetchedAt = game.DataSourceFetchedAt;
+            if (!string.IsNullOrEmpty(game.DataSourceRecordId))
+                existing.DataSourceRecordId = game.DataSourceRecordId;
             _context.Games.Update(existing);
         }
         else

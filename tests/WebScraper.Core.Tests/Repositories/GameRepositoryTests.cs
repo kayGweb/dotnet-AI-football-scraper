@@ -132,6 +132,34 @@ public class GameRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task UpsertAsync_ByNaturalKey_KeepsExistingEspnEventId()
+    {
+        var (home, away, _, _) = await RepositoryTestHelpers.SeedTeamSeasonsAsync(_context);
+        await _gameRepo.UpsertAsync(new Game
+        {
+            Season = 2025, Week = 4, GameDate = new DateTime(2025, 9, 28, 17, 0, 0, DateTimeKind.Utc),
+            HomeTeamSeasonId = home.Id, AwayTeamSeasonId = away.Id,
+            EspnEventId = "401772888", GameStatus = "STATUS_SCHEDULED"
+        });
+
+        await _gameRepo.UpsertAsync(new Game
+        {
+            Season = 2025, Week = 4, GameDate = new DateTime(2025, 9, 28, 17, 0, 0, DateTimeKind.Utc),
+            HomeTeamSeasonId = home.Id, AwayTeamSeasonId = away.Id,
+            DataSource = "ApiSports",
+            DataSourceRecordId = "game-999",
+            GameStatus = "STATUS_IN_PROGRESS",
+            HomeScore = 7, AwayScore = 3,
+        });
+
+        var game = Assert.Single(await _gameRepo.GetBySeasonAsync(2025));
+        Assert.Equal("401772888", game.EspnEventId);
+        Assert.Equal("ApiSports", game.DataSource);
+        Assert.Equal("game-999", game.DataSourceRecordId);
+        Assert.Equal(7, game.HomeScore);
+    }
+
+    [Fact]
     public async Task UpsertAsync_ScheduledThenFinal_FillsInScores()
     {
         var (home, away, _, _) = await RepositoryTestHelpers.SeedTeamSeasonsAsync(_context);

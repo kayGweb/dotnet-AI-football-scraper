@@ -160,6 +160,7 @@ public class DatabasePushService
             (PushStage.PlayerGameStats, DatabasePushStageRunner.PushPlayerGameStatsAsync),
             (PushStage.TeamGameStats, DatabasePushStageRunner.PushTeamGameStatsAsync),
             (PushStage.Injuries, DatabasePushStageRunner.PushInjuriesAsync),
+            (PushStage.InjuryReports, DatabasePushStageRunner.PushInjuryReportsAsync),
             (PushStage.ApiLinks, DatabasePushStageRunner.PushApiLinksAsync),
             (PushStage.GameDrives, DatabasePushStageRunner.PushGameDrivesAsync),
             (PushStage.ScoringPlays, DatabasePushStageRunner.PushScoringPlaysAsync),

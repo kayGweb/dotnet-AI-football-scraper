@@ -55,6 +55,10 @@ public class PlayerRepository : IPlayerRepository
         => await _context.Players.Include(p => p.Team)
             .FirstOrDefaultAsync(p => p.EspnId == espnId);
 
+    public async Task<Player?> GetByExternalIdAsync(string source, string recordId)
+        => await _context.Players.Include(p => p.Team)
+            .FirstOrDefaultAsync(p => p.DataSource == source && p.DataSourceRecordId == recordId);
+
     public async Task UpsertAsync(Player player)
     {
         if (!string.IsNullOrEmpty(player.EspnId))
@@ -102,6 +106,31 @@ public class PlayerRepository : IPlayerRepository
         return player;
     }
 
+    public async Task<Player> UpsertByExternalIdAsync(Player player)
+    {
+        if (string.IsNullOrEmpty(player.DataSource) || string.IsNullOrEmpty(player.DataSourceRecordId))
+            throw new ArgumentException("DataSource and DataSourceRecordId are required for UpsertByExternalIdAsync.", nameof(player));
+
+        var existing = await _context.Players
+            .FirstOrDefaultAsync(p =>
+                p.DataSource == player.DataSource &&
+                p.DataSourceRecordId == player.DataSourceRecordId);
+
+        if (existing != null)
+        {
+            ApplyPlayerFields(existing, player);
+            if (player.TeamId.HasValue)
+                existing.TeamId = player.TeamId;
+            _context.Players.Update(existing);
+            await _context.SaveChangesAsync();
+            return existing;
+        }
+
+        await _context.Players.AddAsync(player);
+        await _context.SaveChangesAsync();
+        return player;
+    }
+
     private static void ApplyPlayerFields(Player target, Player source)
     {
         target.Name = source.Name;
@@ -112,5 +141,11 @@ public class PlayerRepository : IPlayerRepository
         target.College = source.College;
         if (!string.IsNullOrEmpty(source.EspnId))
             target.EspnId = source.EspnId;
+        if (!string.IsNullOrEmpty(source.DataSource))
+            target.DataSource = source.DataSource;
+        if (source.DataSourceFetchedAt.HasValue)
+            target.DataSourceFetchedAt = source.DataSourceFetchedAt;
+        if (!string.IsNullOrEmpty(source.DataSourceRecordId))
+            target.DataSourceRecordId = source.DataSourceRecordId;
     }
 }
