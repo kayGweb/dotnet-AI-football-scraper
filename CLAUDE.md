@@ -100,6 +100,9 @@ src/
 │   │       │   ├── MySportsFeedsPlayerService.cs # MySportsFeeds: Players via /players.json
 │   │       │   ├── MySportsFeedsGameService.cs   # MySportsFeeds: Games via /{season}/games.json
 │   │       │   └── MySportsFeedsStatsService.cs  # MySportsFeeds: Stats via /{season}/week/{week}/player_gamelogs.json
+│   │       ├── ApiSports/
+│   │       │   ├── ApiSportsDtos.cs              # api-sports.io envelope + game/player DTOs (Day 0 fixtures)
+│   │       │   └── ApiSportsMappings.cs          # Team id → NFL abbr; week/status/height/weight parsing
 │   │       └── NflCom/
 │   │           ├── NflComDtos.cs                 # DTO classes for NFL.com JSON responses
 │   │           ├── NflComTeamService.cs          # NFL.com: Teams via /teams
@@ -250,6 +253,9 @@ tests/WebScraper.Core.Tests/            # xUnit test project (renamed from tests
 │   ├── MySportsFeeds/
 │   │   ├── MySportsFeedsTeamServiceTests.cs    # MySportsFeeds nested JSON parsing tests
 │   │   └── MySportsFeedsPlayerServiceTests.cs  # MySportsFeeds player/stats DTO tests
+│   ├── ApiSports/
+│   │   ├── ApiSportsDtoTests.cs            # Fixture deserialization + envelope HasErrors
+│   │   └── ApiSportsMappingsTests.cs       # 26 team ids, week/status/height/weight parsing
 │   └── NflCom/
 │       └── NflComTeamServiceTests.cs   # NFL.com team scraping + graceful error handling
 ├── Services/
@@ -1157,6 +1163,9 @@ Main Menu
 | `Scrapers/MySportsFeeds/MySportsFeedsPlayerServiceTests.cs` | 10 | DTO deserialization, first/last name concatenation, all fields, currentTeam, nullable fields, empty names, gamelogs/stats deserialization |
 | **NFL.com Provider** | | |
 | `Scrapers/NflCom/NflComTeamServiceTests.cs` | 8 | JSON parsing, field mapping, single team, case-insensitive, not found, empty fullName, null response, unexpected JSON structure; ScrapeResult assertions |
+| **api-sports.io Provider** | | |
+| `Scrapers/ApiSports/ApiSportsDtoTests.cs` | 8 | Games/players fixture deserialization, NFL count, OT scores, NS null scores, envelope HasErrors |
+| `Scrapers/ApiSports/ApiSportsMappingsTests.cs` | — | 26 team id map, ParseWeek/ParseStatus/height/weight, IsNfl filter |
 | **UI Services** | | |
 | `Services/ConsoleDisplayServiceTests.cs` | 21 | Banner output, ScrapeResult display (success/failure), table formatting (teams/players/games/stats), database status, error/success/warning output, interactive menus (main/scrape/view/source), provider validation and display names |
 | **Models** | | |
