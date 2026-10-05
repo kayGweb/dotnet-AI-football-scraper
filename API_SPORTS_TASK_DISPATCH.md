@@ -18,8 +18,8 @@ You are the delivery coordinator for the api-sports.io migration across two repo
   SCRAPER  = github.com/kayGweb/dotnet-AI-football-scraper    (.NET 8, EF Core, xUnit)
 
 BASE_BRANCH = claude/happy-albattani-46aq85
-  (this branch holds the plan and the api-sports test fixtures in both repos; once the owner merges
-   it to main, switch BASE_BRANCH to main)
+  (the integration branch in both repos: it holds the plan and the api-sports fixtures, every card
+   lands on it, and main is untouched until the whole migration is done and the owner merges it)
 
 Your job
 1. Dispatch task cards from Part B to Cursor agents, one card per agent, in dependency order.
@@ -367,7 +367,7 @@ Acceptance: `grep -rn "SportsRadar" docs CLAUDE.md` shows only fallback mentions
 
 ## Part C. Owner checklist (not for agents)
 
-- Merge `claude/happy-albattani-46aq85` in both repos (plan + fixtures), then tell Grok to switch `BASE_BRANCH` to `main`.
+- `claude/happy-albattani-46aq85` is the integration branch in both repos. Leave `main` alone until every card is DONE, then open one PR per repo from that branch into `main`.
 - Capture the remaining fixtures and commit them to both fixture folders: `teams.json`, `game-player-stats.json`, `game-team-stats.json`, `injuries-team.json`, `games-season.json` (see plan §6 for the exact calls). S1c and S1d wait on these.
 - Keys: `API_SPORTS_KEY` in Vercel; `ScraperSettings__Providers__ApiSports__ApiKey` and the Neon connection string in `/opt/webscraper/.env` on the Droplet. Never in a PR.
 - Before C2's re-key `--apply`: run the week-number check from plan §1 (api-sports says 2026-10-04 is Week 4).
