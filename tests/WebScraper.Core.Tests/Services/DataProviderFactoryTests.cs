@@ -5,6 +5,7 @@ using WebScraper.Services.Scrapers;
 using WebScraper.Services.Scrapers.Espn;
 using WebScraper.Services.Scrapers.MySportsFeeds;
 using WebScraper.Services.Scrapers.NflCom;
+using WebScraper.Services.Scrapers.ApiSports;
 using WebScraper.Services.Scrapers.SportsDataIo;
 
 namespace WebScraper.Tests.Services;
@@ -25,7 +26,14 @@ public class DataProviderFactoryTests
                 ["Espn"] = new() { BaseUrl = "http://espn.test", AuthType = "None" },
                 ["SportsDataIo"] = new() { BaseUrl = "http://sportsdata.test", AuthType = "Header", ApiKey = "key", AuthHeaderName = "X-Key" },
                 ["MySportsFeeds"] = new() { BaseUrl = "http://msf.test", AuthType = "Basic", ApiKey = "key" },
-                ["NflCom"] = new() { BaseUrl = "http://nfl.test", AuthType = "None" }
+                ["NflCom"] = new() { BaseUrl = "http://nfl.test", AuthType = "None" },
+                ["ApiSports"] = new()
+                {
+                    BaseUrl = "https://v1.american-football.api-sports.test",
+                    AuthType = "Header",
+                    ApiKey = "",
+                    AuthHeaderName = "x-apisports-key"
+                }
             }
         };
     }
@@ -99,6 +107,21 @@ public class DataProviderFactoryTests
         Assert.Contains(services, sd => sd.ServiceType == typeof(IPlayerScraperService));
         Assert.Contains(services, sd => sd.ServiceType == typeof(IGameScraperService));
         Assert.Contains(services, sd => sd.ServiceType == typeof(IStatsScraperService));
+    }
+
+    [Fact]
+    public void RegisterScrapers_ApiSports_ShouldRegisterApiSportsServices()
+    {
+        var services = new ServiceCollection();
+        var settings = CreateSettings("ApiSports");
+
+        DataProviderFactory.RegisterScrapers(services, settings);
+
+        Assert.Contains(services, sd => sd.ServiceType == typeof(ITeamScraperService));
+        Assert.Contains(services, sd => sd.ServiceType == typeof(IPlayerScraperService));
+        Assert.Contains(services, sd => sd.ServiceType == typeof(IGameScraperService));
+        Assert.Contains(services, sd => sd.ServiceType == typeof(IStatsScraperService));
+        Assert.Contains(services, sd => sd.ServiceType == typeof(ITeamScraperService) && sd.ImplementationFactory != null);
     }
 
     [Fact]

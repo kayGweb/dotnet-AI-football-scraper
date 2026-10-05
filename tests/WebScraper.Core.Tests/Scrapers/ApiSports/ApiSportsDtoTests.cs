@@ -21,7 +21,7 @@ public class ApiSportsDtoTests
 
         Assert.NotNull(envelope);
         Assert.Equal("games", envelope.Get);
-        Assert.Equal("2026-10-04", envelope.Parameters!["date"]);
+        Assert.Equal("2026-10-04", envelope.Parameters.GetProperty("date").GetString());
         Assert.False(envelope.HasErrors);
         Assert.Equal(16, envelope.Results);
         Assert.Equal(16, envelope.Response.Count);
@@ -76,8 +76,8 @@ public class ApiSportsDtoTests
 
         Assert.NotNull(envelope);
         Assert.Equal("players", envelope.Get);
-        Assert.Equal("2024", envelope.Parameters!["season"]);
-        Assert.Equal("1", envelope.Parameters["team"]);
+        Assert.Equal("2024", envelope.Parameters.GetProperty("season").GetString());
+        Assert.Equal("1", envelope.Parameters.GetProperty("team").GetString());
         Assert.False(envelope.HasErrors);
         Assert.Equal(14, envelope.Results);
         Assert.Equal(14, envelope.Response.Count);

@@ -9,7 +9,7 @@ public class ApiSportsEnvelope<T>
     public string Get { get; set; } = string.Empty;
 
     [JsonPropertyName("parameters")]
-    public Dictionary<string, string>? Parameters { get; set; }
+    public JsonElement Parameters { get; set; }
 
     [JsonPropertyName("errors")]
     public JsonElement Errors { get; set; }
@@ -180,6 +180,30 @@ public class ApiSportsSideScores
 
     [JsonPropertyName("total")]
     public int? Total { get; set; }
+}
+
+public class ApiSportsTeamListItem
+{
+    [JsonPropertyName("team")]
+    public ApiSportsTeamProfile Team { get; set; } = new();
+}
+
+public class ApiSportsTeamProfile
+{
+    [JsonPropertyName("id")]
+    public int Id { get; set; }
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = string.Empty;
+
+    [JsonPropertyName("code")]
+    public string? Code { get; set; }
+
+    [JsonPropertyName("city")]
+    public string? City { get; set; }
+
+    [JsonPropertyName("logo")]
+    public string? Logo { get; set; }
 }
 
 public class ApiSportsPlayer

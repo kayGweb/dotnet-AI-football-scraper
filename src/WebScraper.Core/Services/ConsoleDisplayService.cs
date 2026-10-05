@@ -8,7 +8,7 @@ public class ConsoleDisplayService
     private static readonly Serilog.ILogger FileLogger = Log.ForContext<ConsoleDisplayService>();
 
     private static readonly string[] ValidProviders =
-        ["ProFootballReference", "Espn", "SportsDataIo", "MySportsFeeds", "NflCom"];
+        ["ProFootballReference", "Espn", "SportsDataIo", "MySportsFeeds", "NflCom", "ApiSports"];
 
     public void PrintAbbreviationsTable()
     {
@@ -491,7 +491,8 @@ public class ConsoleDisplayService
         Console.WriteLine("  3. SportsData.io (requires API key)");
         Console.WriteLine("  4. MySportsFeeds (requires API key)");
         Console.WriteLine("  5. NFL.com (undocumented API)");
-        Console.WriteLine("  6. Cancel");
+        Console.WriteLine("  6. API-Sports (requires API key)");
+        Console.WriteLine("  7. Cancel");
         Console.WriteLine();
     }
 
@@ -514,6 +515,7 @@ public class ConsoleDisplayService
             "sportsdataio" => "SportsData.io API",
             "mysportsfeeds" => "MySportsFeeds API",
             "nflcom" => "NFL.com API",
+            "apisports" => "API-Sports",
             _ => provider
         };
     }
