@@ -98,6 +98,41 @@ public class PlayerRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task UpsertByExternalIdAsync_InsertsThenUpdates()
+    {
+        var team = await SeedTeamAsync();
+        var player = new Player
+        {
+            Name = "Api Player",
+            TeamId = team.Id,
+            Position = "WR",
+            DataSource = "ApiSports",
+            DataSourceRecordId = "player-42",
+            DataSourceFetchedAt = DateTime.UtcNow,
+        };
+
+        var inserted = await _playerRepo.UpsertByExternalIdAsync(player);
+        Assert.True(inserted.Id > 0);
+        Assert.Equal("WR", inserted.Position);
+
+        var updated = await _playerRepo.UpsertByExternalIdAsync(new Player
+        {
+            Name = "Api Player",
+            TeamId = team.Id,
+            Position = "TE",
+            DataSource = "ApiSports",
+            DataSourceRecordId = "player-42",
+        });
+
+        Assert.Equal(inserted.Id, updated.Id);
+        Assert.Equal("TE", updated.Position);
+
+        var fetched = await _playerRepo.GetByExternalIdAsync("ApiSports", "player-42");
+        Assert.NotNull(fetched);
+        Assert.Equal("TE", fetched.Position);
+    }
+
+    [Fact]
     public async Task Player_CanHaveNullTeamId()
     {
         var player = new Player { Name = "Free Agent", TeamId = null, Position = "CB" };
