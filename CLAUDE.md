@@ -542,6 +542,16 @@ dotnet run --project src/WebScraper.Api              # Run the Web API (http://l
 dotnet build src/WebScraper.Mcp                       # Build the MCP server (launched on-demand by Claude Desktop / Claude Code)
 ```
 
+## Deployment
+
+Droplet deployment (Docker + Caddy, Neon PostgreSQL via env file, no Postgres service in compose) is documented in **`deploy/README.md`**. Quick local image check:
+
+```bash
+docker build -t webscraper-api .
+docker run --rm -e DatabaseProvider=Sqlite -p 8080:8080 webscraper-api
+curl http://localhost:8080/health/live
+```
+
 ## WebScraper.Api (M1)
 
 ASP.NET Core Web API host exposing read-only REST endpoints over the scraped data. Shares a single `AppDbContext`/repository layer with the CLI via `AddWebScraperServices` — the API and the scraper CLI can point at the same local SQLite DB (or the same remote PostgreSQL) without duplicating schema or composition-root code.
