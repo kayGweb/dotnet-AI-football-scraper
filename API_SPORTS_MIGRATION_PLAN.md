@@ -39,6 +39,30 @@ Verified from the vendor guide and search results; the docs site is not reachabl
 - Shapes: `game.stage` is `Pre Season | Regular Season | Post Season`; `game.week` is a string (`Week 4`, `Wild Card`, `Divisional Round`, `Conference Championships`, `Super Bowl`); kickoff is `date.timestamp` (unix UTC); `status.short` is one of `NS, Q1, Q2, Q3, Q4, OT, HT, FT, AOT, CANC, PST`; scores are `scores.home.quarter_1..quarter_4, overtime, total`.
 - Gaps: no transactions, no injury history, `coverage.injuries` on `/leagues` must be checked.
 
+### Confirmed by the Day 0 captures (fixtures in the scraper's `tests/WebScraper.Core.Tests/Fixtures/ApiSports/` and the chatbot's `lib/nfl-data/fixtures/`)
+
+- `/games?date=` returns **NFL and NCAA together**. Filter on `league.id == 1` everywhere. NCAA rows have a bare-number `week` and a division name in `stage`.
+- `teams.home` / `teams.away` carry only `id`, `name`, `logo`. **There is no abbreviation in `/games`**, so both apps map the api-sports team id to the NFL abbreviation. Known ids so far:
+
+  | id | Team | id | Team | id | Team |
+  |----|------|----|------|----|------|
+  | 1 | LV Raiders | 12 | PHI Eagles | 24 | TB Buccaneers |
+  | 2 | JAX Jaguars | 13 | NYJ Jets | 25 | MIA Dolphins |
+  | 3 | NE Patriots | 14 | SF 49ers | 26 | HOU Texans |
+  | 4 | NYG Giants | 15 | GB Packers | 28 | DEN Broncos |
+  | 5 | BAL Ravens | 16 | CHI Bears | 29 | DAL Cowboys |
+  | 6 | TEN Titans | 17 | KC Chiefs | 30 | LAC Chargers |
+  | 10 | CIN Bengals | 18 | WAS Commanders | 31 | LAR Rams |
+  | 11 | ARI Cardinals | 20 | BUF Bills | 32 | MIN Vikings |
+  | | | 21 | IND Colts | | |
+  | | | 23 | SEA Seahawks | | |
+
+  Missing: 7, 8, 9, 19, 22, 27 = Falcons, Panthers, Browns, Lions, Saints, Steelers in some order. `/teams?league=1&season=2026` settles them and shows whether `/teams` exposes a `code`.
+- `venue` is `name` + `city` only, nullable, sometimes stale (`Reliant Stadium`). Display only, never an identity key. Neutral-site games list a nominal home team (Commanders "home" in London).
+- `date.timestamp` is unix UTC. Quarter scores are `quarter_1..quarter_4`, `overtime` (null without OT), `total`; an `NS` game has all scores `null`.
+- Players: `height` `5' 8"` and `weight` `203 lbs` are strings to parse; `age` but no birth date; `experience` null for rookies; `number` 0 when unknown; `salary` is noise. `group` doubles as roster status (`Offense`, `Defense`, `Special Teams`, `Practice Squad`, `Injured Reserve Or O`) and feeds `Player.Status` / `isActive`. Names can be mangled; match on id.
+- **Week numbering check before re-keying:** api-sports labels 2026-10-04 as `Week 4`. Confirm the chatbot's `NflGame.week` for those kickoffs says 4 too before running the re-key, because the natural-key fallback matches on week. A one-week offset would silently insert duplicates.
+
 Expected daily usage with Pro: chatbot about 1 season call plus up to 50 score polls on a Sunday; scraper about 1 schedule call, 16 box scores on Tuesday, 32 injuries on Wed and Fri, 32 rosters on Tuesday. Well under any Pro cap.
 
 ---
@@ -222,7 +246,17 @@ The checked-in `appsettings.json` keeps `ApiKey` empty. Keys go in the Local fil
 
 ## 6. Order of work
 
-**Day 0, discovery.** With the key in the scraper's Local file, record real responses to `tests/WebScraper.Core.Tests/Fixtures/ApiSports/`: `teams.json`, `games-season.json`, `injuries-team.json`, `game-player-stats.json`, `game-team-stats.json`. Confirm the 32 team codes, week strings, status codes, Pro per-minute cap, and that `coverage.injuries` is true for the NFL.
+**Day 0, discovery (partly done).** Captured: `games-by-date.json` (`/games?date=2026-10-04`) and `players-by-team.json` (`/players?season=2024&team=1`); findings are in §1. Still to capture, with concrete parameters taken from the games capture:
+
+| Fixture | Call | Why these ids |
+|---------|------|---------------|
+| `teams.json` | `/teams?league=1&season=2026` | fills the 6 missing team ids, shows whether a `code` field exists |
+| `game-player-stats.json` | `/games/statistics/players?id=21572` | Raiders vs Chiefs, Week 4, `FT`, 27-30 |
+| `game-team-stats.json` | `/games/statistics/teams?id=21572` | same game |
+| `injuries-team.json` | `/injuries?team=17` | Kansas City Chiefs; also try `?player=10` (Davante Adams) once to see the player-filter shape |
+| `games-season.json` | `/games?league=1&season=2026` | record `results` and the distinct `stage` / `week` strings, to confirm one call covers preseason, regular season and postseason |
+
+Also confirm the Pro per-minute cap from the dashboard and that `coverage.injuries` is true on `/leagues?id=1&season=2026`.
 
 **Week 1, chatbot C1 + C2.** Provider interface, api-sports provider, source-agnostic sync, re-key script, tests. Deploy with `NFL_DATA_SOURCE=sportsradar` first (identical behavior), then set `API_SPORTS_KEY` and `NFL_DATA_SOURCE=api-sports`, run the re-key dry run then `--apply`, trigger `sync-schedule` and `sync-scores` once by hand, verify with the runbook SQL (272 games, finals per week, 32 standings rows). **This alone unblocks the pick'em season.**
 

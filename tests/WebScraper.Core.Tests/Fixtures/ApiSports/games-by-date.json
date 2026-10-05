@@ -1,0 +1,184 @@
+{
+  "get": "games",
+  "parameters": { "date": "2026-10-04" },
+  "errors": [],
+  "results": 16,
+  "response": [
+    {
+      "game": {
+        "id": 23597, "stage": "FBS (Division I-A)", "week": "5",
+        "date": { "timezone": "UTC", "date": "2026-10-04", "time": "00:00", "timestamp": 1791072000 },
+        "venue": { "name": null, "city": null },
+        "status": { "short": "FT", "long": "Finished", "timer": null }
+      },
+      "league": { "id": 2, "name": "NCAA", "season": "2026", "logo": "https://media.api-sports.io/american-football/leagues/2.png", "country": { "name": "USA", "code": "US", "flag": "https://media.api-sports.io/flags/us.svg" } },
+      "teams": { "home": { "id": 143, "name": "Rutgers", "logo": "https://media.api-sports.io/american-football/teams/143.png" }, "away": { "id": 103, "name": "Indiana", "logo": "https://media.api-sports.io/american-football/teams/103.png" } },
+      "scores": { "home": { "quarter_1": 0, "quarter_2": 0, "quarter_3": 7, "quarter_4": 8, "overtime": null, "total": 15 }, "away": { "quarter_1": 10, "quarter_2": 13, "quarter_3": 14, "quarter_4": 10, "overtime": null, "total": 47 } }
+    },
+    {
+      "game": {
+        "id": 24146, "stage": "FCS (Division I-AA)", "week": "5",
+        "date": { "timezone": "UTC", "date": "2026-10-04", "time": "00:00", "timestamp": 1791072000 },
+        "venue": { "name": null, "city": null },
+        "status": { "short": "NS", "long": "Not Started", "timer": null }
+      },
+      "league": { "id": 2, "name": "NCAA", "season": "2026", "logo": "https://media.api-sports.io/american-football/leagues/2.png", "country": { "name": "USA", "code": "US", "flag": "https://media.api-sports.io/flags/us.svg" } },
+      "teams": { "home": { "id": 241, "name": "Abilene Christian", "logo": "https://media.api-sports.io/american-football/teams/241.png" }, "away": { "id": 720, "name": "West Florida", "logo": "https://media.api-sports.io/american-football/teams/720.png" } },
+      "scores": { "home": { "quarter_1": null, "quarter_2": null, "quarter_3": null, "quarter_4": null, "overtime": null, "total": null }, "away": { "quarter_1": null, "quarter_2": null, "quarter_3": null, "quarter_4": null, "overtime": null, "total": null } }
+    },
+    {
+      "game": {
+        "id": 24147, "stage": "FCS (Division I-AA)", "week": "5",
+        "date": { "timezone": "UTC", "date": "2026-10-04", "time": "00:00", "timestamp": 1791072000 },
+        "venue": { "name": null, "city": null },
+        "status": { "short": "AOT", "long": "After Over Time", "timer": null }
+      },
+      "league": { "id": 2, "name": "NCAA", "season": "2026", "logo": "https://media.api-sports.io/american-football/leagues/2.png", "country": { "name": "USA", "code": "US", "flag": "https://media.api-sports.io/flags/us.svg" } },
+      "teams": { "home": { "id": 89, "name": "Cal Poly", "logo": "https://media.api-sports.io/american-football/teams/89.png" }, "away": { "id": 227, "name": "Weber State", "logo": "https://media.api-sports.io/american-football/teams/227.png" } },
+      "scores": { "home": { "quarter_1": 3, "quarter_2": 6, "quarter_3": 11, "quarter_4": 7, "overtime": 7, "total": 34 }, "away": { "quarter_1": 7, "quarter_2": 10, "quarter_3": 7, "quarter_4": 3, "overtime": 7, "total": 42 } }
+    },
+    {
+      "game": {
+        "id": 21562, "stage": "Regular Season", "week": "Week 4",
+        "date": { "timezone": "UTC", "date": "2026-10-04", "time": "13:30", "timestamp": 1791120600 },
+        "venue": { "name": "Tottenham Hotspur Stadium", "city": "London" },
+        "status": { "short": "FT", "long": "Finished", "timer": null }
+      },
+      "league": { "id": 1, "name": "NFL", "season": "2026", "logo": "https://media.api-sports.io/american-football/leagues/1.png", "country": { "name": "USA", "code": "US", "flag": "https://media.api-sports.io/flags/us.svg" } },
+      "teams": { "home": { "id": 18, "name": "Washington Commanders", "logo": "https://media.api-sports.io/american-football/teams/18.png" }, "away": { "id": 21, "name": "Indianapolis Colts", "logo": "https://media.api-sports.io/american-football/teams/21.png" } },
+      "scores": { "home": { "quarter_1": 6, "quarter_2": 0, "quarter_3": 7, "quarter_4": 0, "overtime": null, "total": 13 }, "away": { "quarter_1": 0, "quarter_2": 10, "quarter_3": 10, "quarter_4": 10, "overtime": null, "total": 30 } }
+    },
+    {
+      "game": {
+        "id": 21563, "stage": "Regular Season", "week": "Week 4",
+        "date": { "timezone": "UTC", "date": "2026-10-04", "time": "17:00", "timestamp": 1791133200 },
+        "venue": { "name": "Highmark Stadium", "city": "Orchard Park" },
+        "status": { "short": "FT", "long": "Finished", "timer": null }
+      },
+      "league": { "id": 1, "name": "NFL", "season": "2026", "logo": "https://media.api-sports.io/american-football/leagues/1.png", "country": { "name": "USA", "code": "US", "flag": "https://media.api-sports.io/flags/us.svg" } },
+      "teams": { "home": { "id": 20, "name": "Buffalo Bills", "logo": "https://media.api-sports.io/american-football/teams/20.png" }, "away": { "id": 3, "name": "New England Patriots", "logo": "https://media.api-sports.io/american-football/teams/3.png" } },
+      "scores": { "home": { "quarter_1": 0, "quarter_2": 17, "quarter_3": 0, "quarter_4": 9, "overtime": null, "total": 26 }, "away": { "quarter_1": 7, "quarter_2": 7, "quarter_3": 7, "quarter_4": 8, "overtime": null, "total": 29 } }
+    },
+    {
+      "game": {
+        "id": 21564, "stage": "Regular Season", "week": "Week 4",
+        "date": { "timezone": "UTC", "date": "2026-10-04", "time": "17:00", "timestamp": 1791133200 },
+        "venue": { "name": "Soldier Field", "city": "Chicago" },
+        "status": { "short": "FT", "long": "Finished", "timer": null }
+      },
+      "league": { "id": 1, "name": "NFL", "season": "2026", "logo": "https://media.api-sports.io/american-football/leagues/1.png", "country": { "name": "USA", "code": "US", "flag": "https://media.api-sports.io/flags/us.svg" } },
+      "teams": { "home": { "id": 16, "name": "Chicago Bears", "logo": "https://media.api-sports.io/american-football/teams/16.png" }, "away": { "id": 13, "name": "New York Jets", "logo": "https://media.api-sports.io/american-football/teams/13.png" } },
+      "scores": { "home": { "quarter_1": 7, "quarter_2": 6, "quarter_3": 7, "quarter_4": 3, "overtime": null, "total": 23 }, "away": { "quarter_1": 0, "quarter_2": 3, "quarter_3": 3, "quarter_4": 6, "overtime": null, "total": 12 } }
+    },
+    {
+      "game": {
+        "id": 21565, "stage": "Regular Season", "week": "Week 4",
+        "date": { "timezone": "UTC", "date": "2026-10-04", "time": "17:00", "timestamp": 1791133200 },
+        "venue": { "name": "Paycor Stadium", "city": "Cincinnati" },
+        "status": { "short": "FT", "long": "Finished", "timer": null }
+      },
+      "league": { "id": 1, "name": "NFL", "season": "2026", "logo": "https://media.api-sports.io/american-football/leagues/1.png", "country": { "name": "USA", "code": "US", "flag": "https://media.api-sports.io/flags/us.svg" } },
+      "teams": { "home": { "id": 10, "name": "Cincinnati Bengals", "logo": "https://media.api-sports.io/american-football/teams/10.png" }, "away": { "id": 2, "name": "Jacksonville Jaguars", "logo": "https://media.api-sports.io/american-football/teams/2.png" } },
+      "scores": { "home": { "quarter_1": 0, "quarter_2": 3, "quarter_3": 7, "quarter_4": 7, "overtime": null, "total": 17 }, "away": { "quarter_1": 3, "quarter_2": 10, "quarter_3": 3, "quarter_4": 6, "overtime": null, "total": 22 } }
+    },
+    {
+      "game": {
+        "id": 21566, "stage": "Regular Season", "week": "Week 4",
+        "date": { "timezone": "UTC", "date": "2026-10-04", "time": "17:00", "timestamp": 1791133200 },
+        "venue": { "name": "MetLife Stadium", "city": "East Rutherford" },
+        "status": { "short": "FT", "long": "Finished", "timer": null }
+      },
+      "league": { "id": 1, "name": "NFL", "season": "2026", "logo": "https://media.api-sports.io/american-football/leagues/1.png", "country": { "name": "USA", "code": "US", "flag": "https://media.api-sports.io/flags/us.svg" } },
+      "teams": { "home": { "id": 4, "name": "New York Giants", "logo": "https://media.api-sports.io/american-football/teams/4.png" }, "away": { "id": 11, "name": "Arizona Cardinals", "logo": "https://media.api-sports.io/american-football/teams/11.png" } },
+      "scores": { "home": { "quarter_1": 3, "quarter_2": 16, "quarter_3": 8, "quarter_4": 9, "overtime": null, "total": 36 }, "away": { "quarter_1": 14, "quarter_2": 3, "quarter_3": 7, "quarter_4": 0, "overtime": null, "total": 24 } }
+    },
+    {
+      "game": {
+        "id": 21567, "stage": "Regular Season", "week": "Week 4",
+        "date": { "timezone": "UTC", "date": "2026-10-04", "time": "17:00", "timestamp": 1791133200 },
+        "venue": { "name": "Lincoln Financial Field", "city": "Philadelphia" },
+        "status": { "short": "FT", "long": "Finished", "timer": null }
+      },
+      "league": { "id": 1, "name": "NFL", "season": "2026", "logo": "https://media.api-sports.io/american-football/leagues/1.png", "country": { "name": "USA", "code": "US", "flag": "https://media.api-sports.io/flags/us.svg" } },
+      "teams": { "home": { "id": 12, "name": "Philadelphia Eagles", "logo": "https://media.api-sports.io/american-football/teams/12.png" }, "away": { "id": 31, "name": "Los Angeles Rams", "logo": "https://media.api-sports.io/american-football/teams/31.png" } },
+      "scores": { "home": { "quarter_1": 3, "quarter_2": 17, "quarter_3": 0, "quarter_4": 0, "overtime": null, "total": 20 }, "away": { "quarter_1": 3, "quarter_2": 7, "quarter_3": 0, "quarter_4": 14, "overtime": null, "total": 24 } }
+    },
+    {
+      "game": {
+        "id": 21568, "stage": "Regular Season", "week": "Week 4",
+        "date": { "timezone": "UTC", "date": "2026-10-04", "time": "17:00", "timestamp": 1791133200 },
+        "venue": { "name": "Raymond James Stadium", "city": "Tampa" },
+        "status": { "short": "FT", "long": "Finished", "timer": null }
+      },
+      "league": { "id": 1, "name": "NFL", "season": "2026", "logo": "https://media.api-sports.io/american-football/leagues/1.png", "country": { "name": "USA", "code": "US", "flag": "https://media.api-sports.io/flags/us.svg" } },
+      "teams": { "home": { "id": 24, "name": "Tampa Bay Buccaneers", "logo": "https://media.api-sports.io/american-football/teams/24.png" }, "away": { "id": 15, "name": "Green Bay Packers", "logo": "https://media.api-sports.io/american-football/teams/15.png" } },
+      "scores": { "home": { "quarter_1": 0, "quarter_2": 7, "quarter_3": 0, "quarter_4": 7, "overtime": null, "total": 14 }, "away": { "quarter_1": 0, "quarter_2": 10, "quarter_3": 7, "quarter_4": 0, "overtime": null, "total": 17 } }
+    },
+    {
+      "game": {
+        "id": 21569, "stage": "Regular Season", "week": "Week 4",
+        "date": { "timezone": "UTC", "date": "2026-10-04", "time": "17:00", "timestamp": 1791133200 },
+        "venue": { "name": "M&T Bank Stadium", "city": "Baltimore" },
+        "status": { "short": "FT", "long": "Finished", "timer": null }
+      },
+      "league": { "id": 1, "name": "NFL", "season": "2026", "logo": "https://media.api-sports.io/american-football/leagues/1.png", "country": { "name": "USA", "code": "US", "flag": "https://media.api-sports.io/flags/us.svg" } },
+      "teams": { "home": { "id": 5, "name": "Baltimore Ravens", "logo": "https://media.api-sports.io/american-football/teams/5.png" }, "away": { "id": 6, "name": "Tennessee Titans", "logo": "https://media.api-sports.io/american-football/teams/6.png" } },
+      "scores": { "home": { "quarter_1": 7, "quarter_2": 17, "quarter_3": 0, "quarter_4": 0, "overtime": null, "total": 24 }, "away": { "quarter_1": 7, "quarter_2": 0, "quarter_3": 3, "quarter_4": 8, "overtime": null, "total": 18 } }
+    },
+    {
+      "game": {
+        "id": 21570, "stage": "Regular Season", "week": "Week 4",
+        "date": { "timezone": "UTC", "date": "2026-10-04", "time": "17:00", "timestamp": 1791133200 },
+        "venue": { "name": "Reliant Stadium", "city": "Houston" },
+        "status": { "short": "FT", "long": "Finished", "timer": null }
+      },
+      "league": { "id": 1, "name": "NFL", "season": "2026", "logo": "https://media.api-sports.io/american-football/leagues/1.png", "country": { "name": "USA", "code": "US", "flag": "https://media.api-sports.io/flags/us.svg" } },
+      "teams": { "home": { "id": 26, "name": "Houston Texans", "logo": "https://media.api-sports.io/american-football/teams/26.png" }, "away": { "id": 29, "name": "Dallas Cowboys", "logo": "https://media.api-sports.io/american-football/teams/29.png" } },
+      "scores": { "home": { "quarter_1": 10, "quarter_2": 6, "quarter_3": 7, "quarter_4": 7, "overtime": null, "total": 30 }, "away": { "quarter_1": 3, "quarter_2": 3, "quarter_3": 14, "quarter_4": 14, "overtime": null, "total": 34 } }
+    },
+    {
+      "game": {
+        "id": 21571, "stage": "Regular Season", "week": "Week 4",
+        "date": { "timezone": "UTC", "date": "2026-10-04", "time": "20:05", "timestamp": 1791144300 },
+        "venue": { "name": "U.S. Bank Stadium", "city": "Minneapolis" },
+        "status": { "short": "FT", "long": "Finished", "timer": null }
+      },
+      "league": { "id": 1, "name": "NFL", "season": "2026", "logo": "https://media.api-sports.io/american-football/leagues/1.png", "country": { "name": "USA", "code": "US", "flag": "https://media.api-sports.io/flags/us.svg" } },
+      "teams": { "home": { "id": 32, "name": "Minnesota Vikings", "logo": "https://media.api-sports.io/american-football/teams/32.png" }, "away": { "id": 25, "name": "Miami Dolphins", "logo": "https://media.api-sports.io/american-football/teams/25.png" } },
+      "scores": { "home": { "quarter_1": 3, "quarter_2": 6, "quarter_3": 3, "quarter_4": 3, "overtime": null, "total": 15 }, "away": { "quarter_1": 0, "quarter_2": 0, "quarter_3": 10, "quarter_4": 0, "overtime": null, "total": 10 } }
+    },
+    {
+      "game": {
+        "id": 21572, "stage": "Regular Season", "week": "Week 4",
+        "date": { "timezone": "UTC", "date": "2026-10-04", "time": "20:25", "timestamp": 1791145500 },
+        "venue": { "name": "Allegiant Stadium", "city": "Las Vegas" },
+        "status": { "short": "FT", "long": "Finished", "timer": null }
+      },
+      "league": { "id": 1, "name": "NFL", "season": "2026", "logo": "https://media.api-sports.io/american-football/leagues/1.png", "country": { "name": "USA", "code": "US", "flag": "https://media.api-sports.io/flags/us.svg" } },
+      "teams": { "home": { "id": 1, "name": "Las Vegas Raiders", "logo": "https://media.api-sports.io/american-football/teams/1.png" }, "away": { "id": 17, "name": "Kansas City Chiefs", "logo": "https://media.api-sports.io/american-football/teams/17.png" } },
+      "scores": { "home": { "quarter_1": 7, "quarter_2": 6, "quarter_3": 0, "quarter_4": 14, "overtime": null, "total": 27 }, "away": { "quarter_1": 7, "quarter_2": 3, "quarter_3": 0, "quarter_4": 20, "overtime": null, "total": 30 } }
+    },
+    {
+      "game": {
+        "id": 21573, "stage": "Regular Season", "week": "Week 4",
+        "date": { "timezone": "UTC", "date": "2026-10-04", "time": "20:25", "timestamp": 1791145500 },
+        "venue": { "name": "Levi's Stadium", "city": "Santa Clara" },
+        "status": { "short": "FT", "long": "Finished", "timer": null }
+      },
+      "league": { "id": 1, "name": "NFL", "season": "2026", "logo": "https://media.api-sports.io/american-football/leagues/1.png", "country": { "name": "USA", "code": "US", "flag": "https://media.api-sports.io/flags/us.svg" } },
+      "teams": { "home": { "id": 14, "name": "San Francisco 49ers", "logo": "https://media.api-sports.io/american-football/teams/14.png" }, "away": { "id": 28, "name": "Denver Broncos", "logo": "https://media.api-sports.io/american-football/teams/28.png" } },
+      "scores": { "home": { "quarter_1": 0, "quarter_2": 3, "quarter_3": 7, "quarter_4": 14, "overtime": null, "total": 24 }, "away": { "quarter_1": 3, "quarter_2": 0, "quarter_3": 0, "quarter_4": 11, "overtime": null, "total": 14 } }
+    },
+    {
+      "game": {
+        "id": 21574, "stage": "Regular Season", "week": "Week 4",
+        "date": { "timezone": "UTC", "date": "2026-10-04", "time": "20:25", "timestamp": 1791145500 },
+        "venue": { "name": "Lumen Field", "city": "Seattle" },
+        "status": { "short": "FT", "long": "Finished", "timer": null }
+      },
+      "league": { "id": 1, "name": "NFL", "season": "2026", "logo": "https://media.api-sports.io/american-football/leagues/1.png", "country": { "name": "USA", "code": "US", "flag": "https://media.api-sports.io/flags/us.svg" } },
+      "teams": { "home": { "id": 23, "name": "Seattle Seahawks", "logo": "https://media.api-sports.io/american-football/teams/23.png" }, "away": { "id": 30, "name": "Los Angeles Chargers", "logo": "https://media.api-sports.io/american-football/teams/30.png" } },
+      "scores": { "home": { "quarter_1": 7, "quarter_2": 13, "quarter_3": 10, "quarter_4": 0, "overtime": null, "total": 30 }, "away": { "quarter_1": 3, "quarter_2": 3, "quarter_3": 7, "quarter_4": 10, "overtime": null, "total": 23 } }
+    }
+  ]
+}
