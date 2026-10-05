@@ -809,6 +809,7 @@ static string? HandleChangeSource(ConsoleDisplayService display, string currentS
         "3" => "SportsDataIo",
         "4" => "MySportsFeeds",
         "5" => "NflCom",
+        "6" => "ApiSports",
         _ => null
     };
 
@@ -1029,7 +1030,7 @@ static void PrintUsage()
           --player <name>     Player name for stats lookup
           --source <provider> Data source override (default: from appsettings.json)
                               Values: ProFootballReference, Espn, SportsDataIo,
-                                      MySportsFeeds, NflCom
+                                      MySportsFeeds, NflCom, ApiSports
           --help, -h          Show this help message
 
         Examples:

@@ -297,6 +297,7 @@ AppDbContext → SQLite / PostgreSQL / SQL Server
 | SportsData.io | `SportsDataIo` | API key header | Implemented |
 | MySportsFeeds | `MySportsFeeds` | HTTP Basic auth | Implemented |
 | NFL.com | `NflCom` | None (undocumented) | Implemented |
+| API-Sports | `ApiSports` | `x-apisports-key` header | Implemented (teams/games; players/stats in S1c) |
 
 ### BaseApiService (`Services/Scrapers/BaseApiService.cs`)
 Abstract base class for all JSON API providers, parallel to `BaseScraperService`:

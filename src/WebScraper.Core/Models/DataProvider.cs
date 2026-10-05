@@ -6,5 +6,6 @@ public enum DataProvider
     Espn,
     SportsDataIo,
     MySportsFeeds,
-    NflCom
+    NflCom,
+    ApiSports
 }

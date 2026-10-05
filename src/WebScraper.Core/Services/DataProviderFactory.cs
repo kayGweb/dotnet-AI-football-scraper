@@ -8,6 +8,7 @@ using WebScraper.Services.Scrapers;
 using WebScraper.Services.Scrapers.Espn;
 using WebScraper.Services.Scrapers.MySportsFeeds;
 using WebScraper.Services.Scrapers.NflCom;
+using WebScraper.Services.Scrapers.ApiSports;
 using WebScraper.Services.Scrapers.SportsDataIo;
 
 namespace WebScraper.Services;
@@ -60,10 +61,18 @@ public static class DataProviderFactory
                 AddApiHttpClient<IStatsScraperService, NflComStatsService>(services, settings, nflSettings);
                 break;
 
+            case "apisports":
+                var apiSportsSettings = settings.Providers.GetValueOrDefault("ApiSports") ?? new ApiProviderSettings();
+                AddApiHttpClient<ITeamScraperService, ApiSportsTeamService>(services, settings, apiSportsSettings);
+                AddApiHttpClient<IPlayerScraperService, ApiSportsPlayerScraperStub>(services, settings, apiSportsSettings);
+                AddApiHttpClient<IGameScraperService, ApiSportsGameService>(services, settings, apiSportsSettings);
+                AddApiHttpClient<IStatsScraperService, ApiSportsStatsScraperStub>(services, settings, apiSportsSettings);
+                break;
+
             default:
                 throw new InvalidOperationException(
                     $"Unsupported data provider: '{settings.DataProvider}'. " +
-                    "Supported: ProFootballReference, Espn, SportsDataIo, MySportsFeeds, NflCom");
+                    "Supported: ProFootballReference, Espn, SportsDataIo, MySportsFeeds, NflCom, ApiSports");
         }
 
         if (!services.Any(d => d.ServiceType == typeof(IOddsPollService)))
