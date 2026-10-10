@@ -14,6 +14,9 @@ public static partial class ApiSportsMappings
         { 4, "NYG" },
         { 5, "BAL" },
         { 6, "TEN" },
+        { 7, "DET" },
+        { 8, "ATL" },
+        { 9, "CLE" },
         { 10, "CIN" },
         { 11, "ARI" },
         { 12, "PHI" },
@@ -23,22 +26,40 @@ public static partial class ApiSportsMappings
         { 16, "CHI" },
         { 17, "KC" },
         { 18, "WAS" },
+        { 19, "CAR" },
         { 20, "BUF" },
         { 21, "IND" },
+        { 22, "PIT" },
         { 23, "SEA" },
         { 24, "TB" },
         { 25, "MIA" },
         { 26, "HOU" },
+        { 27, "NO" },
         { 28, "DEN" },
         { 29, "DAL" },
         { 30, "LAC" },
         { 31, "LAR" },
         { 32, "MIN" },
-        // TODO(S1b): ids 7, 8, 9, 19, 22, 27 from teams.json
     };
+
+    // All 32 ids confirmed by the /teams?league=1&season=2026 capture (teams.json).
+    // The capture's `code` matches these abbreviations for 31 teams; the Rams are "LA"
+    // there and "LAR" here, so always key on the numeric id, never on `code`.
+    private static readonly Dictionary<string, int> AbbreviationToTeamIdMap =
+        TeamIdToAbbreviationMap.ToDictionary(kv => kv.Value, kv => kv.Key, StringComparer.OrdinalIgnoreCase);
 
     public static string? TeamIdToAbbreviation(int teamId) =>
         TeamIdToAbbreviationMap.GetValueOrDefault(teamId);
+
+    public static int? AbbreviationToTeamId(string? abbreviation)
+    {
+        if (string.IsNullOrWhiteSpace(abbreviation))
+            return null;
+
+        return AbbreviationToTeamIdMap.TryGetValue(abbreviation.Trim(), out var id) ? id : null;
+    }
+
+    public static IReadOnlyDictionary<int, string> AllTeamIds => TeamIdToAbbreviationMap;
 
     public static (NflSeasonType SeasonType, int Week)? ParseWeek(string? stage, string? week)
     {

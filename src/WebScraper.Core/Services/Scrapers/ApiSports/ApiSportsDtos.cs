@@ -182,12 +182,10 @@ public class ApiSportsSideScores
     public int? Total { get; set; }
 }
 
-public class ApiSportsTeamListItem
-{
-    [JsonPropertyName("team")]
-    public ApiSportsTeamProfile Team { get; set; } = new();
-}
-
+/// <summary>
+/// One element of the <c>/teams?league=1&amp;season=</c> response. The capture
+/// (<c>teams.json</c>) returns flat team objects, not a <c>{ "team": … }</c> wrapper.
+/// </summary>
 public class ApiSportsTeamProfile
 {
     [JsonPropertyName("id")]
@@ -243,4 +241,97 @@ public class ApiSportsPlayer
 
     [JsonPropertyName("image")]
     public string? Image { get; set; }
+}
+
+// ---------------------------------------------------------------------------
+// /games/statistics/players?id=  (one element per team)
+// ---------------------------------------------------------------------------
+
+public class ApiSportsPlayerStatsTeamBlock
+{
+    [JsonPropertyName("team")]
+    public ApiSportsTeamRef Team { get; set; } = new();
+
+    [JsonPropertyName("groups")]
+    public List<ApiSportsStatGroup> Groups { get; set; } = [];
+}
+
+public class ApiSportsStatGroup
+{
+    /// <summary>Passing, Rushing, Receiving, Fumbles, Defensive, Interceptions, Kick returns, Punt returns, Kicking, Punting.</summary>
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = string.Empty;
+
+    [JsonPropertyName("players")]
+    public List<ApiSportsPlayerStatLine> Players { get; set; } = [];
+}
+
+public class ApiSportsPlayerStatLine
+{
+    [JsonPropertyName("player")]
+    public ApiSportsPlayerRef Player { get; set; } = new();
+
+    [JsonPropertyName("statistics")]
+    public List<ApiSportsStatValue> Statistics { get; set; } = [];
+}
+
+public class ApiSportsPlayerRef
+{
+    [JsonPropertyName("id")]
+    public int Id { get; set; }
+
+    [JsonPropertyName("name")]
+    public string? Name { get; set; }
+
+    [JsonPropertyName("image")]
+    public string? Image { get; set; }
+}
+
+public class ApiSportsStatValue
+{
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>
+    /// api-sports sends stat values as strings ("24/36", "3-19", "91.4"), but a plain number
+    /// would also be valid JSON, so the raw element is kept and <see cref="Text"/> normalizes it.
+    /// </summary>
+    [JsonPropertyName("value")]
+    public JsonElement Value { get; set; }
+
+    [JsonIgnore]
+    public string? Text => ApiSportsJson.ElementToText(Value);
+}
+
+// ---------------------------------------------------------------------------
+// /games/statistics/teams?id=  (one element per team)
+// ---------------------------------------------------------------------------
+
+public class ApiSportsTeamStatsBlock
+{
+    [JsonPropertyName("team")]
+    public ApiSportsTeamRef Team { get; set; } = new();
+
+    /// <summary>
+    /// Sections keyed by name (<c>first_downs</c>, <c>plays</c>, <c>yards</c>, <c>passing</c>,
+    /// <c>rushings</c>, <c>red_zone</c>, <c>penalties</c>, <c>turnovers</c>, <c>posession</c> [sic], …).
+    /// Each section is an object whose values are ints or strings, so it is kept as a
+    /// <see cref="JsonElement"/> and read by <see cref="ApiSportsStatMappings"/>.
+    /// </summary>
+    [JsonPropertyName("statistics")]
+    public Dictionary<string, JsonElement> Statistics { get; set; } = new();
+}
+
+public static class ApiSportsJson
+{
+    public static string? ElementToText(JsonElement element) =>
+        element.ValueKind switch
+        {
+            JsonValueKind.String => element.GetString(),
+            JsonValueKind.Number => element.GetRawText(),
+            JsonValueKind.True => "true",
+            JsonValueKind.False => "false",
+            JsonValueKind.Null or JsonValueKind.Undefined => null,
+            _ => element.GetRawText()
+        };
 }

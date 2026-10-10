@@ -8,11 +8,23 @@ against these files, not against memory of the docs.
 |------|------|----------|
 | `games-by-date.json` | `GET /games?date=2026-10-04` | Original returned 26 games (13 NFL + 13 NCAA). Kept all 13 NFL games and 3 NCAA games chosen to cover `FT`, `NS` (null scores) and `AOT` (overtime scores). `results` adjusted to 16 |
 | `players-by-team.json` | `GET /players?season=2024&team=1` | Original returned 86 Raiders. Kept 14 that cover every `group` value seen, `number: 0`, `salary` variants (`"-"`, `"0-"`, `"($…)"`, `null`), `experience: null`, and a mangled name. `results` adjusted to 14 |
+| `teams.json` | `GET /teams?league=1&season=2026` | Captured 2026-10-10, untrimmed (32 teams). Copied from the chatbot's `lib/nfl-data/fixtures/`. **Flat objects** — there is no `{ "team": … }` wrapper |
 
-Still to capture (see the plan, §6 Day 0): `teams.json` (`/teams?league=1&season=2026`),
-`game-player-stats.json` (`/games/statistics/players?id=21572`), `game-team-stats.json`
-(`/games/statistics/teams?id=21572`), `injuries-team.json` (`/injuries?team=17`),
-`games-season.json` (`/games?league=1&season=2026`, record `results` and the distinct `stage` values only).
+## Hand-authored fixtures (NOT captures — replace with real responses)
+
+| File | Call it stands in for | Status |
+|------|-----------------------|--------|
+| `game-player-stats.json` | `GET /games/statistics/players?id=21572` | **Written from the vendor documentation, not captured.** Shape: `response[]` = one block per team (`team` + `groups[]`), each group (`Passing`, `Rushing`, `Receiving`, `Fumbles`, `Defensive`, `Interceptions`, `Kick returns`, `Punt returns`, `Kicking`, `Punting`) holds `players[]` with `player {id,name,image}` and `statistics[] {name,value}`; values are strings (`"24/36"`, `"3-19"`, `"91.4"`). Numbers are illustrative for Raiders 27 – Chiefs 30 (game 21572) |
+| `game-team-stats.json` | `GET /games/statistics/teams?id=21572` | **Written from the vendor documentation, not captured.** Shape: `response[]` = one block per team (`team` + `statistics{}`), sections `first_downs`, `plays`, `yards`, `passing`, `rushings`, `red_zone`, `penalties`, `turnovers`, `posession` (vendor spelling), `interceptions`, `fumbles_recovered`, `sacks`, `safeties`, `int_touchdowns`, `points_against`; values are a mix of ints and `"a-b"` strings |
+
+To replace them: run the two calls above with a real key, save the bodies untrimmed, and re-run
+`dotnet test`. `ApiSportsStatMappings` matches stat names case-insensitively with aliases and
+ignores unknown names, so a renamed field shows up as a zero in a test assertion rather than a
+crash — fix the alias list in `ApiSportsStatMappings.cs` if that happens.
+
+Still to capture (see the plan, §6 Day 0): `injuries-team.json` (`/injuries?team=17`),
+`games-season.json` (`/games?league=1&season=2026`, record `results` and the distinct `stage` values only),
+plus real replacements for the two hand-authored box-score fixtures above.
 
 ## What the captures established
 
@@ -20,8 +32,11 @@ Still to capture (see the plan, §6 Day 0): `teams.json` (`/teams?league=1&seaso
   Every consumer must filter on `league.id == 1`. The NCAA `week` is a bare number (`"5"`) while the
   NFL `week` is `"Week 4"`; `stage` for NCAA is a division name, for the NFL `"Regular Season"`.
 - **`teams.home` / `teams.away` carry `id`, `name`, `logo` only. No abbreviation.** Team identity is
-  the api-sports numeric id, so `ApiSportsMappings` maps id → NFL abbreviation. 26 of 32 ids are in
-  this file; the `/teams` capture fills in Falcons, Panthers, Browns, Lions, Saints and Steelers.
+  the api-sports numeric id, so `ApiSportsMappings` maps id → NFL abbreviation. All 32 ids are
+  confirmed by `teams.json` (7 DET, 8 ATL, 9 CLE, 19 CAR, 22 PIT, 27 NO were the missing six).
+- **`/teams` returns flat team objects** with a `code` that matches the NFL abbreviation for 31
+  teams; the Rams are `LA` (we use `LAR`). Always key on the numeric id, never on `code`. `coach`
+  and `owner` are stale and must not be displayed as current.
 - `venue` has `name` and `city` only (no state), can be `null`, and names can be stale
   (`"Reliant Stadium"` for Houston). Venue is display data, never an identity key.
 - A neutral-site game lists a nominal home team (Commanders "home" in London). `NeutralSite` is not

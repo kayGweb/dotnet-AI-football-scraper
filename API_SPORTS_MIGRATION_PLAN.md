@@ -11,7 +11,7 @@
 | **S2** | Done (#47) | Migration `ApiSportsProvider`, `InjuryReports`, identity indexes, upsert paths, push stage, `PlayerMissingExternalId` rule |
 | **S1b** | Done (#49) | `ApiSportsTeamService`, `ApiSportsGameService`, factory wiring; player/stats **stubs** until S1c |
 | **S5** | Done (#48) | `Dockerfile`, `deploy/*` — production Droplet cutover is still ops |
-| **S1c** | Not started | Blocked on fixtures `game-player-stats.json`, `game-team-stats.json` |
+| **S1c** | Done (branch `claude/modest-bell-u9rgv3`) | `ApiSportsPlayerService`, `ApiSportsStatsService`, `ApiSportsStatMappings`, 32-team map from `teams.json`, `/teams` DTO fixed to the flat shape. Box-score fixtures are hand-authored from the vendor docs until `/games/statistics/*?id=21572` is captured |
 | **S1d** | Not started | Blocked on `injuries-team.json`; `teams.json` for remaining six team ids |
 | **S3** / **S4** | Not started | After S1d (schedulers, relay poll guard, injuries API/MCP) |
 

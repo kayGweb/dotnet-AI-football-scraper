@@ -20,22 +20,23 @@ public class ApiSportsTeamServiceTests
       "results": 2,
       "response": [
         {
-          "team": {
-            "id": 17,
-            "name": "Kansas City Chiefs",
-            "code": "KC",
-            "city": "Kansas City",
-            "logo": "https://media.api-sports.io/american-football/teams/17.png"
-          }
+          "id": 17,
+          "name": "Kansas City Chiefs",
+          "code": "KC",
+          "city": "Kansas City",
+          "coach": "Andy Reid",
+          "owner": "Clark Hunt",
+          "stadium": "GEHA Field at Arrowhead Stadium",
+          "established": 1960,
+          "logo": "https://media.api-sports.io/american-football/teams/17.png",
+          "country": { "name": "USA", "code": "US", "flag": "https://media.api-sports.io/flags/us.svg" }
         },
         {
-          "team": {
-            "id": 999,
-            "name": "Unknown Franchise",
-            "code": "UNK",
-            "city": "Nowhere",
-            "logo": null
-          }
+          "id": 999,
+          "name": "Unknown Franchise",
+          "code": "UNK",
+          "city": "Nowhere",
+          "logo": null
         }
       ]
     }
@@ -73,6 +74,29 @@ public class ApiSportsTeamServiceTests
             t.Abbreviation == "KC" &&
             t.DataSource == "ApiSports" &&
             t.DataSourceRecordId == "17")), Times.Once);
+    }
+
+    [Fact]
+    public async Task ScrapeTeamsAsync_TeamsFixture_UpsertsAllThirtyTwoTeams()
+    {
+        var json = await File.ReadAllTextAsync(
+            Path.Combine(AppContext.BaseDirectory, "Fixtures", "ApiSports", "teams.json"));
+        var handler = new FakeHttpHandler(json);
+        var mockRepo = new Mock<ITeamRepository>();
+        var upserted = new List<Team>();
+        mockRepo.Setup(r => r.UpsertAsync(It.IsAny<Team>()))
+            .Callback<Team>(upserted.Add)
+            .Returns(Task.CompletedTask);
+        var service = CreateService(handler, mockRepo.Object);
+
+        var result = await service.ScrapeTeamsAsync();
+
+        Assert.True(result.Success);
+        Assert.Equal(32, result.RecordsProcessed);
+        Assert.Equal(32, upserted.Select(t => t.Abbreviation).Distinct().Count());
+        Assert.Contains(upserted, t => t.Abbreviation == "LAR" && t.DataSourceRecordId == "31");
+        Assert.Contains(upserted, t => t.Abbreviation == "DET" && t.DataSourceRecordId == "7");
+        Assert.All(upserted, t => Assert.False(string.IsNullOrEmpty(t.Conference)));
     }
 
     [Fact]

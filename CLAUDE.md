@@ -107,12 +107,13 @@ src/
 │   │       │   └── MySportsFeedsStatsService.cs  # MySportsFeeds: Stats via /{season}/week/{week}/player_gamelogs.json
 │   │       ├── ApiSports/
 │   │       │   ├── ApiSportsDtos.cs              # api-sports.io envelope + game/player DTOs (Day 0 fixtures)
-│   │       │   ├── ApiSportsMappings.cs          # Team id → NFL abbr (26/32 until teams.json); week/status/height/weight
+│   │       │   ├── ApiSportsMappings.cs          # Team id ↔ NFL abbr (all 32); week/status/height/weight
+│   │       │   ├── ApiSportsStatMappings.cs      # Pure box-score → PlayerGameStats / TeamGameStats mapping (S1c)
 │   │       │   ├── ApiSportsServiceBase.cs       # FetchEnvelopeAsync + HasErrors handling (S1b)
 │   │       │   ├── ApiSportsTeamService.cs       # GET /teams?league=1&season= (S1b)
 │   │       │   ├── ApiSportsGameService.cs       # GET /games?league=1&season=, NFL filter, venue upsert (S1b)
-│   │       │   ├── ApiSportsPlayerScraperStub.cs # IPlayerScraperService stub until S1c
-│   │       │   └── ApiSportsStatsScraperStub.cs  # IStatsScraperService stub until S1c
+│   │       │   ├── ApiSportsPlayerService.cs     # GET /players?team=&season= × 32 → Player + PlayerTeamSeason (S1c)
+│   │       │   └── ApiSportsStatsService.cs      # /games/statistics/players + /teams per game → PlayerGameStats, TeamGameStats (S1c)
 │   │       └── NflCom/
 │   │           ├── NflComDtos.cs                 # DTO classes for NFL.com JSON responses
 │   │           ├── NflComTeamService.cs          # NFL.com: Teams via /teams
@@ -269,10 +270,13 @@ tests/WebScraper.Core.Tests/            # xUnit test project (renamed from tests
 │   │   ├── MySportsFeedsTeamServiceTests.cs    # MySportsFeeds nested JSON parsing tests
 │   │   └── MySportsFeedsPlayerServiceTests.cs  # MySportsFeeds player/stats DTO tests
 │   ├── ApiSports/
-│   │   ├── ApiSportsDtoTests.cs            # Fixture deserialization + envelope HasErrors
-│   │   ├── ApiSportsMappingsTests.cs       # 26 team ids, week/status/height/weight parsing
-│   │   ├── ApiSportsTeamServiceTests.cs    # Mock HTTP team scrape + envelope errors (S1b)
-│   │   └── ApiSportsGameServiceTests.cs    # Mock HTTP games: NFL filter, NS scores, api-sports errors (S1b)
+│   │   ├── ApiSportsDtoTests.cs            # Fixture deserialization (games, players, teams, box scores) + envelope HasErrors
+│   │   ├── ApiSportsMappingsTests.cs       # 32 team ids (both directions), week/status/height/weight parsing
+│   │   ├── ApiSportsStatMappingsTests.cs   # Box-score group → stat columns, team statistics sections (S1c)
+│   │   ├── ApiSportsTeamServiceTests.cs    # Mock HTTP team scrape (flat /teams shape, teams.json) + envelope errors (S1b)
+│   │   ├── ApiSportsGameServiceTests.cs    # Mock HTTP games: NFL filter, NS scores, api-sports errors (S1b)
+│   │   ├── ApiSportsPlayerServiceTests.cs  # Roster scrape by external id, PlayerTeamSeason, mapping failures (S1c)
+│   │   └── ApiSportsStatsServiceTests.cs   # Players + teams box-score calls, player discovery, skips, errors (S1c)
 │   └── NflCom/
 │       └── NflComTeamServiceTests.cs   # NFL.com team scraping + graceful error handling
 ├── Services/
@@ -314,7 +318,7 @@ AppDbContext → SQLite / PostgreSQL / SQL Server
 | SportsData.io | `SportsDataIo` | API key header | Implemented |
 | MySportsFeeds | `MySportsFeeds` | HTTP Basic auth | Implemented |
 | NFL.com | `NflCom` | None (undocumented) | Implemented |
-| API-Sports | `ApiSports` | `x-apisports-key` header | Implemented (teams/games; players/stats in S1c) |
+| API-Sports | `ApiSports` | `x-apisports-key` header | Implemented (teams, games, players, stats; injuries in S1d) |
 
 ### BaseApiService (`Services/Scrapers/BaseApiService.cs`)
 Abstract base class for all JSON API providers, parallel to `BaseScraperService`:
@@ -344,18 +348,19 @@ Static helper that maps the `DataProvider` config string to the correct set of D
 ### api-sports.io Provider (`Services/Scrapers/ApiSports/`)
 | Service | Interface | api-sports Endpoint | Key Logic |
 |---------|-----------|---------------------|-----------|
-| `ApiSportsTeamService` | `ITeamScraperService` | `/teams?league=1&season=` | Maps api-sports team id → NFL abbreviation; lineage `DataSource=ApiSports` |
+| `ApiSportsTeamService` | `ITeamScraperService` | `/teams?league=1&season=` | Response is a flat team array (no `team` wrapper); maps api-sports team id → NFL abbreviation; lineage `DataSource=ApiSports` |
 | `ApiSportsGameService` | `IGameScraperService` | `/games?league=1&season=` | One call per season; client-side NFL filter (`league.id==1`); `ParseWeek` / `ParseStatus`; scheduled (`NS`) games store null scores; venue upsert by name+city |
-| `ApiSportsPlayerScraperStub` | `IPlayerScraperService` | — | Returns `ScrapeResult.Failed` until **S1c** (`ApiSportsPlayerService`) |
-| `ApiSportsStatsScraperStub` | `IStatsScraperService` | — | Returns `ScrapeResult.Failed` until **S1c** (`ApiSportsStatsService`) |
-| `ApiSportsDtos` / `ApiSportsMappings` | — | — | Envelope + game/player DTOs; 26 team ids in fixtures (6 pending `teams.json`); postseason week labels Wild Card=1 … Super Bowl=4 |
+| `ApiSportsPlayerService` | `IPlayerScraperService` | `/players?team={apiId}&season=` | One call per team (abbreviation → api-sports id via `AbbreviationToTeamId`); `Player` upsert by `(DataSource, DataSourceRecordId)`; `number: 0` → null jersey; height/weight parsed; `PlayerTeamSeason` row per player |
+| `ApiSportsStatsService` | `IStatsScraperService` | `/games/statistics/players?id=` + `/games/statistics/teams?id=` | For each `Games` row with `DataSource=ApiSports` in the week (scheduled/postponed/cancelled skipped): one `PlayerGameStats` per player accumulated across the 10 groups, players discovered from the box score by api-sports id (existing rows reused, not overwritten), `TeamGameStats` per team; `DataSourceRecordId = "{gameId}:{playerId}"` / `"{gameId}:{teamId}"` |
+| `ApiSportsStatMappings` | — | — | Pure, case-insensitive stat-name → column mapping with aliases; unknown names ignored; accepts the vendor's `posession` spelling |
+| `ApiSportsDtos` / `ApiSportsMappings` | — | — | Envelope + team/game/player/box-score DTOs; all 32 team ids (`teams.json`); postseason week labels Wild Card=1 … Super Bowl=4 |
 
-Fixtures: `tests/WebScraper.Core.Tests/Fixtures/ApiSports/` (`games-by-date.json`, `players-by-team.json`). Still needed for S1c/S1d: `teams.json`, `game-player-stats.json`, `game-team-stats.json`, `injuries-team.json` — see fixture README and `API_SPORTS_MIGRATION_PLAN.md` §6.
+Fixtures: `tests/WebScraper.Core.Tests/Fixtures/ApiSports/` — captured: `games-by-date.json`, `players-by-team.json`, `teams.json`; **hand-authored from the vendor docs, pending real captures:** `game-player-stats.json`, `game-team-stats.json`. Still needed for S1d: `injuries-team.json` — see fixture README and `API_SPORTS_MIGRATION_PLAN.md` §6.
 
 ## Database Schema
 Twelve tables with the following relationships:
 - **Teams** — 32 NFL teams (id, name, abbreviation, city, conference, division)
-- **Players** — FK to Teams via `TeamId` (nullable for free agents); `EspnId` for ESPN athlete matching; index on `(DataSource, DataSourceRecordId)` for api-sports identity
+- **Players** — FK to Teams via `TeamId` (nullable for free agents); `EspnId` for ESPN athlete matching; index on `(DataSource, DataSourceRecordId)` for api-sports identity (api-sports rows have `EspnId = null` and `DataSourceRecordId` = api-sports player id)
 - **Games** — Two FKs to TeamSeason (`HomeTeamSeasonId`, `AwayTeamSeasonId`); optional FK to `Venues`; includes quarter scores, `EspnEventId`, `GameStatus`, `HomeWinner`, `Attendance`, `NeutralSite`; index on `(DataSource, DataSourceRecordId)` for cross-provider upsert
 - **PlayerGameStats** — Composite FKs to `Players` and `Games`; ~40 stat columns across 10 categories: passing (C/A, yards, TD, INT, QBR, sacks), rushing (attempts, yards, TD, long), receiving (rec, yards, TD, targets, long, YPR), fumbles, defensive (tackles, sacks, TFL, PD, QBH), interceptions (caught, yards, TD), kick returns, punt returns, kicking (FG, XP, points), punting (punts, yards, avg, TB, inside20)
 - **Venues** — Stadium info (EspnId UK, name, city, state, country, IsGrass, IsIndoor)
@@ -1198,10 +1203,13 @@ Main Menu
 | **NFL.com Provider** | | |
 | `Scrapers/NflCom/NflComTeamServiceTests.cs` | 8 | JSON parsing, field mapping, single team, case-insensitive, not found, empty fullName, null response, unexpected JSON structure; ScrapeResult assertions |
 | **api-sports.io Provider** | | |
-| `Scrapers/ApiSports/ApiSportsDtoTests.cs` | 8 | Games/players fixture deserialization, NFL count, OT scores, NS null scores, envelope HasErrors |
-| `Scrapers/ApiSports/ApiSportsMappingsTests.cs` | — | 26 team id map, ParseWeek/ParseStatus/height/weight, IsNfl filter |
-| `Scrapers/ApiSports/ApiSportsTeamServiceTests.cs` | — | Team scrape + api-sports envelope error → Failed (S1b) |
+| `Scrapers/ApiSports/ApiSportsDtoTests.cs` | 12 | Games/players/teams/box-score fixture deserialization, NFL count, OT scores, NS null scores, stat value normalization, envelope HasErrors |
+| `Scrapers/ApiSports/ApiSportsMappingsTests.cs` | — | 32 team id map both directions (checked against `teams.json`), ParseWeek/ParseStatus/height/weight, IsNfl filter |
+| `Scrapers/ApiSports/ApiSportsStatMappingsTests.cs` | 12 | Every box-score group → `PlayerGameStats` columns, multi-group accumulation, unknown names ignored, team statistics incl. `posession` (S1c) |
+| `Scrapers/ApiSports/ApiSportsTeamServiceTests.cs` | 3 | Flat `/teams` shape, 32 teams from `teams.json`, api-sports envelope error → Failed (S1b) |
 | `Scrapers/ApiSports/ApiSportsGameServiceTests.cs` | — | NFL-only filter, null scores for scheduled, envelope errors (S1b) |
+| `Scrapers/ApiSports/ApiSportsPlayerServiceTests.cs` | 9 | Roster upsert by external id, `PlayerTeamSeason`, parsed height/weight/jersey, unmapped team, envelope error, all-teams sum (S1c) |
+| `Scrapers/ApiSports/ApiSportsStatsServiceTests.cs` | 13 | One line per player, players then teams call order, group accumulation, box-score player discovery, existing player reuse, team stats, no/ESPN-only/scheduled games, envelope errors (S1c) |
 | `Repositories/InjuryReportRepositoryTests.cs` | — | Upsert + latest snapshot per external id (S2) |
 | **UI Services** | | |
 | `Services/ConsoleDisplayServiceTests.cs` | 21 | Banner output, ScrapeResult display (success/failure), table formatting (teams/players/games/stats), database status, error/success/warning output, interactive menus (main/scrape/view/source), provider validation and display names |
@@ -1520,12 +1528,12 @@ full-season games scrape loads every week of the schedule.
 Merged on integration branch `claude/happy-albattani-46aq85`:
 - [x] **S1a** — `ApiSportsDtos`, `ApiSportsMappings`, fixture-backed unit tests
 - [x] **S2** — `ApiSportsProvider` migration (`InjuryReports`, identity indexes, `GameRepository`/`PlayerRepository` external-id upsert, push `InjuryReports` stage, `PlayerMissingExternalId` quality rule). `NflSeasonType` stored values remain Preseason=1, Regular=2, Postseason=3 (ESPN `seasontype` and api-sports week parsing use the same integers).
-- [x] **S1b** — `ApiSportsTeamService`, `ApiSportsGameService`, `ApiSportsServiceBase`, factory wiring; `ApiSportsPlayerScraperStub` / `ApiSportsStatsScraperStub` until S1c
+- [x] **S1b** — `ApiSportsTeamService`, `ApiSportsGameService`, `ApiSportsServiceBase`, factory wiring
 - [x] **S5** — `Dockerfile`, `deploy/docker-compose.yml`, Caddy, `deploy/README.md` (ops on a Droplet is separate from merging artifacts)
+- [x] **S1c** — `ApiSportsPlayerService`, `ApiSportsStatsService`, `ApiSportsStatMappings`; 32-team map from `teams.json`; `/teams` DTO fixed to the flat capture shape. The two box-score fixtures are hand-authored from the vendor docs — replace with real captures of `/games/statistics/players?id=21572` and `/games/statistics/teams?id=21572` and re-run the tests before relying on the numbers
 
 Not merged yet (do not treat as done):
-- [ ] **S1c** — `ApiSportsPlayerService`, `ApiSportsStatsService` (needs `game-player-stats.json`, `game-team-stats.json`)
-- [ ] **S1d** — `ApiSportsInjuryService`, `ScrapeJobType.Injuries`, scrape API/UI (needs `injuries-team.json`; full 32-team map needs `teams.json`)
+- [ ] **S1d** — `ApiSportsInjuryService`, `ScrapeJobType.Injuries`, scrape API/UI (needs `injuries-team.json`)
 - [ ] **S3** — `InjuryRefreshScheduler`, `ScheduleRefresh:StatsAfterWeekEnds`, configurable `ScrapeEventRelay` poll (after S1d)
 - [ ] **S4** — `GET /api/v1/injuries/current`, status heartbeat fields, MCP `nfl_get_current_injuries` (after S1d)
 

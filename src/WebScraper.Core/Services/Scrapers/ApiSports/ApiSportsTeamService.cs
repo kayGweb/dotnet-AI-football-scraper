@@ -25,7 +25,7 @@ public class ApiSportsTeamService : ApiSportsServiceBase, ITeamScraperService
         var season = NflSeasonSchedule.GetCurrentSeason(DateTime.UtcNow);
         _logger.LogInformation("Starting teams scrape for season {Season} from api-sports", season);
 
-        var (teams, error) = await FetchEnvelopeAsync<ApiSportsTeamListItem>($"teams?league=1&season={season}");
+        var (teams, error) = await FetchEnvelopeAsync<ApiSportsTeamProfile>($"teams?league=1&season={season}");
         if (teams == null)
             return ScrapeResult.Failed($"api-sports error: {error}");
 
@@ -53,7 +53,7 @@ public class ApiSportsTeamService : ApiSportsServiceBase, ITeamScraperService
             "Starting single team scrape for {Abbreviation} (season {Season}) from api-sports",
             abbreviation, season);
 
-        var (teams, error) = await FetchEnvelopeAsync<ApiSportsTeamListItem>($"teams?league=1&season={season}");
+        var (teams, error) = await FetchEnvelopeAsync<ApiSportsTeamProfile>($"teams?league=1&season={season}");
         if (teams == null)
             return ScrapeResult.Failed($"api-sports error: {error}");
 
@@ -74,14 +74,14 @@ public class ApiSportsTeamService : ApiSportsServiceBase, ITeamScraperService
         return ScrapeResult.Failed($"Team with abbreviation '{abbreviation}' not found in api-sports response");
     }
 
-    private Team? MapToTeam(ApiSportsTeamListItem item, DateTime fetchedAt)
+    private Team? MapToTeam(ApiSportsTeamProfile item, DateTime fetchedAt)
     {
-        var abbreviation = ApiSportsMappings.TeamIdToAbbreviation(item.Team.Id);
+        var abbreviation = ApiSportsMappings.TeamIdToAbbreviation(item.Id);
         if (abbreviation == null)
         {
             _logger.LogWarning(
                 "Skipping api-sports team id {TeamId} ({Name}): no NFL abbreviation mapping",
-                item.Team.Id, item.Team.Name);
+                item.Id, item.Name);
             return null;
         }
 
@@ -89,13 +89,13 @@ public class ApiSportsTeamService : ApiSportsServiceBase, ITeamScraperService
 
         return new Team
         {
-            Name = item.Team.Name,
+            Name = item.Name,
             Abbreviation = abbreviation,
-            City = item.Team.City ?? string.Empty,
+            City = item.City ?? string.Empty,
             Conference = conference,
             Division = division,
             DataSource = "ApiSports",
-            DataSourceRecordId = item.Team.Id.ToString(),
+            DataSourceRecordId = item.Id.ToString(),
             DataSourceFetchedAt = fetchedAt
         };
     }

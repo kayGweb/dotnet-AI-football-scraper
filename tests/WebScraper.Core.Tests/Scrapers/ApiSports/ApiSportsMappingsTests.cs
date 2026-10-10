@@ -18,6 +18,9 @@ public class ApiSportsMappingsTests
     [InlineData(4, "NYG")]
     [InlineData(5, "BAL")]
     [InlineData(6, "TEN")]
+    [InlineData(7, "DET")]
+    [InlineData(8, "ATL")]
+    [InlineData(9, "CLE")]
     [InlineData(10, "CIN")]
     [InlineData(11, "ARI")]
     [InlineData(12, "PHI")]
@@ -27,12 +30,15 @@ public class ApiSportsMappingsTests
     [InlineData(16, "CHI")]
     [InlineData(17, "KC")]
     [InlineData(18, "WAS")]
+    [InlineData(19, "CAR")]
     [InlineData(20, "BUF")]
     [InlineData(21, "IND")]
+    [InlineData(22, "PIT")]
     [InlineData(23, "SEA")]
     [InlineData(24, "TB")]
     [InlineData(25, "MIA")]
     [InlineData(26, "HOU")]
+    [InlineData(27, "NO")]
     [InlineData(28, "DEN")]
     [InlineData(29, "DAL")]
     [InlineData(30, "LAC")]
@@ -44,16 +50,55 @@ public class ApiSportsMappingsTests
     }
 
     [Theory]
-    [InlineData(7)]
-    [InlineData(8)]
-    [InlineData(9)]
-    [InlineData(19)]
-    [InlineData(22)]
-    [InlineData(27)]
+    [InlineData(0)]
+    [InlineData(33)]
     [InlineData(999)]
     public void TeamIdToAbbreviation_UnknownIdsReturnNull(int teamId)
     {
         Assert.Null(ApiSportsMappings.TeamIdToAbbreviation(teamId));
+    }
+
+    [Fact]
+    public void TeamsFixture_AllThirtyTwoIdsResolveToDistinctAbbreviations()
+    {
+        var json = File.ReadAllText(FixturePath("teams.json"));
+        var envelope = JsonSerializer.Deserialize<ApiSportsEnvelope<ApiSportsTeamProfile>>(json, JsonOptions);
+
+        Assert.NotNull(envelope);
+        Assert.Equal(32, envelope.Response.Count);
+
+        var abbreviations = envelope.Response
+            .Select(t => ApiSportsMappings.TeamIdToAbbreviation(t.Id))
+            .ToList();
+
+        Assert.All(abbreviations, a => Assert.False(string.IsNullOrEmpty(a)));
+        Assert.Equal(32, abbreviations.Distinct().Count());
+
+        // `code` agrees with the map for every team except the Rams (vendor "LA", ours "LAR")
+        foreach (var team in envelope.Response)
+        {
+            var expected = team.Code == "LA" ? "LAR" : team.Code;
+            Assert.Equal(expected, ApiSportsMappings.TeamIdToAbbreviation(team.Id));
+        }
+    }
+
+    [Theory]
+    [InlineData("KC", 17)]
+    [InlineData("kc", 17)]
+    [InlineData("LAR", 31)]
+    [InlineData("NO", 27)]
+    public void AbbreviationToTeamId_RoundTrips(string abbreviation, int expected)
+    {
+        Assert.Equal(expected, ApiSportsMappings.AbbreviationToTeamId(abbreviation));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("XYZ")]
+    public void AbbreviationToTeamId_UnknownReturnsNull(string? abbreviation)
+    {
+        Assert.Null(ApiSportsMappings.AbbreviationToTeamId(abbreviation));
     }
 
     [Fact]

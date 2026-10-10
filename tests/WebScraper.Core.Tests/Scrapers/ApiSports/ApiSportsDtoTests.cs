@@ -84,6 +84,91 @@ public class ApiSportsDtoTests
     }
 
     [Fact]
+    public void DeserializeTeamsFixture_FlatTeamObjects()
+    {
+        var json = File.ReadAllText(FixturePath("teams.json"));
+        var envelope = JsonSerializer.Deserialize<ApiSportsEnvelope<ApiSportsTeamProfile>>(json, JsonOptions);
+
+        Assert.NotNull(envelope);
+        Assert.Equal("teams", envelope.Get);
+        Assert.False(envelope.HasErrors);
+        Assert.Equal(32, envelope.Results);
+        Assert.Equal(32, envelope.Response.Count);
+
+        var raiders = envelope.Response.Single(t => t.Id == 1);
+        Assert.Equal("Las Vegas Raiders", raiders.Name);
+        Assert.Equal("LV", raiders.Code);
+        Assert.Equal("Las Vegas", raiders.City);
+    }
+
+    [Fact]
+    public void DeserializeGamePlayerStatsFixture_GroupsAndStringValues()
+    {
+        var json = File.ReadAllText(FixturePath("game-player-stats.json"));
+        var envelope = JsonSerializer.Deserialize<ApiSportsEnvelope<ApiSportsPlayerStatsTeamBlock>>(json, JsonOptions);
+
+        Assert.NotNull(envelope);
+        Assert.Equal("games/statistics/players", envelope.Get);
+        Assert.Equal("21572", envelope.Parameters.GetProperty("id").GetString());
+        Assert.False(envelope.HasErrors);
+        Assert.Equal(2, envelope.Response.Count);
+
+        var raiders = envelope.Response.Single(b => b.Team.Id == 1);
+        Assert.Equal(10, raiders.Groups.Count);
+
+        var passing = raiders.Groups.Single(g => g.Name == "Passing");
+        var qb = Assert.Single(passing.Players);
+        Assert.Equal(1001, qb.Player.Id);
+        Assert.Equal("Geno Smith", qb.Player.Name);
+        Assert.Equal("24/36", qb.Statistics.Single(s => s.Name == "comp_att").Text);
+        Assert.Equal("3-19", qb.Statistics.Single(s => s.Name == "sacks").Text);
+
+        var interceptions = raiders.Groups.Single(g => g.Name == "Interceptions");
+        Assert.Empty(interceptions.Players);
+    }
+
+    [Fact]
+    public void DeserializeGameTeamStatsFixture_SectionsAsJsonElements()
+    {
+        var json = File.ReadAllText(FixturePath("game-team-stats.json"));
+        var envelope = JsonSerializer.Deserialize<ApiSportsEnvelope<ApiSportsTeamStatsBlock>>(json, JsonOptions);
+
+        Assert.NotNull(envelope);
+        Assert.Equal("games/statistics/teams", envelope.Get);
+        Assert.Equal(2, envelope.Response.Count);
+
+        var chiefs = envelope.Response.Single(b => b.Team.Id == 17);
+        Assert.True(chiefs.Statistics.ContainsKey("first_downs"));
+        Assert.True(chiefs.Statistics.ContainsKey("posession"));
+        Assert.Equal(24, chiefs.Statistics["first_downs"].GetProperty("total").GetInt32());
+        Assert.Equal("7-12", chiefs.Statistics["first_downs"].GetProperty("third_down_efficiency").GetString());
+        Assert.Equal("30:19", chiefs.Statistics["posession"].GetProperty("total").GetString());
+    }
+
+    [Fact]
+    public void StatValue_Text_NormalizesNumbersAndNulls()
+    {
+        var json = """
+        {
+          "player": { "id": 5, "name": "Someone" },
+          "statistics": [
+            { "name": "as_string", "value": "12" },
+            { "name": "as_number", "value": 12 },
+            { "name": "as_decimal", "value": 7.5 },
+            { "name": "as_null", "value": null }
+          ]
+        }
+        """;
+        var line = JsonSerializer.Deserialize<ApiSportsPlayerStatLine>(json, JsonOptions);
+
+        Assert.NotNull(line);
+        Assert.Equal("12", line.Statistics[0].Text);
+        Assert.Equal("12", line.Statistics[1].Text);
+        Assert.Equal("7.5", line.Statistics[2].Text);
+        Assert.Null(line.Statistics[3].Text);
+    }
+
+    [Fact]
     public void HasErrors_TrueForNonEmptyErrorObject()
     {
         var json = """{"get":"x","parameters":{},"errors":{"token":"Invalid"},"results":0,"response":[]}""";

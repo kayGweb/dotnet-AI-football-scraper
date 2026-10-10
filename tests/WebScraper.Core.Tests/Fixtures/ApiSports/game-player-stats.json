@@ -1,0 +1,326 @@
+{
+  "get": "games/statistics/players",
+  "parameters": { "id": "21572" },
+  "errors": [],
+  "results": 2,
+  "response": [
+    {
+      "team": { "id": 1, "name": "Las Vegas Raiders", "logo": "https://media.api-sports.io/american-football/teams/1.png" },
+      "groups": [
+        {
+          "name": "Passing",
+          "players": [
+            {
+              "player": { "id": 1001, "name": "Geno Smith", "image": "https://media.api-sports.io/american-football/players/1001.png" },
+              "statistics": [
+                { "name": "comp_att", "value": "24/36" },
+                { "name": "yards", "value": "268" },
+                { "name": "average", "value": "7.4" },
+                { "name": "passing_touch_downs", "value": "2" },
+                { "name": "interceptions", "value": "1" },
+                { "name": "sacks", "value": "3-19" },
+                { "name": "rating", "value": "91.4" }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Rushing",
+          "players": [
+            {
+              "player": { "id": 3, "name": "Ameer Abdullah", "image": "https://media.api-sports.io/american-football/players/3.png" },
+              "statistics": [
+                { "name": "total_rushes", "value": "14" },
+                { "name": "yards", "value": "61" },
+                { "name": "average", "value": "4.4" },
+                { "name": "rushing_touch_downs", "value": "1" },
+                { "name": "longest_rush", "value": "18" }
+              ]
+            },
+            {
+              "player": { "id": 1001, "name": "Geno Smith", "image": "https://media.api-sports.io/american-football/players/1001.png" },
+              "statistics": [
+                { "name": "total_rushes", "value": "3" },
+                { "name": "yards", "value": "12" },
+                { "name": "average", "value": "4.0" },
+                { "name": "rushing_touch_downs", "value": "0" },
+                { "name": "longest_rush", "value": "9" }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Receiving",
+          "players": [
+            {
+              "player": { "id": 10, "name": "Davante Adams", "image": "https://media.api-sports.io/american-football/players/10.png" },
+              "statistics": [
+                { "name": "total_receptions", "value": "8" },
+                { "name": "yards", "value": "112" },
+                { "name": "average", "value": "14.0" },
+                { "name": "receiving_touch_downs", "value": "1" },
+                { "name": "longest_reception", "value": "34" },
+                { "name": "targets", "value": "11" }
+              ]
+            },
+            {
+              "player": { "id": 3, "name": "Ameer Abdullah", "image": "https://media.api-sports.io/american-football/players/3.png" },
+              "statistics": [
+                { "name": "total_receptions", "value": "4" },
+                { "name": "yards", "value": "27" },
+                { "name": "average", "value": "6.8" },
+                { "name": "receiving_touch_downs", "value": "0" },
+                { "name": "longest_reception", "value": "11" },
+                { "name": "targets", "value": "5" }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Fumbles",
+          "players": [
+            {
+              "player": { "id": 1001, "name": "Geno Smith", "image": "https://media.api-sports.io/american-football/players/1001.png" },
+              "statistics": [
+                { "name": "fumbles", "value": "1" },
+                { "name": "lost", "value": "1" },
+                { "name": "recovered", "value": "0" }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Defensive",
+          "players": [
+            {
+              "player": { "id": 1002, "name": "Maxx Crosby", "image": "https://media.api-sports.io/american-football/players/1002.png" },
+              "statistics": [
+                { "name": "tackles", "value": "7" },
+                { "name": "unassisted_tackles", "value": "5" },
+                { "name": "sacks", "value": "1.5" },
+                { "name": "tfl", "value": "2" },
+                { "name": "passes_defended", "value": "1" },
+                { "name": "qb_hts", "value": "4" },
+                { "name": "td", "value": "0" }
+              ]
+            },
+            {
+              "player": { "id": 1003, "name": "Robert Spillane", "image": "https://media.api-sports.io/american-football/players/1003.png" },
+              "statistics": [
+                { "name": "tackles", "value": "11" },
+                { "name": "unassisted_tackles", "value": "6" },
+                { "name": "sacks", "value": "0" },
+                { "name": "tfl", "value": "1" },
+                { "name": "passes_defended", "value": "0" },
+                { "name": "qb_hts", "value": "0" },
+                { "name": "td", "value": "0" }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Interceptions",
+          "players": []
+        },
+        {
+          "name": "Kick returns",
+          "players": [
+            {
+              "player": { "id": 1004, "name": "Tre Tucker", "image": "https://media.api-sports.io/american-football/players/1004.png" },
+              "statistics": [
+                { "name": "total", "value": "2" },
+                { "name": "yards", "value": "51" },
+                { "name": "average", "value": "25.5" },
+                { "name": "lg", "value": "29" },
+                { "name": "td", "value": "0" }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Punt returns",
+          "players": [
+            {
+              "player": { "id": 1004, "name": "Tre Tucker", "image": "https://media.api-sports.io/american-football/players/1004.png" },
+              "statistics": [
+                { "name": "total", "value": "3" },
+                { "name": "yards", "value": "22" },
+                { "name": "average", "value": "7.3" },
+                { "name": "lg", "value": "12" },
+                { "name": "td", "value": "0" }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Kicking",
+          "players": [
+            {
+              "player": { "id": 1005, "name": "Daniel Carlson", "image": "https://media.api-sports.io/american-football/players/1005.png" },
+              "statistics": [
+                { "name": "field_goals", "value": "2/3" },
+                { "name": "pct", "value": "66.7" },
+                { "name": "long", "value": "48" },
+                { "name": "extra_points", "value": "3/3" },
+                { "name": "points", "value": "9" }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Punting",
+          "players": [
+            {
+              "player": { "id": 1006, "name": "AJ Cole", "image": "https://media.api-sports.io/american-football/players/1006.png" },
+              "statistics": [
+                { "name": "total", "value": "4" },
+                { "name": "yards", "value": "188" },
+                { "name": "average", "value": "47.0" },
+                { "name": "touchbacks", "value": "1" },
+                { "name": "inside_20", "value": "2" },
+                { "name": "long", "value": "56" }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "team": { "id": 17, "name": "Kansas City Chiefs", "logo": "https://media.api-sports.io/american-football/teams/17.png" },
+      "groups": [
+        {
+          "name": "Passing",
+          "players": [
+            {
+              "player": { "id": 1701, "name": "Patrick Mahomes", "image": "https://media.api-sports.io/american-football/players/1701.png" },
+              "statistics": [
+                { "name": "comp_att", "value": "29/41" },
+                { "name": "yards", "value": "312" },
+                { "name": "average", "value": "7.6" },
+                { "name": "passing_touch_downs", "value": "3" },
+                { "name": "interceptions", "value": "0" },
+                { "name": "sacks", "value": "2-11" },
+                { "name": "rating", "value": "112.8" }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Rushing",
+          "players": [
+            {
+              "player": { "id": 1702, "name": "Isiah Pacheco", "image": "https://media.api-sports.io/american-football/players/1702.png" },
+              "statistics": [
+                { "name": "total_rushes", "value": "17" },
+                { "name": "yards", "value": "74" },
+                { "name": "average", "value": "4.4" },
+                { "name": "rushing_touch_downs", "value": "0" },
+                { "name": "longest_rush", "value": "15" }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Receiving",
+          "players": [
+            {
+              "player": { "id": 1703, "name": "Travis Kelce", "image": "https://media.api-sports.io/american-football/players/1703.png" },
+              "statistics": [
+                { "name": "total_receptions", "value": "9" },
+                { "name": "yards", "value": "98" },
+                { "name": "average", "value": "10.9" },
+                { "name": "receiving_touch_downs", "value": "1" },
+                { "name": "longest_reception", "value": "22" },
+                { "name": "targets", "value": "12" }
+              ]
+            },
+            {
+              "player": { "id": 1704, "name": "Xavier Worthy", "image": "https://media.api-sports.io/american-football/players/1704.png" },
+              "statistics": [
+                { "name": "total_receptions", "value": "6" },
+                { "name": "yards", "value": "104" },
+                { "name": "average", "value": "17.3" },
+                { "name": "receiving_touch_downs", "value": "2" },
+                { "name": "longest_reception", "value": "45" },
+                { "name": "targets", "value": "8" }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Fumbles",
+          "players": []
+        },
+        {
+          "name": "Defensive",
+          "players": [
+            {
+              "player": { "id": 1705, "name": "Chris Jones", "image": "https://media.api-sports.io/american-football/players/1705.png" },
+              "statistics": [
+                { "name": "tackles", "value": "4" },
+                { "name": "unassisted_tackles", "value": "3" },
+                { "name": "sacks", "value": "2" },
+                { "name": "tfl", "value": "3" },
+                { "name": "passes_defended", "value": "0" },
+                { "name": "qb_hts", "value": "5" },
+                { "name": "td", "value": "0" }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Interceptions",
+          "players": [
+            {
+              "player": { "id": 1706, "name": "Trent McDuffie", "image": "https://media.api-sports.io/american-football/players/1706.png" },
+              "statistics": [
+                { "name": "total_interceptions", "value": "1" },
+                { "name": "yards", "value": "23" },
+                { "name": "intercepted_touch_downs", "value": "0" }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Kick returns",
+          "players": []
+        },
+        {
+          "name": "Punt returns",
+          "players": []
+        },
+        {
+          "name": "Kicking",
+          "players": [
+            {
+              "player": { "id": 1707, "name": "Harrison Butker", "image": "https://media.api-sports.io/american-football/players/1707.png" },
+              "statistics": [
+                { "name": "field_goals", "value": "3/3" },
+                { "name": "pct", "value": "100.0" },
+                { "name": "long", "value": "52" },
+                { "name": "extra_points", "value": "3/3" },
+                { "name": "points", "value": "12" }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Punting",
+          "players": [
+            {
+              "player": { "id": 1708, "name": "Matt Araiza", "image": "https://media.api-sports.io/american-football/players/1708.png" },
+              "statistics": [
+                { "name": "total", "value": "3" },
+                { "name": "yards", "value": "141" },
+                { "name": "average", "value": "47.0" },
+                { "name": "touchbacks", "value": "0" },
+                { "name": "inside_20", "value": "2" },
+                { "name": "long", "value": "51" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
