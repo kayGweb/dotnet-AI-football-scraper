@@ -18,6 +18,7 @@ public class AppDbContext : DbContext
     public DbSet<Venue> Venues => Set<Venue>();
     public DbSet<TeamGameStats> TeamGameStats => Set<TeamGameStats>();
     public DbSet<Injury> Injuries => Set<Injury>();
+    public DbSet<InjuryReport> InjuryReports => Set<InjuryReport>();
     public DbSet<ApiLink> ApiLinks => Set<ApiLink>();
     public DbSet<GameDrive> GameDrives => Set<GameDrive>();
     public DbSet<ScoringPlay> ScoringPlays => Set<ScoringPlay>();
@@ -81,6 +82,9 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Game>()
             .HasIndex(g => new { g.Season, g.SeasonType, g.Week, g.HomeTeamSeasonId, g.AwayTeamSeasonId })
             .IsUnique();
+
+        modelBuilder.Entity<Game>()
+            .HasIndex(g => new { g.DataSource, g.DataSourceRecordId });
 
         // Game -> Venue (optional)
         modelBuilder.Entity<Game>()
@@ -197,6 +201,28 @@ public class AppDbContext : DbContext
             .HasIndex(p => p.EspnId)
             .IsUnique()
             .HasFilter("\"EspnId\" IS NOT NULL");
+
+        modelBuilder.Entity<Player>()
+            .HasIndex(p => new { p.DataSource, p.DataSourceRecordId });
+
+        // InjuryReport — api-sports style snapshots
+        modelBuilder.Entity<InjuryReport>()
+            .HasOne(r => r.TeamSeason)
+            .WithMany()
+            .HasForeignKey(r => r.TeamSeasonId);
+
+        modelBuilder.Entity<InjuryReport>()
+            .HasOne(r => r.Player)
+            .WithMany()
+            .HasForeignKey(r => r.PlayerId)
+            .IsRequired(false);
+
+        modelBuilder.Entity<InjuryReport>()
+            .HasIndex(r => new { r.ExternalPlayerId, r.SnapshotAt })
+            .IsUnique();
+
+        modelBuilder.Entity<InjuryReport>()
+            .HasIndex(r => r.TeamSeasonId);
 
         // ScrapeJob parent/child for backfill fan-out
         modelBuilder.Entity<ScrapeJob>()
@@ -320,6 +346,7 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<Venue>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<TeamGameStats>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<Injury>().HasQueryFilter(e => !e.IsDeleted);
+        modelBuilder.Entity<InjuryReport>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<ApiLink>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<GameDrive>().HasQueryFilter(e => !e.IsDeleted);
         modelBuilder.Entity<ScoringPlay>().HasQueryFilter(e => !e.IsDeleted);

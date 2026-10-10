@@ -6,6 +6,8 @@ Originally a .NET 8 Console application that scrapes NFL football data from mult
 - `API_INTEGRATION_PLAN.md` — multi-provider extension plan (on review branch)
 - `CHATBOT_MICROSERVICE_PLAN.md` — microservice transformation plan (milestones M0–M6)
 - `AGENT_PLATFORM_PLAN.md` — **current** agent-managed database plan (identity, coverage, backfill, MCP operate tools)
+- `API_SPORTS_MIGRATION_PLAN.md` — api-sports.io feed migration (scraper provider S1–S6, Droplet deploy, chatbot bridge)
+- `API_SPORTS_TASK_DISPATCH.md` — Grok/Cursor task cards and dependency graph for that migration
 
 ## Tech Stack
 - **Framework:** .NET 8 (class library, console app, Web API, Blazor Server admin dashboard, MCP server)
@@ -36,12 +38,13 @@ src/
 │   │   ├── Venue.cs                        # Stadium/venue entity — implements IAuditableEntity + ISoftDeletable
 │   │   ├── TeamGameStats.cs                # Team-level per-game aggregates — implements IAuditableEntity + ISoftDeletable
 │   │   ├── Injury.cs                       # Player injury reports per game — implements IAuditableEntity + ISoftDeletable
+│   │   ├── InjuryReport.cs                 # api-sports injury snapshots per team (S2) — implements IAuditableEntity + ISoftDeletable
 │   │   ├── ApiLink.cs                      # Catalog of ESPN API endpoints — implements IAuditableEntity + ISoftDeletable
 │   │   ├── ScrapeJob.cs                   # M3b: Persisted scrape job (Id, Type, Source, Season, Week, Status, Progress, Error, timestamps, RequestedBy) + ScrapeJobType/ScrapeJobStatus enums
 │   │   ├── ScrapeEvent.cs                 # M3c: Outbox event row (Id, JobId, EventType, Timestamp, JSON Payload) + ScrapeEventType enum
 │   │   ├── ScrapeResult.cs                # Scraper operation result (Success, RecordsProcessed, Errors)
 │   │   ├── ScraperSettings.cs             # Config POCO: scraper options + DataProvider + Providers dict
-│   │   ├── DataProvider.cs                # Enum: ProFootballReference, Espn, SportsDataIo, MySportsFeeds, NflCom
+│   │   ├── DataProvider.cs                # Enum: ProFootballReference, Espn, SportsDataIo, MySportsFeeds, NflCom, ApiSports
 │   │   ├── NflSeasonType.cs               # ESPN seasontype enum: Preseason=1, Regular=2, Postseason=3
 │   │   └── ApiProviderSettings.cs         # Config POCO: BaseUrl, ApiKey, AuthType, headers per provider
 │   ├── Data/
@@ -56,6 +59,7 @@ src/
 │   │       ├── IVenueRepository.cs        # Venue-specific repository interface
 │   │       ├── ITeamGameStatsRepository.cs # Team game stats repository interface
 │   │       ├── IInjuryRepository.cs       # Injury repository interface
+│   │       ├── IInjuryReportRepository.cs # InjuryReport snapshot repository (S2)
 │   │       ├── IApiLinkRepository.cs      # API link repository interface
 │   │       ├── TeamRepository.cs          # Team repository implementation
 │   │       ├── PlayerRepository.cs        # Player repository implementation
@@ -64,6 +68,7 @@ src/
 │   │       ├── VenueRepository.cs         # Venue repository implementation (upsert by EspnId)
 │   │       ├── TeamGameStatsRepository.cs # Team game stats implementation (upsert by GameId+TeamId)
 │   │       ├── InjuryRepository.cs        # Injury repository implementation (upsert by GameId+EspnAthleteId)
+│   │       ├── InjuryReportRepository.cs  # InjuryReport upsert (ExternalPlayerId+SnapshotAt) + GetCurrentAsync
 │   │       └── ApiLinkRepository.cs       # API link repository implementation (upsert by Url)
 │   ├── Services/
 │   │   ├── RateLimiterService.cs          # Global rate limiter (SemaphoreSlim-based)
@@ -100,6 +105,15 @@ src/
 │   │       │   ├── MySportsFeedsPlayerService.cs # MySportsFeeds: Players via /players.json
 │   │       │   ├── MySportsFeedsGameService.cs   # MySportsFeeds: Games via /{season}/games.json
 │   │       │   └── MySportsFeedsStatsService.cs  # MySportsFeeds: Stats via /{season}/week/{week}/player_gamelogs.json
+│   │       ├── ApiSports/
+│   │       │   ├── ApiSportsDtos.cs              # api-sports.io envelope + game/player DTOs (Day 0 fixtures)
+│   │       │   ├── ApiSportsMappings.cs          # Team id ↔ NFL abbr (all 32); week/status/height/weight
+│   │       │   ├── ApiSportsStatMappings.cs      # Pure box-score → PlayerGameStats / TeamGameStats mapping (S1c)
+│   │       │   ├── ApiSportsServiceBase.cs       # FetchEnvelopeAsync + HasErrors handling (S1b)
+│   │       │   ├── ApiSportsTeamService.cs       # GET /teams?league=1&season= (S1b)
+│   │       │   ├── ApiSportsGameService.cs       # GET /games?league=1&season=, NFL filter, venue upsert (S1b)
+│   │       │   ├── ApiSportsPlayerService.cs     # GET /players?team=&season= × 32 → Player + PlayerTeamSeason (S1c)
+│   │       │   └── ApiSportsStatsService.cs      # /games/statistics/players + /teams per game → PlayerGameStats, TeamGameStats (S1c)
 │   │       └── NflCom/
 │   │           ├── NflComDtos.cs                 # DTO classes for NFL.com JSON responses
 │   │           ├── NflComTeamService.cs          # NFL.com: Teams via /teams
@@ -111,10 +125,14 @@ src/
 │   │   ├── 20260304000000_InitialPostgres.Designer.cs
 │   │   ├── 20260309231025_ExpandedSchema.cs          # Expanded schema migration (4 new tables, ~40 new columns)
 │   │   ├── 20260309231025_ExpandedSchema.Designer.cs
+│   │   ├── 20260531173027_AuditableAndSoftDelete.cs    # M0 lineage + soft-delete + ApiQueryLogs
+│   │   ├── 20260729021311_Block1IdentitySchema.cs      # Franchise, TeamSeason, game FKs
+│   │   ├── 20260729022001_Block2CoverageQuality.cs
+│   │   ├── 20260729023017_Block3AgentSurface.cs
+│   │   ├── 20260729023725_Block4Tier1Data.cs
+│   │   ├── 20260729024738_Block6IncrementalPush.cs
+│   │   ├── 20261005023140_ApiSportsProvider.cs         # S2: InjuryReports + identity indexes
 │   │   └── AppDbContextModelSnapshot.cs              # Current model snapshot
-│   │   # NOTE: M0 adds lineage + soft-delete columns + ApiQueryLogs table. Run
-│   │   # `dotnet ef migrations add AuditableAndSoftDelete --project src/WebScraper.Core --startup-project src/WebScraper.Cli`
-│   │   # to generate the M0 migration before running the app — see CHATBOT_MICROSERVICE_PLAN.md M0.
 │   └── Extensions/
 │       └── ServiceCollectionExtensions.cs # DI wiring: DB (with interceptor), repos, delegates to DataProviderFactory
 ├── WebScraper.Cli/                     # Console app (the existing CLI)
@@ -234,8 +252,9 @@ tests/WebScraper.Core.Tests/            # xUnit test project (renamed from tests
 │   └── TestDbContextFactory.cs         # In-memory SQLite factory for repository tests
 ├── Repositories/
 │   ├── TeamRepositoryTests.cs          # 10 tests: CRUD, upsert, queries
-│   ├── PlayerRepositoryTests.cs        # 6 tests: CRUD, FK relationships
-│   ├── GameRepositoryTests.cs          # 5 tests: CRUD, season/week queries
+│   ├── PlayerRepositoryTests.cs        # 6 tests: CRUD, FK relationships (+ external id upsert, S2)
+│   ├── GameRepositoryTests.cs          # 5 tests: CRUD, season/week queries (+ DataSource match, S2)
+│   ├── InjuryReportRepositoryTests.cs  # InjuryReport upsert + GetCurrentAsync (S2)
 │   └── StatsRepositoryTests.cs         # 4 tests: Upsert, player/game stats queries
 ├── Scrapers/
 │   ├── TeamScraperParsingTests.cs      # 8 tests: PFR HTML parsing
@@ -250,6 +269,14 @@ tests/WebScraper.Core.Tests/            # xUnit test project (renamed from tests
 │   ├── MySportsFeeds/
 │   │   ├── MySportsFeedsTeamServiceTests.cs    # MySportsFeeds nested JSON parsing tests
 │   │   └── MySportsFeedsPlayerServiceTests.cs  # MySportsFeeds player/stats DTO tests
+│   ├── ApiSports/
+│   │   ├── ApiSportsDtoTests.cs            # Fixture deserialization (games, players, teams, box scores) + envelope HasErrors
+│   │   ├── ApiSportsMappingsTests.cs       # 32 team ids (both directions), week/status/height/weight parsing
+│   │   ├── ApiSportsStatMappingsTests.cs   # Box-score group → stat columns, team statistics sections (S1c)
+│   │   ├── ApiSportsTeamServiceTests.cs    # Mock HTTP team scrape (flat /teams shape, teams.json) + envelope errors (S1b)
+│   │   ├── ApiSportsGameServiceTests.cs    # Mock HTTP games: NFL filter, NS scores, api-sports errors (S1b)
+│   │   ├── ApiSportsPlayerServiceTests.cs  # Roster scrape by external id, PlayerTeamSeason, mapping failures (S1c)
+│   │   └── ApiSportsStatsServiceTests.cs   # Players + teams box-score calls, player discovery, skips, errors (S1c)
 │   └── NflCom/
 │       └── NflComTeamServiceTests.cs   # NFL.com team scraping + graceful error handling
 ├── Services/
@@ -291,6 +318,7 @@ AppDbContext → SQLite / PostgreSQL / SQL Server
 | SportsData.io | `SportsDataIo` | API key header | Implemented |
 | MySportsFeeds | `MySportsFeeds` | HTTP Basic auth | Implemented |
 | NFL.com | `NflCom` | None (undocumented) | Implemented |
+| API-Sports | `ApiSports` | `x-apisports-key` header | Implemented (teams, games, players, stats; injuries in S1d) |
 
 ### BaseApiService (`Services/Scrapers/BaseApiService.cs`)
 Abstract base class for all JSON API providers, parallel to `BaseScraperService`:
@@ -317,15 +345,28 @@ Static helper that maps the `DataProvider` config string to the correct set of D
 | `EspnDtos` | — | — | DTO classes for teams, scoreboard, summary, gameInfo, injuries, team statistics, linescores, header links |
 | `EspnMappings` | — | — | Bidirectional ESPN ID ↔ NFL abbreviation map for all 32 teams + division lookup |
 
+### api-sports.io Provider (`Services/Scrapers/ApiSports/`)
+| Service | Interface | api-sports Endpoint | Key Logic |
+|---------|-----------|---------------------|-----------|
+| `ApiSportsTeamService` | `ITeamScraperService` | `/teams?league=1&season=` | Response is a flat team array (no `team` wrapper); maps api-sports team id → NFL abbreviation; lineage `DataSource=ApiSports` |
+| `ApiSportsGameService` | `IGameScraperService` | `/games?league=1&season=` | One call per season; client-side NFL filter (`league.id==1`); `ParseWeek` / `ParseStatus`; scheduled (`NS`) games store null scores; venue upsert by name+city |
+| `ApiSportsPlayerService` | `IPlayerScraperService` | `/players?team={apiId}&season=` | One call per team (abbreviation → api-sports id via `AbbreviationToTeamId`); `Player` upsert by `(DataSource, DataSourceRecordId)`; `number: 0` → null jersey; height/weight parsed; `PlayerTeamSeason` row per player |
+| `ApiSportsStatsService` | `IStatsScraperService` | `/games/statistics/players?id=` + `/games/statistics/teams?id=` | For each `Games` row with `DataSource=ApiSports` in the week (scheduled/postponed/cancelled skipped): one `PlayerGameStats` per player accumulated across the 10 groups, players discovered from the box score by api-sports id (existing rows reused, not overwritten), `TeamGameStats` per team; `DataSourceRecordId = "{gameId}:{playerId}"` / `"{gameId}:{teamId}"` |
+| `ApiSportsStatMappings` | — | — | Pure, case-insensitive stat-name → column mapping with aliases; unknown names ignored; accepts the vendor's `posession` spelling |
+| `ApiSportsDtos` / `ApiSportsMappings` | — | — | Envelope + team/game/player/box-score DTOs; all 32 team ids (`teams.json`); postseason week labels Wild Card=1 … Super Bowl=4 |
+
+Fixtures: `tests/WebScraper.Core.Tests/Fixtures/ApiSports/` — captured: `games-by-date.json`, `players-by-team.json`, `teams.json`; **hand-authored from the vendor docs, pending real captures:** `game-player-stats.json`, `game-team-stats.json`. Still needed for S1d: `injuries-team.json` — see fixture README and `API_SPORTS_MIGRATION_PLAN.md` §6.
+
 ## Database Schema
 Twelve tables with the following relationships:
 - **Teams** — 32 NFL teams (id, name, abbreviation, city, conference, division)
-- **Players** — FK to Teams via `TeamId` (nullable for free agents); `EspnId` for ESPN athlete matching
-- **Games** — Two FKs to Teams: `HomeTeamId`, `AwayTeamId` (both use `DeleteBehavior.Restrict`); optional FK to `Venues`; includes quarter scores (HomeQ1-Q4, HomeOT, AwayQ1-Q4, AwayOT), `EspnEventId`, `GameStatus`, `HomeWinner`, `Attendance`, `NeutralSite`
+- **Players** — FK to Teams via `TeamId` (nullable for free agents); `EspnId` for ESPN athlete matching; index on `(DataSource, DataSourceRecordId)` for api-sports identity (api-sports rows have `EspnId = null` and `DataSourceRecordId` = api-sports player id)
+- **Games** — Two FKs to TeamSeason (`HomeTeamSeasonId`, `AwayTeamSeasonId`); optional FK to `Venues`; includes quarter scores, `EspnEventId`, `GameStatus`, `HomeWinner`, `Attendance`, `NeutralSite`; index on `(DataSource, DataSourceRecordId)` for cross-provider upsert
 - **PlayerGameStats** — Composite FKs to `Players` and `Games`; ~40 stat columns across 10 categories: passing (C/A, yards, TD, INT, QBR, sacks), rushing (attempts, yards, TD, long), receiving (rec, yards, TD, targets, long, YPR), fumbles, defensive (tackles, sacks, TFL, PD, QBH), interceptions (caught, yards, TD), kick returns, punt returns, kicking (FG, XP, points), punting (punts, yards, avg, TB, inside20)
 - **Venues** — Stadium info (EspnId UK, name, city, state, country, IsGrass, IsIndoor)
 - **TeamGameStats** — Team-level per-game aggregates (FKs to Games+Teams, UK on GameId+TeamId); first downs, yards, efficiency, red zone, turnovers, penalties, possession time
 - **Injuries** — Player injury reports per game (FKs to Games+Players, UK on GameId+EspnAthleteId); status, injury type, body location, return date
+- **InjuryReports** — Provider injury snapshots (FK `TeamSeasonId`, optional `PlayerId`, UK on `ExternalPlayerId`+`SnapshotAt`, index on `TeamSeasonId`); `PlayerName`, `Position`, `Status`, `Description`, `ReportedAt`, `SnapshotAt`
 - **ApiLinks** — Discovered ESPN API endpoints (UK on Url); endpoint type, relation, season/week, ESPN event ID, timestamps
 - **ApiQueryLogs** (M0) — Observability log of every public API consumer request: `Id` (long PK), `Timestamp`, `ApiKeyId`, `ApiKeyName`, `Method`, `Path`, `QueryString`, `StatusCode`, `DurationMs`, `ResponseBytes`, `UserAgent`, `CorrelationId`. Indexes on `Timestamp` and on `(ApiKeyId, Timestamp)` for dashboard queries. Populated asynchronously by `ApiQueryLoggingMiddleware` via a background `Channel<T>` writer in the M1 Web API — the hot path never blocks on the DB.
 - **ApiKeys** (M3a) — DB-backed API keys: `KeyId` (unique opaque ID), `HashedKey` (SHA-256 hex), `Name`, `Scopes` (comma-separated), `CreatedBy`, `LastUsedAt`, `ExpiresAt` + IAuditableEntity + ISoftDeletable. Auth handler checks this table first, falls back to config.
@@ -352,7 +393,7 @@ Every non-log entity (Teams through ApiLinks) now implements `IAuditableEntity` 
 - `ConnectionStrings.DefaultConnection` — connection string for selected provider (SQLite by default)
 - `ScraperSettings` — global scraper config:
   - `RequestDelayMs` (1500), `MaxRetries` (3), `UserAgent`, `TimeoutSeconds` (30)
-  - `DataProvider` — `"ProFootballReference"` (default) | `"Espn"` | `"SportsDataIo"` | `"MySportsFeeds"` | `"NflCom"`
+  - `DataProvider` — `"ProFootballReference"` | `"Espn"` (CLI default) | `"SportsDataIo"` | `"MySportsFeeds"` | `"NflCom"` | `"ApiSports"` (`src/WebScraper.Api/appsettings.json` defaults to `ApiSports`; CLI stays on `Espn` until you switch)
   - `Providers` — per-provider config dictionary with `BaseUrl`, `ApiKey`, `AuthType`, `AuthHeaderName`, `RequestDelayMs`, `CustomHeaders`
 - `Serilog` — structured logging config
 
@@ -406,7 +447,8 @@ Or use option **5** ("Push to server") in the interactive menu.
 |-----------|---------------|------------|
 | `ITeamRepository` | `GetByAbbreviationAsync`, `GetByConferenceAsync` | Abbreviation |
 | `IPlayerRepository` | `GetByTeamAsync`, `GetByNameAsync` | Name + TeamId |
-| `IGameRepository` | `GetBySeasonAsync`, `GetByWeekAsync` | Season + Week + HomeTeamId + AwayTeamId |
+| `IGameRepository` | `GetBySeasonAsync`, `GetByWeekAsync` | Upsert match order: `EspnEventId` → `(DataSource, DataSourceRecordId)` → natural key `(Season, SeasonType, Week, HomeTeamSeasonId, AwayTeamSeasonId)` |
+| `IInjuryReportRepository` | `GetCurrentAsync` | `ExternalPlayerId` + `SnapshotAt` |
 | `IStatsRepository` | `GetPlayerStatsAsync`, `GetGameStatsAsync` | PlayerId + GameId |
 | `IVenueRepository` | `GetByEspnIdAsync` | EspnId |
 | `ITeamGameStatsRepository` | `GetByGameAsync`, `GetByGameAndTeamAsync` | GameId + TeamId |
@@ -514,13 +556,7 @@ Each scraper's `HttpClient` (both HTML and API) is configured with a resilience 
 - Migration files live in `src/WebScraper.Core/Migrations/`
 - `InitialPostgres` migration creates the original 4 tables (Teams, Players, Games, PlayerGameStats) with FKs and indexes
 - `ExpandedSchema` migration adds 4 new tables (Venues, TeamGameStats, Injuries, ApiLinks), new columns to Games (VenueId, Attendance, quarter scores, EspnEventId, etc.), new columns to PlayerGameStats (~40 stat fields), and Player.EspnId
-- **Pending (M0):** `AuditableAndSoftDelete` migration — adds data lineage columns (DataSource, DataSourceFetchedAt, DataSourceRecordId, CreatedAt, UpdatedAt) and soft-delete columns (IsDeleted, DeletedAt, DeletedBy, DeleteReason) to all 8 entities, plus the new `ApiQueryLogs` table with its indexes. Generate it with:
-  ```bash
-  dotnet ef migrations add AuditableAndSoftDelete \
-      --project src/WebScraper.Core \
-      --startup-project src/WebScraper.Cli
-  ```
-  This cannot be hand-written safely — run the command once the .NET SDK is available.
+- Later migrations on disk include M0 (`AuditableAndSoftDelete`), agent-platform Blocks 1–6, and api-sports **S2** (`ApiSportsProvider`: `InjuryReports` table plus `(DataSource, DataSourceRecordId)` indexes on `Games` and `Players`). See the tree under `src/WebScraper.Core/Migrations/` for the full list.
 - `Program.cs` calls `db.Database.MigrateAsync()` on startup — auto-applies pending migrations
 - To add a new migration: `dotnet ef migrations add <Name> --project src/WebScraper.Core --startup-project src/WebScraper.Cli`
 - To apply manually: `dotnet ef database update --project src/WebScraper.Core --startup-project src/WebScraper.Cli`
@@ -532,6 +568,16 @@ dotnet build
 dotnet run --project src/WebScraper.Cli              # Run the CLI
 dotnet run --project src/WebScraper.Api              # Run the Web API (http://localhost:5080, Swagger at /swagger)
 dotnet build src/WebScraper.Mcp                       # Build the MCP server (launched on-demand by Claude Desktop / Claude Code)
+```
+
+## Deployment
+
+Droplet deployment (Docker + Caddy, Neon PostgreSQL via env file, no Postgres service in compose) is documented in **`deploy/README.md`**. Quick local image check:
+
+```bash
+docker build -t webscraper-api .
+docker run --rm -e DatabaseProvider=Sqlite -p 8080:8080 webscraper-api
+curl http://localhost:8080/health/live
 ```
 
 ## WebScraper.Api (M1)
@@ -1118,7 +1164,7 @@ Main Menu
 - **Scrape submenu** — all scrape operations (teams, single team, players, games, stats, full pipeline) with inline prompts for season/week/abbreviation
 - **View submenu** — query and display database data using formatted tables (teams, players by team, games by season/week with venue/attendance, player stats grouped by offense/defense/kicking/returns, venues, team game stats, injuries)
 - **Database status** — quick record counts for all tables
-- **Change source** — switch between all 5 data providers at runtime; triggers host rebuild with new DI container
+- **Change source** — switch between all 6 data providers at runtime; triggers host rebuild with new DI container
 - **Push to server** — reads all data from local SQLite and upserts it into remote PostgreSQL (requires `ConnectionStrings:PostgreSQL` in `appsettings.Local.json`)
 - **Input handling** — validates numeric input, handles EOF (Ctrl+D/Ctrl+Z) gracefully
 
@@ -1142,7 +1188,7 @@ Main Menu
 | `Scrapers/GameScraperParsingTests.cs` | 2 | PFR-to-NFL abbreviation mapping (14 mapped + 4 unmapped pass-through) |
 | **API Infrastructure** | | |
 | `Services/BaseApiServiceTests.cs` | 10 | FetchJsonAsync deserialization (valid, malformed, error, null, case-insensitive), auth configuration (Header, Basic, None, missing key, custom headers) |
-| `Services/DataProviderFactoryTests.cs` | 9 | All 5 providers register correctly, invalid provider throws, case-insensitive matching |
+| `Services/DataProviderFactoryTests.cs` | 9+ | All 6 providers register correctly (incl. `ApiSports` with player/stats stubs), invalid provider throws, case-insensitive matching |
 | `Configuration/ProviderConfigTests.cs` | 10 | Config binding from IConfiguration, default values, per-provider settings, API key handling, --source override, multi-provider dictionary |
 | **ESPN Provider** | | |
 | `Scrapers/Espn/EspnMappingsTests.cs` | 8 | All 32 ESPN IDs → NFL abbreviations, reverse mapping, division lookup, unknown IDs, case insensitivity |
@@ -1156,6 +1202,15 @@ Main Menu
 | `Scrapers/MySportsFeeds/MySportsFeedsPlayerServiceTests.cs` | 10 | DTO deserialization, first/last name concatenation, all fields, currentTeam, nullable fields, empty names, gamelogs/stats deserialization |
 | **NFL.com Provider** | | |
 | `Scrapers/NflCom/NflComTeamServiceTests.cs` | 8 | JSON parsing, field mapping, single team, case-insensitive, not found, empty fullName, null response, unexpected JSON structure; ScrapeResult assertions |
+| **api-sports.io Provider** | | |
+| `Scrapers/ApiSports/ApiSportsDtoTests.cs` | 12 | Games/players/teams/box-score fixture deserialization, NFL count, OT scores, NS null scores, stat value normalization, envelope HasErrors |
+| `Scrapers/ApiSports/ApiSportsMappingsTests.cs` | — | 32 team id map both directions (checked against `teams.json`), ParseWeek/ParseStatus/height/weight, IsNfl filter |
+| `Scrapers/ApiSports/ApiSportsStatMappingsTests.cs` | 12 | Every box-score group → `PlayerGameStats` columns, multi-group accumulation, unknown names ignored, team statistics incl. `posession` (S1c) |
+| `Scrapers/ApiSports/ApiSportsTeamServiceTests.cs` | 3 | Flat `/teams` shape, 32 teams from `teams.json`, api-sports envelope error → Failed (S1b) |
+| `Scrapers/ApiSports/ApiSportsGameServiceTests.cs` | — | NFL-only filter, null scores for scheduled, envelope errors (S1b) |
+| `Scrapers/ApiSports/ApiSportsPlayerServiceTests.cs` | 9 | Roster upsert by external id, `PlayerTeamSeason`, parsed height/weight/jersey, unmapped team, envelope error, all-teams sum (S1c) |
+| `Scrapers/ApiSports/ApiSportsStatsServiceTests.cs` | 13 | One line per player, players then teams call order, group accumulation, box-score player discovery, existing player reuse, team stats, no/ESPN-only/scheduled games, envelope errors (S1c) |
+| `Repositories/InjuryReportRepositoryTests.cs` | — | Upsert + latest snapshot per external id (S2) |
 | **UI Services** | | |
 | `Services/ConsoleDisplayServiceTests.cs` | 21 | Banner output, ScrapeResult display (success/failure), table formatting (teams/players/games/stats), database status, error/success/warning output, interactive menus (main/scrape/view/source), provider validation and display names |
 | **Models** | | |
@@ -1337,7 +1392,7 @@ Phase B from `AGENT_PLATFORM_PLAN.md` §4 and §7 Phase B. Migration: `Block2Cov
 
 **Quality rules engine**
 - `DataQualityFinding` — assertions with severity, status, repair payload
-- `QualityRulesEngine` — 7 rules: missing player/team stats, quarter-score mismatch, missing EspnId, implausible pass yards, venue location, week game-count mismatch
+- `QualityRulesEngine` — 7 rules: missing player/team stats, quarter-score mismatch, missing external id (`EspnId` or `DataSourceRecordId`), implausible pass yards, venue location, week game-count mismatch
 - Runs automatically after Games/Stats/All scrape jobs complete
 
 **Repair loop**
@@ -1459,8 +1514,9 @@ full-season games scrape loads every week of the schedule.
 - `EspnGameService` stores scheduled games (`status.type.state == "pre"`) with **null** scores and
   `HomeWinner` (ESPN reports `"0"`, which previously looked like a 0-0 final and tripped the
   missing-stats quality rule). Kickoff times are parsed as UTC.
-- `GameRepository.UpsertAsync` matches on `EspnEventId` first so a postponed/rescheduled game moves
-  weeks in place instead of leaving a duplicate.
+- `GameRepository.UpsertAsync` matches on `EspnEventId`, then `(DataSource, DataSourceRecordId)` for
+  api-sports rows, then the natural team-season key — so a postponed/rescheduled game moves weeks in
+  place instead of leaving a duplicate.
 - `ScheduleRefreshScheduler` (API hosted service) enqueues a full-season Games job for the current
   season every `ScheduleRefresh:IntervalHours` (default 12; postseason added Jan–Feb). Skips if a
   full-season games job is already queued/running or succeeded within the interval.
@@ -1468,12 +1524,27 @@ full-season games scrape loads every week of the schedule.
 - API: `GET /api/v1/schedule`, `GET /api/v1/schedule/upcoming`; `?seasonType=` on `/api/v1/games`.
 - MCP: `nfl_get_schedule`, `nfl_get_upcoming_games` (46 tools total).
 
+### api-sports.io migration (scraper — see `API_SPORTS_MIGRATION_PLAN.md`)
+Merged on integration branch `claude/happy-albattani-46aq85`:
+- [x] **S1a** — `ApiSportsDtos`, `ApiSportsMappings`, fixture-backed unit tests
+- [x] **S2** — `ApiSportsProvider` migration (`InjuryReports`, identity indexes, `GameRepository`/`PlayerRepository` external-id upsert, push `InjuryReports` stage, `PlayerMissingExternalId` quality rule). `NflSeasonType` stored values remain Preseason=1, Regular=2, Postseason=3 (ESPN `seasontype` and api-sports week parsing use the same integers).
+- [x] **S1b** — `ApiSportsTeamService`, `ApiSportsGameService`, `ApiSportsServiceBase`, factory wiring
+- [x] **S5** — `Dockerfile`, `deploy/docker-compose.yml`, Caddy, `deploy/README.md` (ops on a Droplet is separate from merging artifacts)
+- [x] **S1c** — `ApiSportsPlayerService`, `ApiSportsStatsService`, `ApiSportsStatMappings`; 32-team map from `teams.json`; `/teams` DTO fixed to the flat capture shape. The two box-score fixtures are hand-authored from the vendor docs — replace with real captures of `/games/statistics/players?id=21572` and `/games/statistics/teams?id=21572` and re-run the tests before relying on the numbers
+
+Not merged yet (do not treat as done):
+- [ ] **S1d** — `ApiSportsInjuryService`, `ScrapeJobType.Injuries`, scrape API/UI (needs `injuries-team.json`)
+- [ ] **S3** — `InjuryRefreshScheduler`, `ScheduleRefresh:StatsAfterWeekEnds`, configurable `ScrapeEventRelay` poll (after S1d)
+- [ ] **S4** — `GET /api/v1/injuries/current`, status heartbeat fields, MCP `nfl_get_current_injuries` (after S1d)
+
+Chatbot cards **C1–C5** are tracked in the chatbot repo; not part of this scraper branch.
+
 ### Remaining (post-Blocks 0–7)
 - [ ] **Phase E execution** — run 2006–2025 backfill on local Hermes agent (ops, not code)
 - [ ] **Phase C §5 e2e test** — automated agent backfills one season unattended and reports coverage
 - [ ] **Phase F** — play-by-play (~950k rows)
 - [ ] **Phase G** — deep history 1970–2005 via PFR
-- [ ] **M5** — contract tests, Docker, DigitalOcean deployment
+- [ ] **M5** — contract tests, GHCR publish workflow; Droplet **deploy artifacts** are in S5 (`deploy/README.md`), production Droplet cutover is ops
 - [ ] **M6** — production polish (OTel, webhooks, FTS, etc.)
 - [ ] **SignalR on Backfill/Jobs pages** — still polling at 5s
 - [ ] **Agent activity log UI** — operate audit view over `ApiQueryLogs`

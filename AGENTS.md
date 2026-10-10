@@ -12,11 +12,12 @@ Project overview, architecture, and standard build/test/run commands live in `RE
 - `src/WebScraper.Api` — primary host: REST API + Blazor Server admin dashboard + SignalR, all in one process. Also runs the in-process scrape job worker and event relay.
 - `src/WebScraper.Cli` — standalone scraper/REPL; shares the same SQLite DB as the API.
 - `src/WebScraper.Mcp` — stdio MCP server; only useful when launched by an MCP client (build-verify only, do not expect it to "run" standalone).
-- `src/WebScraper.Core` — library (not runnable). `tests/WebScraper.Core.Tests` — 224 xUnit tests, run with `dotnet test`.
+- `src/WebScraper.Core` — library (not runnable). `tests/WebScraper.Core.Tests` — 385 xUnit tests, run with `dotnet test`.
 
 ### Non-obvious caveats
 - Default DB is embedded SQLite at `data/nfl_data.db` (repo root). No external DB server is needed. Both the API and CLI auto-apply EF migrations on startup and create the file if missing. Because the path is relative, run both from the repo root so they share the same DB.
-- The API and CLI default to the `Espn` data provider, which requires outbound internet to `site.api.espn.com` (no API key). ESPN scrapes work in this environment. On startup the CLI performs a live ESPN connectivity check before any command (including `status`/`list`), so those still need internet.
+- **Data provider defaults:** `src/WebScraper.Api/appsettings.json` sets `ScraperSettings:DataProvider` to `ApiSports` (needs `x-apisports-key` in `appsettings.Local.json` to scrape live). The CLI still defaults to `Espn`. ESPN needs outbound internet to `site.api.espn.com` (no API key). On startup the CLI performs a live ESPN connectivity check before any command (including `status`/`list`), so those still need internet even when you only read the DB.
+- **api-sports migration status** is tracked in `API_SPORTS_MIGRATION_PLAN.md` and `CLAUDE.md` (S1c/S1d/S3/S4 not merged yet). Droplet deploy steps: `deploy/README.md`.
 - Admin dashboard login and JWT endpoints require secrets in the git-ignored `src/WebScraper.Api/appsettings.Local.json` (`Jwt:SigningKey`, `InitialAdmin:Email`/`Password`, and optionally a bootstrap `ApiKeys` entry). This file is NOT committed and NOT recreated by the update script — a fresh VM has no admin login until you create it. `README.md` §2 documents the shape; generate a key with `openssl rand -base64 48`. The initial admin is only seeded when the Identity user table is empty.
 - Run the API in `Development` (`ASPNETCORE_ENVIRONMENT=Development`) to expose Swagger at `/swagger`. Default URL is `http://localhost:5080` (set `ASPNETCORE_URLS=http://localhost:5080`).
 - Read endpoints (`/api/v1/*`) need an `X-Api-Key` header; write endpoints need an `Authorization: Bearer <jwt>` from `POST /api/v1/auth/login`. Scrape POSTs are async: they return 202 + a job id; poll `GET /api/v1/jobs/{id}` for `Succeeded`/`Failed` (a full players scrape takes ~45s).

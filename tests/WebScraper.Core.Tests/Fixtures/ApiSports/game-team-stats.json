@@ -1,0 +1,74 @@
+{
+  "get": "games/statistics/teams",
+  "parameters": { "id": "21572" },
+  "errors": [],
+  "results": 2,
+  "response": [
+    {
+      "team": { "id": 1, "name": "Las Vegas Raiders", "logo": "https://media.api-sports.io/american-football/teams/1.png" },
+      "statistics": {
+        "first_downs": {
+          "total": 21,
+          "passing": 13,
+          "rushing": 6,
+          "from_penalties": 2,
+          "third_down_efficiency": "6-13",
+          "fourth_down_efficiency": "1-2"
+        },
+        "plays": { "total": 61 },
+        "yards": { "total": 322, "yards_per_play": "5.3", "total_drives": "11" },
+        "passing": {
+          "total": 249,
+          "comp_att": "24/36",
+          "yards_per_pass": "6.4",
+          "interceptions_thrown": 1,
+          "sacks_yards_lost": "3-19"
+        },
+        "rushings": { "total": 73, "attempts": 17, "yards_per_rush": "4.3" },
+        "red_zone": { "made_att": "3-4" },
+        "penalties": { "total": "6-45" },
+        "turnovers": { "total": 2, "lost_fumbles": 1, "interceptions": 1 },
+        "posession": { "total": "29:41" },
+        "interceptions": { "total": 0 },
+        "fumbles_recovered": { "total": 0 },
+        "sacks": { "total": 2 },
+        "safeties": { "total": 0 },
+        "int_touchdowns": { "total": 0 },
+        "points_against": { "total": 30 }
+      }
+    },
+    {
+      "team": { "id": 17, "name": "Kansas City Chiefs", "logo": "https://media.api-sports.io/american-football/teams/17.png" },
+      "statistics": {
+        "first_downs": {
+          "total": 24,
+          "passing": 17,
+          "rushing": 5,
+          "from_penalties": 2,
+          "third_down_efficiency": "7-12",
+          "fourth_down_efficiency": "0-0"
+        },
+        "plays": { "total": 64 },
+        "yards": { "total": 375, "yards_per_play": "5.9", "total_drives": "11" },
+        "passing": {
+          "total": 301,
+          "comp_att": "29/41",
+          "yards_per_pass": "7.0",
+          "interceptions_thrown": 0,
+          "sacks_yards_lost": "2-11"
+        },
+        "rushings": { "total": 74, "attempts": 17, "yards_per_rush": "4.4" },
+        "red_zone": { "made_att": "3-5" },
+        "penalties": { "total": "4-30" },
+        "turnovers": { "total": 0, "lost_fumbles": 0, "interceptions": 0 },
+        "posession": { "total": "30:19" },
+        "interceptions": { "total": 1 },
+        "fumbles_recovered": { "total": 1 },
+        "sacks": { "total": 3 },
+        "safeties": { "total": 0 },
+        "int_touchdowns": { "total": 0 },
+        "points_against": { "total": 27 }
+      }
+    }
+  ]
+}

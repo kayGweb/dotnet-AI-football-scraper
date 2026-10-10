@@ -74,6 +74,7 @@ appsettings.Local.json
 !appsettings.Development.json
 .env
 .env.*
+!deploy/.env.example
 
 # Data directory (database files)
 data/*.db

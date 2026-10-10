@@ -164,7 +164,7 @@ public class BaseApiServiceTests
     }
 
     [Fact]
-    public void ConfigureAuth_HeaderType_WithMissingApiKey_ShouldNotAddHeader()
+    public void ConfigureAuth_HeaderType_WithMissingApiKey_ShouldAddEmptyHeaderValue()
     {
         var handler = new FakeHttpHandler("", "application/json");
         var settings = new ApiProviderSettings
@@ -178,7 +178,9 @@ public class BaseApiServiceTests
 
         _ = new TestApiService(httpClient, logger, settings, CreateRateLimiter());
 
-        Assert.False(httpClient.DefaultRequestHeaders.Contains("Ocp-Apim-Subscription-Key"));
+        Assert.True(httpClient.DefaultRequestHeaders.Contains("Ocp-Apim-Subscription-Key"));
+        Assert.Equal(string.Empty,
+            httpClient.DefaultRequestHeaders.GetValues("Ocp-Apim-Subscription-Key").First());
     }
 
     [Fact]

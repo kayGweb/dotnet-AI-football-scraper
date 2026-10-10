@@ -1,0 +1,5 @@
+# TLS is automatic when SCRAPER_HOST is a public DNS name (Let's Encrypt).
+# For IP-only hosts, use http:// or configure tls internal in Caddy docs.
+{$SCRAPER_HOST} {
+	reverse_proxy api:8080
+}

@@ -522,6 +522,8 @@ namespace WebScraper.Migrations
 
                     b.HasIndex("VenueId");
 
+                    b.HasIndex("DataSource", "DataSourceRecordId");
+
                     b.HasIndex("Season", "SeasonType", "Week", "HomeTeamSeasonId", "AwayTeamSeasonId")
                         .IsUnique();
 
@@ -880,6 +882,83 @@ namespace WebScraper.Migrations
                     b.ToTable("Injuries");
                 });
 
+            modelBuilder.Entity("WebScraper.Models.InjuryReport", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DataSource")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DataSourceFetchedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DataSourceRecordId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeleteReason")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DeletedBy")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ExternalPlayerId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("PlayerId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("PlayerName")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Position")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime?>("ReportedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("SnapshotAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("TeamSeasonId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PlayerId");
+
+                    b.HasIndex("TeamSeasonId");
+
+                    b.HasIndex("ExternalPlayerId", "SnapshotAt")
+                        .IsUnique();
+
+                    b.ToTable("InjuryReports");
+                });
+
             modelBuilder.Entity("WebScraper.Models.Player", b =>
                 {
                     b.Property<int>("Id")
@@ -946,6 +1025,8 @@ namespace WebScraper.Migrations
                         .HasFilter("\"EspnId\" IS NOT NULL");
 
                     b.HasIndex("TeamId");
+
+                    b.HasIndex("DataSource", "DataSourceRecordId");
 
                     b.ToTable("Players");
                 });
@@ -1857,6 +1938,23 @@ namespace WebScraper.Migrations
                     b.Navigation("Game");
 
                     b.Navigation("Player");
+                });
+
+            modelBuilder.Entity("WebScraper.Models.InjuryReport", b =>
+                {
+                    b.HasOne("WebScraper.Models.Player", "Player")
+                        .WithMany()
+                        .HasForeignKey("PlayerId");
+
+                    b.HasOne("WebScraper.Models.TeamSeason", "TeamSeason")
+                        .WithMany()
+                        .HasForeignKey("TeamSeasonId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Player");
+
+                    b.Navigation("TeamSeason");
                 });
 
             modelBuilder.Entity("WebScraper.Models.Player", b =>

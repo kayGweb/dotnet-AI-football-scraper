@@ -70,6 +70,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IVenueRepository, VenueRepository>();
         services.AddScoped<ITeamGameStatsRepository, TeamGameStatsRepository>();
         services.AddScoped<IInjuryRepository, InjuryRepository>();
+        services.AddScoped<IInjuryReportRepository, InjuryReportRepository>();
         services.AddScoped<IApiLinkRepository, ApiLinkRepository>();
         services.AddScoped<IGameDriveRepository, GameDriveRepository>();
         services.AddScoped<IScoringPlayRepository, ScoringPlayRepository>();

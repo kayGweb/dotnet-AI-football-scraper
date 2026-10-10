@@ -1,0 +1,22 @@
+{
+  "get": "players",
+  "parameters": { "season": "2024", "team": "1" },
+  "errors": [],
+  "results": 14,
+  "response": [
+    { "id": 3, "name": "Ameer Abdullah", "age": 33, "height": "5' 8\"", "weight": "203 lbs", "college": "Nebraska", "group": "Offense", "position": "RB", "number": 20, "salary": "-", "experience": 12, "image": "https://media.api-sports.io/american-football/players/3.png" },
+    { "id": 5, "name": "Brittain Brown", "age": 28, "height": "6' 1\"", "weight": "205 lbs", "college": "UCLA", "group": "Injured Reserve Or O", "position": "RB", "number": 38, "salary": "-", "experience": 3, "image": "https://media.api-sports.io/american-football/players/5.png" },
+    { "id": 7, "name": "Sincere McCormick", "age": 26, "height": "5' 8\"", "weight": "204 lbs", "college": "UTSA", "group": "Practice Squad", "position": "RB", "number": 35, "salary": null, "experience": 3, "image": "https://media.api-sports.io/american-football/players/7.png" },
+    { "id": 10, "name": "Davante Adams", "age": 33, "height": "6' 1\"", "weight": "204 lbs", "college": "Fresno State", "group": "Offense", "position": "WR", "number": 17, "salary": "-", "experience": 13, "image": "https://media.api-sports.io/american-football/players/10.png" },
+    { "id": 30, "name": "Kolton Miller", "age": 27, "height": "6' 8\"", "weight": "325 lbs", "college": "UCLA", "group": "Offense", "position": "OT", "number": 74, "salary": "($24,350,000)", "experience": 6, "image": "https://media.api-sports.io/american-football/players/30.png" },
+    { "id": 34, "name": "Maxx Crosby", "age": 25, "height": "6' 5\"", "weight": "255 lbs", "college": "Eastern Michigan", "group": "Defense", "position": "DE", "number": 98, "salary": "($46,965,000)", "experience": 5, "image": "https://media.api-sports.io/american-football/players/34.png" },
+    { "id": 47, "name": "Divine Deablo", "age": 28, "height": "6' 3\"", "weight": "223 lbs", "college": "Virginia Tech", "group": "Defense", "position": "LB", "number": 0, "salary": "-", "experience": 6, "image": "https://media.api-sports.io/american-football/players/47.png" },
+    { "id": 62, "name": "Isaiah Pola-Mao", "age": 24, "height": "6' 4\"", "weight": "205 lbs", "college": "USC", "group": "Defense", "position": "S", "number": 20, "salary": "0-", "experience": 2, "image": "https://media.api-sports.io/american-football/players/62.png" },
+    { "id": 65, "name": "Daniel Carlson", "age": 31, "height": "6' 5\"", "weight": "222 lbs", "college": "Auburn", "group": "Special Teams", "position": "PK", "number": 10, "salary": "-", "experience": 9, "image": "https://media.api-sports.io/american-football/players/65.png" },
+    { "id": 66, "name": "AJ Cole", "age": 27, "height": "6' 4\"", "weight": "220 lbs", "college": "NC State", "group": "Special Teams", "position": "P", "number": 6, "salary": null, "experience": 5, "image": "https://media.api-sports.io/american-football/players/66.png" },
+    { "id": 2074, "name": "Jacob Bobenmoyer", "age": 26, "height": "6' 2\"", "weight": "235 lbs", "college": "Northern Colorado", "group": "Special Teams", "position": "LS", "number": 50, "salary": "($1,000,000)", "experience": 4, "image": "https://media.api-sports.io/american-football/players/2074.png" },
+    { "id": 6839, "name": "Phalen Sanford", "age": 24, "height": "5' 11\"", "weight": "195 lbs", "college": "Nebraska", "group": "Practice Squad", "position": "S", "number": 42, "salary": null, "experience": null, "image": "https://media.api-sports.io/american-football/players/6839.png" },
+    { "id": 10779, "name": "Aidan O'Connell", "age": 24, "height": "6' 3\"", "weight": "210 lbs", "college": "Purdue", "group": "Offense", "position": "QB", "number": 4, "salary": "($509,380)", "experience": null, "image": "https://media.api-sports.io/american-football/players/10779.png" },
+    { "id": 14653, "name": "Jackson PowersJohnson", "age": 23, "height": "6' 3\"", "weight": "325 lbs", "college": "Oregon", "group": "Offense", "position": "G", "number": 58, "salary": "-", "experience": 3, "image": "https://media.api-sports.io/american-football/players/14653.png" }
+  ]
+}

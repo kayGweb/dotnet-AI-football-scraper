@@ -28,7 +28,7 @@ public class QualityRulesEngine
         findings.AddRange(await CheckGamesMissingPlayerStatsAsync(season, seasonType, week, cancellationToken));
         findings.AddRange(await CheckQuarterScoreMismatchAsync(season, seasonType, week, cancellationToken));
         findings.AddRange(await CheckGamesMissingTeamStatsAsync(season, seasonType, week, cancellationToken));
-        findings.AddRange(await CheckPlayersMissingEspnIdAsync(cancellationToken));
+        findings.AddRange(await CheckPlayersMissingExternalIdAsync(cancellationToken));
         findings.AddRange(await CheckImplausiblePassingYardsAsync(season, seasonType, week, cancellationToken));
         findings.AddRange(await CheckVenuesMissingLocationAsync(cancellationToken));
         findings.AddRange(await CheckWeekGameCountMismatchAsync(season, seasonType, week, cancellationToken));
@@ -198,21 +198,23 @@ public class QualityRulesEngine
             .ToList();
     }
 
-    private async Task<List<DataQualityFinding>> CheckPlayersMissingEspnIdAsync(CancellationToken ct)
+    private async Task<List<DataQualityFinding>> CheckPlayersMissingExternalIdAsync(CancellationToken ct)
     {
         var players = await _db.Players
-            .Where(p => p.EspnId == null || p.EspnId == "")
+            .Where(p =>
+                (p.EspnId == null || p.EspnId == "") &&
+                (p.DataSourceRecordId == null || p.DataSourceRecordId == ""))
             .Take(500)
             .Select(p => new { p.Id, p.Name })
             .ToListAsync(ct);
 
         return players.Select(p => new DataQualityFinding
         {
-            RuleType = DataQualityRuleType.PlayerMissingEspnId,
+            RuleType = DataQualityRuleType.PlayerMissingExternalId,
             Severity = DataQualitySeverity.Info,
             EntityType = nameof(Player),
             EntityId = p.Id,
-            Message = $"Player '{p.Name}' (id={p.Id}) has no EspnId",
+            Message = $"Player '{p.Name}' (id={p.Id}) has no external id",
         }).ToList();
     }
 

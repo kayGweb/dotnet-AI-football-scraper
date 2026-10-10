@@ -36,10 +36,9 @@ public abstract class BaseApiService
     {
         switch (_providerSettings.AuthType.ToLowerInvariant())
         {
-            case "header" when !string.IsNullOrEmpty(_providerSettings.ApiKey)
-                            && !string.IsNullOrEmpty(_providerSettings.AuthHeaderName):
+            case "header" when !string.IsNullOrEmpty(_providerSettings.AuthHeaderName):
                 _httpClient.DefaultRequestHeaders.TryAddWithoutValidation(
-                    _providerSettings.AuthHeaderName, _providerSettings.ApiKey);
+                    _providerSettings.AuthHeaderName, _providerSettings.ApiKey ?? string.Empty);
                 break;
 
             case "basic" when !string.IsNullOrEmpty(_providerSettings.ApiKey):

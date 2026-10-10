@@ -26,6 +26,7 @@ internal static class DatabasePushStageRunner
                 DROP TABLE IF EXISTS "ScoringPlays" CASCADE;
                 DROP TABLE IF EXISTS "GameDrives" CASCADE;
                 DROP TABLE IF EXISTS "ApiLinks" CASCADE;
+                DROP TABLE IF EXISTS "InjuryReports" CASCADE;
                 DROP TABLE IF EXISTS "Injuries" CASCADE;
                 DROP TABLE IF EXISTS "TeamGameStats" CASCADE;
                 DROP TABLE IF EXISTS "PlayerGameStats" CASCADE;
@@ -457,6 +458,63 @@ internal static class DatabasePushStageRunner
                 }
             },
             "injuries",
+            ct);
+
+    public static async Task<int> PushInjuryReportsAsync(PushExecutionContext ctx, CancellationToken ct)
+        => await PushBatchedAsync(
+            ctx,
+            PushStage.InjuryReports,
+            () => ctx.LocalDb.InjuryReports.AsNoTracking().OrderBy(r => r.Id),
+            async (report, ct2) =>
+            {
+                if (!ctx.Maps.TeamSeasonIdMap.TryGetValue(report.TeamSeasonId, out var remoteTeamSeasonId))
+                {
+                    ctx.Errors.Add($"InjuryReport: team season ID mapping missing (TS:{report.TeamSeasonId})");
+                    return;
+                }
+
+                int? remotePlayerId = report.PlayerId.HasValue && ctx.Maps.PlayerIdMap.TryGetValue(report.PlayerId.Value, out var pid)
+                    ? pid
+                    : null;
+
+                var existing = await ctx.RemoteDb.InjuryReports
+                    .FirstOrDefaultAsync(r =>
+                        r.ExternalPlayerId == report.ExternalPlayerId &&
+                        r.SnapshotAt == report.SnapshotAt, ct2);
+
+                if (existing != null)
+                {
+                    existing.TeamSeasonId = remoteTeamSeasonId;
+                    existing.PlayerId = remotePlayerId;
+                    existing.PlayerName = report.PlayerName;
+                    existing.Position = report.Position;
+                    existing.Status = report.Status;
+                    existing.Description = report.Description;
+                    existing.ReportedAt = PushTime.ToUtcOrNull(report.ReportedAt);
+                    existing.DataSource = report.DataSource;
+                    existing.DataSourceFetchedAt = report.DataSourceFetchedAt;
+                    existing.DataSourceRecordId = report.DataSourceRecordId;
+                }
+                else
+                {
+                    ctx.RemoteDb.InjuryReports.Add(new InjuryReport
+                    {
+                        TeamSeasonId = remoteTeamSeasonId,
+                        PlayerId = remotePlayerId,
+                        ExternalPlayerId = report.ExternalPlayerId,
+                        PlayerName = report.PlayerName,
+                        Position = report.Position,
+                        Status = report.Status,
+                        Description = report.Description,
+                        ReportedAt = PushTime.ToUtcOrNull(report.ReportedAt),
+                        SnapshotAt = PushTime.ToUtc(report.SnapshotAt),
+                        DataSource = report.DataSource,
+                        DataSourceFetchedAt = report.DataSourceFetchedAt,
+                        DataSourceRecordId = report.DataSourceRecordId,
+                    });
+                }
+            },
+            "injury reports",
             ct);
 
     public static async Task<int> PushApiLinksAsync(PushExecutionContext ctx, CancellationToken ct)
